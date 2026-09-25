@@ -71,10 +71,13 @@ suite and live ingestion checks.
 
 `deploy-cloud.yml` now runs **only** on manual dispatch. When dispatched it:
 
-1. Materializes the protected `staging` environment's `ENV_STAGING` secret.
+1. Validates the version-controlled `deploy/config/staging.env` file and
+   renders secret values from GCP Secret Manager.
 2. Runs the read-only Alembic compatibility check.
-3. Runs `./scripts/deploy.sh migrate --env-file .env.staging`; the lower-level
-   GCP/OCI deployers repeat this idempotent gate before publishing a service.
+3. Runs `./scripts/deploy.sh migrate --env-file .env.staging`; the GCP deployer
+   repeats this idempotent gate before publishing Cloud Run. The managed OCI
+   job passes an explicit skip only after this migration job succeeds; a
+   manual/local voice-ws deployment runs its own gate.
 4. The GCP deployment's migration-gated bootstrap synchronizes code-owned
    native tools and the three public demo agents before publishing images.
 5. Verifies the phone-number data migration.
@@ -91,9 +94,8 @@ use the manual Cloud Run path:
 
 | Secret                           | Required              | Purpose                                      |
 | -------------------------------- | --------------------- | -------------------------------------------- |
-| `ENV_STAGING`                    | Yes (for GH dispatch) | Complete `.env.staging` contents             |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Only for Cloud Run    | Google Workload Identity Federation provider |
-| `GCP_SERVICE_ACCOUNT`            | Only for Cloud Run    | Service account allowed to deploy staging    |
+| `GCP_SERVICE_ACCOUNT`            | Only for Cloud Run    | WIF service account allowed to deploy and read managed secrets |
 | `STAGING_OCI_SSH_KEY`            | Optional              | SSH key for a dedicated staging voice-ws VM  |
 
 Configure these as **staging environment variables** only if deploying to
@@ -108,6 +110,14 @@ Cloud Run:
 | `STAGING_OCI_SSH_HOST`         | Optional dedicated staging voice-ws host        |
 | `STAGING_OCI_SSH_USER`         | Optional staging SSH user; defaults to `ubuntu` |
 
+The version-controlled `deploy/config/staging.env` file contains
+`GCP_SECRET_NAME_PREFIX`, `GCP_BACKEND_RUNTIME_SERVICE_ACCOUNT`, `OCI_VAULT_ID`,
+`OCI_SECRET_NAME_PREFIX`, and non-secret application settings. It must never
+contain secret values. Empty secret-key declarations opt optional managed
+secrets into the release; omitted optional keys are not fetched even if an old
+version remains in the manager. The normal local staging path does not use
+these managed-cloud fields.
+
 The staging service names must not be the production service names. For the
 normal **local** staging flow, no GCP/OCI secrets are needed — only a local
 `.env.staging` with the staging Supabase project `gdzwiwukcwbqohfwxxrx`.
@@ -121,9 +131,13 @@ environment. Do not promote a branch or tag: even a well-named tag can be moved
 unless the repository enforces immutable tags. It then:
 
 1. Checks out that ref in the protected `production` environment.
-2. Runs the same migration compatibility check and migration verification
-   against production. The lower-level GCP/OCI deployers repeat the
-   idempotent migration gate before publishing each service.
+2. Checks out and validates the version-controlled
+   `deploy/config/production.env`, authenticates to GCP with GitHub OIDC/WIF,
+   and renders migration values from GCP Secret Manager. It then runs the same
+   migration compatibility check and migration verification against
+   production. The GCP deployer repeats the idempotent gate; the managed OCI
+   job skips its duplicate gate only after the protected migration job
+   succeeds.
 3. The GCP deployment's migration-gated bootstrap synchronizes code-owned
    native tools and the three public demo agents before publishing images.
 4. Deploys the checked-out ref to the production Cloud Run services.
@@ -137,11 +151,13 @@ these there:
 
 | Secret                           | Required | Purpose                                                        |
 | -------------------------------- | -------- | -------------------------------------------------------------- |
-| `ENV_PROD`                       | Yes      | Production `.env.prod` contents                                |
-| `NEXT_PUBLIC_POSTHOG_KEY`        | Yes      | PostHog project token injected into the production frontend build |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Yes      | Google Workload Identity Federation provider                   |
-| `GCP_SERVICE_ACCOUNT`            | Yes      | Production deployment service account                          |
+| `GCP_SERVICE_ACCOUNT`            | Yes      | WIF service account allowed to deploy and read managed secrets |
 | `OCI_SSH_KEY`                    | Optional | Production voice-ws VM private key                             |
+
+`NEXT_PUBLIC_POSTHOG_KEY` is no longer required in GitHub. Put the public
+PostHog project token in `deploy/config/production.env`; the workflow keeps a
+temporary fallback to the old GitHub environment secret during migration.
 
 Optional production environment variables can override the defaults used by the
 deployment scripts: `PRODUCTION_GCP_PROJECT_ID`, `PRODUCTION_GCP_REGION`,
@@ -150,18 +166,47 @@ deployment scripts: `PRODUCTION_GCP_PROJECT_ID`, `PRODUCTION_GCP_REGION`,
 
 Production migration is intentionally in the same protected workflow as the
 application deployment. A migration failure prevents the application jobs from
-running. The GCP and OCI deploy scripts also run the same compatibility-gated,
-idempotent migration step, so manual component redeployments cannot publish
-code ahead of the database. Successful cloud migrations request a PostgREST
-schema-cache reload. The compatibility check is read-only and is not a
-replacement for backups, rollback planning, or reviewing a migration's
-data-safety behavior.
+running. The GCP and manual OCI deploy scripts also run the same
+compatibility-gated, idempotent migration step, so manual component
+redeployments cannot publish code ahead of the database. The managed OCI job
+receives an explicit skip only after that protected migration succeeds.
+Successful cloud migrations request a PostgREST schema-cache reload. The
+compatibility check is read-only and is not a replacement for backups, rollback
+planning, or reviewing a migration's data-safety behavior.
 
 Each GitHub Actions job runs on a fresh runner. The GCP promotion job therefore
 installs the small migration requirements bundle before invoking the deploy
 script's repeated compatibility gate; the migration job's Python environment is
-not shared with the deployment job. The OCI voice-ws job installs the same
-bundle before its own compatibility gate for the same reason.
+not shared with the deployment job. The OCI voice-ws job transfers only
+non-secret config and a value-free manifest; the VM's OCI instance principal
+fetches current secret versions locally. It does not install a migration bundle
+or receive a complete production env file.
+
+The version-controlled `deploy/config/production.env` file contains
+`GCP_SECRET_NAME_PREFIX`, `GCP_BACKEND_RUNTIME_SERVICE_ACCOUNT`, `OCI_VAULT_ID`,
+`OCI_SECRET_NAME_PREFIX`, and non-secret application settings. The release
+validator rejects secret values and visible placeholders before any cloud
+operation starts. Empty secret-key declarations opt optional managed secrets
+into the release; omitted optional keys are not fetched even if an old version
+remains in the manager.
+
+## Managed secret flow and IAM
+
+The complete design is documented in [secret management](secret-management.md).
+The operational boundary is:
+
+- GCP Secret Manager stores Cloud Run backend, migration, and shared runtime
+  values. `render-gcp-env.py` is used only on an ephemeral runner for the
+  migration gate. Cloud Run receives pinned `KEY=secret:version` references
+  and resolves them with `GCP_BACKEND_RUNTIME_SERVICE_ACCOUNT`.
+- OCI Vault stores voice-ws values. The VM's dynamic-group instance principal
+  reads only the secrets in the manifest. The SSH key transports source and
+  configuration; it is not used to call OCI APIs.
+- GitHub stores no long-lived GCP service-account key and no complete
+  production environment file. Workload Identity Federation gives the runner
+  short-lived GCP credentials.
+- `JWT_SECRET_KEY` and `ENCRYPTION_KEY` must be synchronized in both managers
+  because backend and voice-ws share the JWT/encryption trust boundary.
 
 ## Local versus CI
 
@@ -170,7 +215,7 @@ bundle before its own compatibility gate for the same reason.
 | Application state | Dedicated Docker Compose project            | Local Docker Compose project (`--env staging`)        | Production Cloud Run/OCI        |
 | Database          | Dedicated local Supabase project            | Cloud staging Supabase (`gdzwiwukcwbqohfwxxrx`)       | Cloud production Supabase       |
 | Auth              | Seeded email/password user                  | Staging accounts (cloud)                              | Production accounts             |
-| Env source        | Generated ignored `.worktree-state/app.env` | `.env.staging` (gitignored)                           | `ENV_PROD` (GH secret)          |
+| Env source        | Generated ignored `.worktree-state/app.env` | `.env.staging` (gitignored)                           | `deploy/config/production.env` + managed secret stores |
 | Trigger           | `scripts/worktree-stack.sh up`              | `./scripts/validate-staging.sh` after merge to `main` | Manual workflow dispatch        |
 | Approval          | Developer                                   | Release operator (local)                              | Protected environment reviewers |
 

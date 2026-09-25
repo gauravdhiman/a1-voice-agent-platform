@@ -1,15 +1,22 @@
 # Production environment variables
 
-Manual production deployments read from **`.env.prod`** at the repo root
-(gitignored). The template is **`.env.prod.example`**. Deploy manually with
-**`./scripts/deploy.sh`**.
+The version-controlled files under `deploy/config/` are the source of truth
+for non-secret environment configuration:
 
-The GitHub Actions deployment uses the same file format, but does not read a
-developer's local `.env.prod`. The workflow reads the Repository secret
-`ENV_PROD`, writes its contents to a temporary `.env.prod` in the CI runner,
-and then runs the same deployment script. Therefore, changing a local
-`.env.prod` affects manual deployments only; changing `ENV_PROD` affects CI
-deployments.
+- `deploy/config/local.env`
+- `deploy/config/staging.env`
+- `deploy/config/production.env`
+
+They contain no secret values. Actual secret material is fetched from GCP
+Secret Manager or OCI Vault during managed releases. A local/manual operator
+may create a complete gitignored `.env.prod` from a versioned config and an
+ignored secret overlay with `scripts/deploy/build-env-file.py`.
+
+GitHub Actions checks out the selected config file, validates it, authenticates
+to GCP with OIDC/WIF, and renders the required migration values from GCP
+Secret Manager. The OCI voice-ws bootstrap receives only public configuration
+and secret names, then reads values from OCI Vault using its instance
+principal.
 
 > **Index:** [deployment/README.md](README.md) · **Local dev config:** [environment_configuration.md](../environment_configuration.md)
 
@@ -41,8 +48,29 @@ files for Cloud Run (backend) and the OCI VM (voice-ws). Frontend
 `NEXT_PUBLIC_*` vars are passed as Docker build args during
 `./scripts/deploy.sh frontend` or `gcp`.
 
-For CI, the selected file is the temporary file generated from `ENV_PROD`; for
-manual deployment, it is the local `.env.prod` file.
+For CI, the selected runtime file is generated from the versioned non-secret
+config plus managed secret versions. For a local/manual deployment, it is the
+operator's gitignored `.env.prod` file.
+
+## Secret-manager configuration
+
+These values identify secret-manager resources; they are not secret payloads.
+They belong in the version-controlled `deploy/config/*.env` files and the
+matching `.env.*.example` templates.
+
+| Variable | Purpose |
+| --- | --- |
+| `SECRET_MANAGER_MODE` | `env` for local/manual env-file operation; `gcp` for the managed cloud release path |
+| `GCP_SECRET_MANAGER_PROJECT_ID` | GCP project that owns the Secret Manager resources; should match `GCP_PROJECT_ID` for Cloud Run |
+| `GCP_SECRET_NAME_PREFIX` | Stable environment prefix used by Secret Manager, for example `247ai-production` |
+| `GCP_BACKEND_RUNTIME_SERVICE_ACCOUNT` | Cloud Run backend service account granted read access to the selected secrets |
+| `OCI_VAULT_ID` | OCI Vault OCID used by the voice-ws VM |
+| `OCI_SECRET_NAME_PREFIX` | Stable environment prefix used to derive OCI Vault secret names |
+
+The same `JWT_SECRET_KEY` and `ENCRYPTION_KEY` values must exist in both
+providers because backend and voice-ws share the JWT/encryption trust boundary.
+See [secret management](secret-management.md) for provisioning, IAM, CI
+flow, rotation, and the staged organization-credential migration.
 
 ---
 

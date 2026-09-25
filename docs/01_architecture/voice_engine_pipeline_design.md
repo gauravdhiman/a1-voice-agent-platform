@@ -243,14 +243,16 @@ classDiagram
 ## 5. API-key resolution (extended, shared) — ✅ Phase 3 done
 
 Implemented in `shared/voice_agents/key_resolver.py` (`resolve_api_keys`).
-All per-org provider keys live in **one Fernet-encrypted JSONB blob** on
+All per-org provider keys live in **one Fernet-encrypted TEXT blob** on
 `organizations.provider_credentials` (`encrypt_data`/`decrypt_data` in
 `shared/common/security.py`), shape `{google, deepgram, openai, cartesia,
 cerebras, livekit: {api_key, api_secret}}` (only the set keys present). This
 consolidates the previously-plaintext `google_api_key` (a latent security gap)
 and adds storage for the direct-provider + LiveKit Inference keys. The legacy
-`google_api_key` column is retained but no longer the source of truth (dropped
-in a follow-up migration).
+`google_api_key` column is retained temporarily for rolling-deployment
+compatibility but is no longer the source of truth. Migration
+`20260922000002` moves any remaining value into the encrypted blob and clears
+the plaintext column; a later cleanup migration can drop the empty column.
 
 The resolver pairs a `SpeechConfig` with the org's decrypted blob + the platform
 env vars and returns a `{provider: api_key}` map, with the same org-vs-platform +
@@ -259,7 +261,9 @@ actually needs appear** in the result — a realtime agent gets just
 `{"google": ...}`; an all-direct pipeline never touches `livekit`. Providers
 with no resolvable key (neither org nor env) are **omitted** (no raise) — the
 registry's existing per-provider guard raises a clear `ValueError` naming the
-provider, preserving the current fail-fast behavior.
+provider, preserving the current fail-fast behavior. If an existing encrypted
+org blob cannot be authenticated, resolution fails closed rather than charging
+the platform account.
 
 LiveKit **Inference** is the one special case: a single voice-ws (Pipecat) auth
 (`api_key` + `api_secret`) authenticates *all* Inference stages in a pipeline, so
@@ -277,7 +281,7 @@ both are `None`).
 ```mermaid
 flowchart TD
     Agent["VoiceAgent.preset_id -> preset.config (SpeechConfig)"] --> Resolver["key_resolver.resolve_api_keys(speech_config, org, use_platform_credits)"]
-    Blob["organizations.provider_credentials (encrypted JSONB)"] -->|decrypt_data| Resolver
+    Blob["organizations.provider_credentials (encrypted TEXT)"] -->|decrypt_data| Resolver
     Plat["platform env: GEMINI/OPENAI/DEEPGRAM/CARTESIA/CEREBRAS_API_KEY, /SECRET"] --> Resolver
     Credits["agent.use_platform_credits"] --> Resolver
     Resolver --> Map["{google|openai|deepgram|cartesia|cerebras: str, livekit: {api_key, api_secret} (only when an Inference stage is used)}"]

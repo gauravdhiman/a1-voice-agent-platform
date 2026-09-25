@@ -16,16 +16,22 @@ Resolution priority per provider (mirrors the existing Google-key logic in
    ignored).
 2. Else if the org's decrypted ``provider_credentials`` blob has the key -> the
    org key (BYO — billing goes to the tenant's own provider account).
-3. Else -> the platform env var (fallback).
+3. Else -> the platform env var (fallback), but only when the organization has
+   no configured encrypted credential blob.
 4. Else -> **omit** the provider. The registry's existing per-provider guard then
    raises a clear ``ValueError`` naming the provider, preserving the current
    fail-fast behavior — the resolver introduces no new error path.
 
-All org provider keys — including the previously-plaintext ``google_api_key`` —
-live in one Fernet-encrypted ``organizations.provider_credentials`` JSON blob
-(:mod:`shared.common.security` ``encrypt_data``/``decrypt_data``). The resolver
-decrypts it once per call and reads ``creds["google"]`` etc.; it NEVER reads the
-legacy plaintext ``google_api_key`` column.
+If an organization has a non-empty encrypted blob that cannot be authenticated,
+resolution fails closed and never falls back to a platform key. This prevents a
+key-ring/configuration failure from silently charging the platform account.
+
+All current org provider keys live in one Fernet-encrypted
+``organizations.provider_credentials`` JSON blob (:mod:`shared.common.security`
+``encrypt_data``/``decrypt_data``). During the staged rollout only, the
+resolver retains a legacy ``google_api_key`` fallback for rows created by an
+older application instance; the credential migration clears those values
+before the compatibility column is removed in a later release.
 
 This module is pure-Python (no LiveKit import) so it is safe to import in both the
 backend venv and voice-ws, and unit-testable without a network.
@@ -64,6 +70,10 @@ _INFERENCE_STAGE_DEFAULTS: dict[str, str] = {
     "llm": "openai",
     "tts": "cartesia",
 }
+
+
+class OrganizationCredentialResolutionError(RuntimeError):
+    """Raised when an organization credential blob cannot be authenticated."""
 
 
 def normalize_stage_provider(provider: str, *, stage: str = "") -> str:
@@ -115,8 +125,13 @@ def _org_credentials(org: Optional[Any]) -> dict[str, Any]:
 
     Returns:
         The decrypted credentials dict (e.g.
-        ``{"google": ..., "deepgram": ...}``), or ``{}`` if there is no org, no
-        blob, or decryption fails.
+        ``{"google": ..., "deepgram": ...}``), or ``{}`` if there is no org or
+        no encrypted blob.
+
+    Raises:
+        OrganizationCredentialResolutionError: If a non-empty encrypted blob
+            cannot be authenticated. Callers must not silently switch to a
+            platform credential in that case.
     """
     if org is None:
         return {}
@@ -129,14 +144,23 @@ def _org_credentials(org: Optional[Any]) -> dict[str, Any]:
                 creds = decrypted
         except Exception as e:  # pragma: no cover - defensive, logged
             logger.error(
-                "Failed to decrypt provider_credentials for org %s: %s",
+                "Failed to decrypt provider_credentials for org %s (%s)",
                 getattr(org, "id", "<unknown>"),
-                e,
-                exc_info=True,
+                type(e).__name__,
             )
-    # Legacy plaintext column fallback (pre–Phase 3 rows). Matches
-    # ``OrganizationService._organization_from_dict`` so org-facing readiness
-    # aligns with the credentials UI status pills.
+            raise OrganizationCredentialResolutionError(
+                "organization provider credentials could not be decrypted"
+            ) from None
+        if not isinstance(decrypted, dict) or not decrypted:
+            logger.error(
+                "Refusing to use unreadable provider_credentials for org %s",
+                getattr(org, "id", "<unknown>"),
+            )
+            raise OrganizationCredentialResolutionError(
+                "organization provider credentials could not be decrypted"
+            )
+    # Transitional legacy-column fallback. The staged data migration clears
+    # this value before the compatibility column is removed.
     if not creds.get("google"):
         legacy_google = getattr(org, "google_api_key", None)
         if legacy_google:
@@ -157,7 +181,13 @@ def resolve_org_provider_credential(org: Optional[Any], provider: str) -> Any:
         not configured it. The value is intended for a narrowly scoped server
         runtime path and must never be serialized into prompts or API models.
     """
-    return _org_credentials(org).get(provider)
+    try:
+        return _org_credentials(org).get(provider)
+    except OrganizationCredentialResolutionError:
+        # Fail closed for the narrowly scoped native-tool path. Returning no
+        # credential lets the tool emit its normal safe configuration error;
+        # it must never use a stale per-agent or platform fallback.
+        return None
 
 
 def resolve_api_keys(
@@ -190,7 +220,15 @@ def resolve_api_keys(
         Providers with no resolvable key are omitted.
     """
     needed = _providers_needed(speech_config)
-    creds = _org_credentials(org) if not use_platform_credits else {}
+    if use_platform_credits:
+        creds = {}
+    else:
+        try:
+            creds = _org_credentials(org)
+        except OrganizationCredentialResolutionError:
+            # A configured-but-unreadable tenant blob is not equivalent to an
+            # unconfigured tenant. Do not silently charge the platform account.
+            return {}
     api_keys: dict[str, Any] = {}
 
     for provider in needed:

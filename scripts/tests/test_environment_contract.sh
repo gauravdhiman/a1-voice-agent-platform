@@ -39,6 +39,10 @@ for file in .env.local.example .env.staging.example .env.prod.example; do
   [[ -f "$ROOT/$file" ]] || { echo "Missing template: $file" >&2; exit 1; }
 done
 
+for file in deploy/config/local.env deploy/config/staging.env deploy/config/production.env; do
+  [[ -f "$ROOT/$file" ]] || { echo "Missing versioned config: $file" >&2; exit 1; }
+done
+
 for legacy in .env .env.cloud .env.cloud.example .env.dev; do
   [[ ! -e "$ROOT/$legacy" ]] || { echo "Legacy file exists: $legacy" >&2; exit 1; }
 done
@@ -63,20 +67,32 @@ diff -u \
   <(template_keys "$ROOT/.env.prod.example")
 
 for file in .env.local.example .env.staging.example .env.prod.example; do
+  assert_contains "$ROOT/$file" 'SECRET_MANAGER_MODE='
+  assert_contains "$ROOT/$file" 'GCP_SECRET_MANAGER_PROJECT_ID='
+  assert_contains "$ROOT/$file" 'GCP_SECRET_NAME_PREFIX='
+  assert_contains "$ROOT/$file" 'GCP_BACKEND_RUNTIME_SERVICE_ACCOUNT='
+  assert_contains "$ROOT/$file" 'OCI_VAULT_ID='
+  assert_contains "$ROOT/$file" 'OCI_SECRET_NAME_PREFIX='
   assert_contains "$ROOT/$file" 'NEXT_PUBLIC_POSTHOG_KEY='
   assert_contains "$ROOT/$file" 'NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com'
 done
 assert_contains "$ROOT/frontend/.env.local.example" 'NEXT_PUBLIC_POSTHOG_KEY='
 assert_contains "$ROOT/frontend/.env.local.example" 'NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com'
+assert_contains "$ROOT/frontend/.env.local.example" 'NEXT_PUBLIC_TURNSTILE_SITE_KEY='
 assert_contains "$ROOT/docker-compose.dev.yml" 'NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY:-}'
 assert_contains "$ROOT/docker-compose.dev.yml" 'NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}'
 assert_contains "$ROOT/docker-compose.yml" 'NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY:-}'
 assert_contains "$ROOT/docker-compose.yml" 'NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}'
 assert_contains "$ROOT/frontend/Dockerfile" 'ARG NEXT_PUBLIC_POSTHOG_KEY'
 assert_contains "$ROOT/frontend/Dockerfile" 'ARG NEXT_PUBLIC_POSTHOG_HOST'
+assert_contains "$ROOT/frontend/Dockerfile" 'ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY'
+assert_contains "$ROOT/docker-compose.dev.yml" 'NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}'
+assert_contains "$ROOT/docker-compose.yml" 'NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'NEXT_PUBLIC_POSTHOG_KEY="$(read_env NEXT_PUBLIC_POSTHOG_KEY)"'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--build-arg "NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY}"'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--build-arg "NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}"'
+assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--build-arg "NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}"'
+assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--build-arg "NEXT_PUBLIC_APP_DESCRIPTION=${NEXT_PUBLIC_APP_DESCRIPTION}"'
 
 assert_contains "$ROOT/start.sh" 'ENV_FILE="$PROJECT_DIR/.env.local"'
 assert_contains "$ROOT/start.sh" 'ENV_FILE="$PROJECT_DIR/.env.staging"'
@@ -116,9 +132,25 @@ assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'RELEASE_TAG="${RELEASE_TAG
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${RELEASE_TAG}"'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'run-alembic-cloud.sh'
 assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" 'sync-release-fixtures.sh'
+assert_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--set-secrets=$backend_secret_refs'
+assert_contains "$ROOT/scripts/deploy/gcp-secret-refs.py" 'versions'
+assert_contains "$ROOT/scripts/deploy/render-gcp-env.py" 'Secret Manager'
+assert_contains "$ROOT/scripts/deploy/build-env-file.py" 'secret overlay'
+assert_contains "$ROOT/scripts/deploy/validate-versioned-config.py" 'version-controlled'
+assert_contains "$ROOT/.dockerignore" '**/.env.*'
+assert_contains "$ROOT/.dockerignore" '**/.git'
+assert_contains "$ROOT/scripts/deploy/sync-gcp-secrets.py" '--apply'
+assert_contains "$ROOT/scripts/deploy/sync-oci-secrets.py" '--apply'
+assert_contains "$ROOT/scripts/deploy/rotate-encrypted-data.py" '--apply'
+assert_contains "$ROOT/scripts/deploy/rotate-encrypted-data.py" 'no changes were committed'
 assert_not_contains "$ROOT/scripts/deploy/gcp-deploy.sh" '--allow-unauthenticated'
 assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'SSH_KEY="${HOME}/${SSH_KEY#\~/}"'
 assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'run-alembic-cloud.sh'
+assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'oci-fetch-vault-env.sh'
+assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" '.dockerignore'
+assert_contains "$ROOT/scripts/deploy/oci-fetch-vault-env.sh" 'instance_principal'
+assert_contains "$ROOT/.github/workflows/promote-production.yml" 'deploy/config/production.env'
+assert_not_contains "$ROOT/.github/workflows/promote-production.yml" 'ENV_PROD_CONFIG'
 assert_contains "$ROOT/deploy/oci/docker-compose.voice-ws.yml" 'cpus: 2.0'
 assert_contains "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" 'voice_nano_cpus'
 assert_contains "$ROOT/scripts/deploy/run-alembic.sh" 'check_alembic_compatibility.py'
@@ -131,7 +163,7 @@ assert_before "$ROOT/scripts/deploy/gcp-deploy.sh" \
   '  docker build --platform linux/amd64 -t "$BACKEND_IMAGE" -f backend/Dockerfile .'
 assert_before "$ROOT/scripts/deploy/oci-deploy-voice-ws.sh" \
   'ENV_FILE="$ENV_FILE" "${ROOT}/scripts/deploy/run-alembic-cloud.sh"' \
-  'rm -rf ${REMOTE_DIR}'
+  'rm -rf -- '\''${REMOTE_DIR}'\'''
 assert_before "$ROOT/scripts/deploy/run-alembic.sh" \
   'check_alembic_compatibility.py' \
   'alembic upgrade "${REVISION}"'
@@ -172,12 +204,15 @@ assert_contains "$workflow" 'name: Deploy Cloud (staging)'
 assert_contains "$workflow" 'group: deploy-staging'
 assert_contains "$workflow" 'migrate-staging:'
 assert_contains "$workflow" 'environment: staging'
-assert_contains "$workflow" 'ENV_STAGING: ${{ secrets.ENV_STAGING }}'
+assert_contains "$workflow" 'deploy/config/staging.env'
+assert_not_contains "$workflow" 'ENV_STAGING_CONFIG: ${{ secrets.ENV_STAGING_CONFIG }}'
+assert_contains "$workflow" 'render-gcp-env.py'
 assert_contains "$workflow" 'check_alembic_compatibility.py --env-file .env.staging'
 assert_contains "$workflow" './scripts/deploy.sh migrate --env-file .env.staging'
 assert_contains "$workflow" 'GCP_PROJECT_ID: ${{ vars.STAGING_GCP_PROJECT_ID }}'
 assert_not_contains "$workflow" 'migrate-production:'
 assert_not_contains "$workflow" 'secrets.ENV_PROD'
+assert_not_contains "$workflow" 'secrets.ENV_STAGING }}'
 assert_not_contains "$workflow" 'if: ${{ secrets.OCI_SSH_KEY != '\'''\'' }}'
 assert_contains "$workflow" 'id: check-oci-ssh'
 assert_contains "$workflow" 'OCI_SSH_KEY: ${{ secrets.STAGING_OCI_SSH_KEY }}'
@@ -194,14 +229,17 @@ assert_contains "$production_workflow" 'PROMOTION_REF: ${{ inputs.ref }}'
 assert_contains "$production_workflow" 'full 40-character commit SHA'
 assert_contains "$production_workflow" 'ref: ${{ inputs.ref }}'
 assert_contains "$production_workflow" 'environment: production'
-assert_contains "$production_workflow" 'ENV_PROD: ${{ secrets.ENV_PROD }}'
-assert_contains "$production_workflow" 'NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}'
-assert_contains "$production_workflow" 'NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com'
-assert_contains "$production_workflow" 'The production environment secret NEXT_PUBLIC_POSTHOG_KEY is required.'
+assert_contains "$production_workflow" 'deploy/config/production.env'
+assert_not_contains "$production_workflow" 'ENV_PROD_CONFIG: ${{ secrets.ENV_PROD_CONFIG }}'
+assert_contains "$production_workflow" 'render-gcp-env.py'
+assert_contains "$production_workflow" 'deploy/config/production.env NEXT_PUBLIC_POSTHOG_KEY'
+assert_contains "$production_workflow" 'LEGACY_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}'
 assert_contains "$production_workflow" 'check_alembic_compatibility.py --env-file .env.prod'
 assert_contains "$production_workflow" './scripts/deploy.sh migrate --env-file .env.prod'
+assert_contains "$production_workflow" 'verify_org_credential_migration.py --env-file .env.prod'
 assert_contains "$production_workflow" 'name: Install GCP deployment migration dependencies'
-assert_contains "$production_workflow" 'name: Install OCI deployment migration dependencies'
+assert_contains "$production_workflow" 'SKIP_DEPLOYMENT_MIGRATIONS: "true"'
+assert_not_contains "$production_workflow" 'secrets.ENV_PROD }}'
 assert_contains "$workflow" 'echo "RELEASE_TAG=$(git rev-parse HEAD)" >> "$GITHUB_ENV"'
 assert_contains "$production_workflow" 'echo "RELEASE_TAG=$(git rev-parse HEAD)" >> "$GITHUB_ENV"'
 

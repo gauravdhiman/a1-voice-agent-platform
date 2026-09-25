@@ -20,6 +20,15 @@ FRONTEND_SERVICE="${GCP_FRONTEND_SERVICE:-frontend-247ai}"
 ENV_FILE="${ENV_FILE:-.env.prod}"
 COMPONENT="${GCP_DEPLOY_COMPONENT:-all}"
 RELEASE_TAG="${RELEASE_TAG:-latest}"
+BACKEND_ENV_FILE=""
+
+cleanup_backend_env() {
+  if [[ -n "$BACKEND_ENV_FILE" ]]; then
+    rm -f "$BACKEND_ENV_FILE"
+  fi
+}
+
+trap cleanup_backend_env EXIT
 
 if ! [[ "$RELEASE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
   echo "Invalid RELEASE_TAG: $RELEASE_TAG" >&2
@@ -71,8 +80,57 @@ run_release_fixture_sync() {
 validate_backend_environment() {
   echo "==> Validating backend deployment environment..."
   python3 scripts/deploy/gcp-env-from-cloud.py backend \
-    --env-file "$ENV_FILE" >/dev/null
+    --env-file "$ENV_FILE" \
+    --secret-mode "$SECRET_MANAGER_MODE" >/dev/null
 }
+
+read_env() {
+  python3 - "$1" "$ENV_FILE" <<'PY'
+import sys
+from pathlib import Path
+key, path = sys.argv[1], Path(sys.argv[2])
+for line in path.read_text().splitlines():
+    line = line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    k, _, v = line.partition("=")
+    if k.strip() == key:
+        v = v.strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+            v = v[1:-1]
+        print(v)
+        break
+PY
+}
+
+SECRET_MANAGER_MODE="$(read_env SECRET_MANAGER_MODE || true)"
+SECRET_MANAGER_MODE="${SECRET_MANAGER_MODE:-env}"
+case "$SECRET_MANAGER_MODE" in
+  env|gcp) ;;
+  *)
+    echo "SECRET_MANAGER_MODE must be env or gcp" >&2
+    exit 1
+    ;;
+esac
+GCP_SECRET_NAME_PREFIX="$(read_env GCP_SECRET_NAME_PREFIX || true)"
+GCP_SECRET_MANAGER_PROJECT_ID="$(read_env GCP_SECRET_MANAGER_PROJECT_ID || true)"
+BACKEND_RUNTIME_SERVICE_ACCOUNT="$(read_env GCP_BACKEND_RUNTIME_SERVICE_ACCOUNT || true)"
+
+if [[ "$SECRET_MANAGER_MODE" == "gcp" ]]; then
+  if [[ -z "$GCP_SECRET_NAME_PREFIX" ]]; then
+    echo "GCP_SECRET_NAME_PREFIX is required when SECRET_MANAGER_MODE=gcp" >&2
+    exit 1
+  fi
+  if [[ -n "$GCP_SECRET_MANAGER_PROJECT_ID" && \
+        "$GCP_SECRET_MANAGER_PROJECT_ID" != "$PROJECT_ID" ]]; then
+    echo "GCP_SECRET_MANAGER_PROJECT_ID must match GCP_PROJECT_ID for Cloud Run secret references" >&2
+    exit 1
+  fi
+  if [[ -z "$BACKEND_RUNTIME_SERVICE_ACCOUNT" ]]; then
+    echo "GCP_BACKEND_RUNTIME_SERVICE_ACCOUNT is required when SECRET_MANAGER_MODE=gcp" >&2
+    exit 1
+  fi
+fi
 
 # Keep the schema gate in this lower-level deployer as well as the public
 # wrapper so direct component deployments cannot publish code ahead of the DB.
@@ -87,25 +145,10 @@ gcloud config set project "$PROJECT_ID" >/dev/null
 # use them until the Artifact Registry credential helper is configured.
 gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet >/dev/null
 
-read_env() {
-  python3 - "$1" "$ENV_FILE" <<'PY'
-import sys
-from pathlib import Path
-key, path = sys.argv[1], Path(sys.argv[2])
-for line in path.read_text().splitlines():
-    line = line.strip()
-    if not line or line.startswith("#") or "=" not in line:
-        continue
-    k, _, v = line.partition("=")
-    if k.strip() == key:
-        print(v.strip())
-        break
-PY
-}
-
 NEXT_PUBLIC_SUPABASE_URL="$(read_env NEXT_PUBLIC_SUPABASE_URL)"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="$(read_env NEXT_PUBLIC_SUPABASE_ANON_KEY)"
 NEXT_PUBLIC_GOOGLE_CLIENT_ID="$(read_env NEXT_PUBLIC_GOOGLE_CLIENT_ID)"
+NEXT_PUBLIC_TURNSTILE_SITE_KEY="$(read_env NEXT_PUBLIC_TURNSTILE_SITE_KEY || true)"
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="$(read_env NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)"
 NEXT_PUBLIC_API_URL="$(read_env NEXT_PUBLIC_API_URL)"
 NEXT_PUBLIC_APP_NAME="$(read_env NEXT_PUBLIC_APP_NAME)"
@@ -132,12 +175,25 @@ deploy_backend() {
   docker build --platform linux/amd64 -t "$BACKEND_IMAGE" -f backend/Dockerfile .
   docker push "$BACKEND_IMAGE"
 
-  local backend_env
-  backend_env="$(mktemp)"
-  python3 scripts/deploy/gcp-env-from-cloud.py backend --env-file "$ENV_FILE" > "$backend_env"
+  BACKEND_ENV_FILE="$(mktemp)"
+  python3 scripts/deploy/gcp-env-from-cloud.py backend \
+    --env-file "$ENV_FILE" \
+    --secret-mode "$SECRET_MANAGER_MODE" > "$BACKEND_ENV_FILE"
+
+  local -a secret_deploy_args=()
+  if [[ "$SECRET_MANAGER_MODE" == "gcp" ]]; then
+    local backend_secret_refs
+    backend_secret_refs="$(python3 scripts/deploy/gcp-secret-refs.py \
+      --env-file "$ENV_FILE" \
+      --project "$PROJECT_ID" \
+      --service backend \
+      --secret-prefix "$GCP_SECRET_NAME_PREFIX")"
+    secret_deploy_args+=("--service-account=$BACKEND_RUNTIME_SERVICE_ACCOUNT")
+    secret_deploy_args+=("--set-secrets=$backend_secret_refs")
+  fi
 
   echo "==> Deploying backend to Cloud Run ($BACKEND_SERVICE, tag ${RELEASE_TAG})..."
-  gcloud run deploy "$BACKEND_SERVICE" \
+  if ! gcloud run deploy "$BACKEND_SERVICE" \
     --image="$BACKEND_IMAGE" \
     --region="$REGION" \
     --platform=managed \
@@ -147,9 +203,15 @@ deploy_backend() {
     --min-instances=1 \
     --max-instances=10 \
     --no-cpu-throttling \
-    --env-vars-file="$backend_env"
+    --env-vars-file="$BACKEND_ENV_FILE" \
+    "${secret_deploy_args[@]}"; then
+    cleanup_backend_env
+    BACKEND_ENV_FILE=""
+    return 1
+  fi
 
-  rm -f "$backend_env"
+  cleanup_backend_env
+  BACKEND_ENV_FILE=""
 }
 
 deploy_frontend() {
@@ -159,6 +221,7 @@ deploy_frontend() {
     --build-arg "NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}" \
     --build-arg "NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}" \
     --build-arg "NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}" \
+    --build-arg "NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}" \
     --build-arg "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}" \
     --build-arg "NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY}" \
     --build-arg "NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}" \

@@ -17,7 +17,12 @@ from src.organization.invitation_models import (
     InvitationRole,
     InvitationStatus,
 )
-from src.organization.models import Organization, OrganizationCreate, OrganizationUpdate
+from src.organization.models import (
+    Organization,
+    OrganizationCreate,
+    OrganizationRuntime,
+    OrganizationUpdate,
+)
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.models import UserRoleCreate
 from src.rbac.user_roles.service import user_role_service
@@ -67,14 +72,14 @@ class OrganizationService(BaseOrganizationService):
     # Provider-credentials blob helpers (Phase 3)
     # ------------------------------------------------------------------
     @staticmethod
-    def _organization_from_dict(org_dict: dict) -> Organization:
-        """Build an :class:`Organization` from a raw Supabase row.
+    def _organization_from_dict(org_dict: dict) -> OrganizationRuntime:
+        """Build an internal runtime organization from a Supabase row.
 
-        Resolves the Google API key from the encrypted ``provider_credentials``
-        blob (the source of truth as of Phase 3), falling back to the legacy
-        plaintext ``google_api_key`` column for rows that have not yet been
-        migrated. The encrypted blob is also attached to the model so the worker
-        path (which decrypts it itself) and any internal caller can read it.
+        Resolves provider-credential status from the encrypted
+        ``provider_credentials`` blob, falling back to the legacy plaintext
+        ``google_api_key`` column only for rows that have not yet completed the
+        staged migration. The runtime model carries the opaque ciphertext for
+        the worker; its secret fields are excluded from serialization.
 
         Also derives ``provider_credentials_status`` — a per-provider
         "configured?" boolean map (never the decrypted values) — so the
@@ -89,11 +94,9 @@ class OrganizationService(BaseOrganizationService):
             org_dict: A raw row from the ``organizations`` table.
 
         Returns:
-            An :class:`Organization` with ``google_api_key`` populated from the
-            decrypted blob (so the existing org-settings UI form still works),
-            ``provider_credentials`` carrying the opaque encrypted blob, and
-            ``provider_credentials_status`` carrying the per-provider boolean
-            map, plus any saved provider reference notes.
+            An :class:`OrganizationRuntime` carrying the opaque encrypted blob,
+            a transitional legacy ``google_api_key`` fallback, a boolean-only
+            provider status map, and any saved provider reference notes.
         """
         provider_credentials = org_dict.get("provider_credentials")
         google_api_key = org_dict.get("google_api_key")
@@ -103,14 +106,11 @@ class OrganizationService(BaseOrganizationService):
                 decrypted = decrypt_data(provider_credentials)
                 if isinstance(decrypted, dict):
                     creds = decrypted
-                    if creds.get("google"):
-                        google_api_key = creds["google"]
             except Exception as e:
                 logger.error(
-                    "Failed to decrypt provider_credentials for org %s: %s",
+                    "Failed to decrypt provider_credentials for org %s (%s)",
                     org_dict.get("id"),
-                    e,
-                    exc_info=True,
+                    type(e).__name__,
                 )
         provider_credentials_descriptions: dict[str, str] = {}
         raw_descriptions = org_dict.get("provider_credentials_descriptions")
@@ -126,7 +126,7 @@ class OrganizationService(BaseOrganizationService):
         # from the blob OR the legacy plaintext column fallback; string providers
         # are True when present in the decrypted blob.
         provider_credentials_status = {
-            "google": bool(google_api_key),
+            "google": bool(creds.get("google") or google_api_key),
             "deepgram": bool(creds.get("deepgram")),
             "openai": bool(creds.get("openai")),
             "cartesia": bool(creds.get("cartesia")),
@@ -135,7 +135,7 @@ class OrganizationService(BaseOrganizationService):
             "fish": bool(creds.get("fish")),
             "resend": bool(creds.get("resend")),
         }
-        return Organization(
+        return OrganizationRuntime(
             id=org_dict["id"],
             name=org_dict["name"],
             description=org_dict["description"],
@@ -146,6 +146,8 @@ class OrganizationService(BaseOrganizationService):
             location=org_dict.get("location"),
             timezone=org_dict.get("timezone"),
             business_details=org_dict.get("business_details"),
+            # Transitional fallback for the runtime resolver only. The staged
+            # migration clears this column before the public model is served.
             google_api_key=google_api_key,
             provider_credentials=provider_credentials,
             provider_credentials_status=provider_credentials_status,
@@ -183,16 +185,31 @@ class OrganizationService(BaseOrganizationService):
         """
         creds: dict = {}
         if existing_blob:
+            # Never replace an unreadable blob with only the newly submitted
+            # credential. That would silently destroy every other provider
+            # credential and turn an encryption-key/configuration problem into
+            # data loss. The caller returns a safe update error and leaves the
+            # existing ciphertext untouched.
             try:
                 decrypted = decrypt_data(existing_blob)
-                if isinstance(decrypted, dict):
-                    creds = dict(decrypted)
-            except Exception as e:
+            except Exception as exc:
                 logger.error(
-                    "Failed to decrypt existing provider_credentials for merge: %s",
-                    e,
-                    exc_info=True,
+                    "Refusing to overwrite unreadable provider_credentials blob (%s)",
+                    type(exc).__name__,
                 )
+                raise ValueError(
+                    "Existing provider credentials could not be decrypted; "
+                    "no credentials were changed"
+                ) from None
+            if not isinstance(decrypted, dict) or not decrypted:
+                logger.error(
+                    "Refusing to overwrite unreadable provider_credentials blob"
+                )
+                raise ValueError(
+                    "Existing provider credentials could not be decrypted; "
+                    "no credentials were changed"
+                )
+            creds = dict(decrypted)
         for provider, value in updates.items():
             if value is None:
                 creds.pop(provider, None)
@@ -1085,10 +1102,10 @@ class OrganizationService(BaseOrganizationService):
         try:
             # Test the API key by calling Google's models endpoint
             # This is a lightweight call that validates the key
-            url = f"https://generativelanguage.googleapis.com/v1/models?key={api_key}"
+            url = "https://generativelanguage.googleapis.com/v1/models"
 
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(url)
+                response = await client.get(url, headers={"x-goog-api-key": api_key})
 
                 if response.status_code == 200:
                     current_span.set_status(trace.Status(trace.StatusCode.OK))
@@ -1129,7 +1146,11 @@ class OrganizationService(BaseOrganizationService):
         except Exception as e:
             error_msg = f"Validation error: {str(e)}"
             current_span.set_status(trace.Status(trace.StatusCode.ERROR, error_msg))
-            logger.error(f"Google API key validation exception: {e}", exc_info=True)
+            logger.error(
+                "Google API key validation exception (%s)",
+                type(e).__name__,
+                exc_info=True,
+            )
             return False, "Unable to validate API key"
 
     def _get_frontend_url(self) -> str:

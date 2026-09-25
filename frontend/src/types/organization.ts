@@ -17,7 +17,6 @@ export interface Organization {
   onboarding_completed: boolean;
   created_at: string;
   updated_at: string;
-  google_api_key?: string | null;
   /**
    * Per-provider "is a key configured?" map (booleans only — never the decrypted
    * values), derived from the encrypted `provider_credentials` blob on read
@@ -83,6 +82,10 @@ export interface OrganizationUpdate {
   /** IANA timezone; empty string clears the org default on save. */
   timezone?: string | null;
   business_details?: string | null;
+  /**
+   * Write-only legacy input. The backend validates and encrypts it, and never
+   * includes it in organization responses.
+   */
   google_api_key?: string | null;
   /**
    * Per-provider credentials supplied from the UI (Phase 4). Send ONLY touched

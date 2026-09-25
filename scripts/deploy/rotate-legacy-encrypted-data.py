@@ -102,7 +102,9 @@ def rotate(path: Path, *, apply: bool) -> int:
     try:
         connection = psycopg2.connect(dsn)
     except Exception as exc:  # pragma: no cover - depends on operator network
-        raise RuntimeError(f"database connection failed ({type(exc).__name__})") from None
+        raise RuntimeError(
+            f"database connection failed ({type(exc).__name__})"
+        ) from None
 
     total_updated = 0
     try:

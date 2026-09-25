@@ -6,6 +6,7 @@ import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "deploy" / "gcp-env-from-cloud.py"
 MODULE_SPEC = importlib.util.spec_from_file_location(
@@ -15,6 +16,17 @@ MODULE_SPEC = importlib.util.spec_from_file_location(
 assert MODULE_SPEC and MODULE_SPEC.loader
 gcp_env = importlib.util.module_from_spec(MODULE_SPEC)
 MODULE_SPEC.loader.exec_module(gcp_env)
+
+RENDER_SCRIPT_PATH = (
+    Path(__file__).resolve().parents[1] / "deploy" / "render-gcp-env.py"
+)
+RENDER_MODULE_SPEC = importlib.util.spec_from_file_location(
+    "render_gcp_env",
+    RENDER_SCRIPT_PATH,
+)
+assert RENDER_MODULE_SPEC and RENDER_MODULE_SPEC.loader
+render_gcp_env = importlib.util.module_from_spec(RENDER_MODULE_SPEC)
+RENDER_MODULE_SPEC.loader.exec_module(render_gcp_env)
 
 
 RECORDING_ENVIRONMENT_KEYS = {
@@ -64,6 +76,19 @@ class GcpEnvironmentGenerationTests(unittest.TestCase):
             "voice-ws deployment allowlist is missing encryption variables",
         )
 
+    def test_service_allowlists_cover_every_managed_secret_for_that_runtime(
+        self,
+    ) -> None:
+        """A newly classified secret cannot be silently omitted at deploy time."""
+        from secret_config import BACKEND_SECRET_KEYS, WORKER_SECRET_KEYS
+
+        self.assertTrue(BACKEND_SECRET_KEYS <= gcp_env.BACKEND_KEYS)
+        self.assertTrue(WORKER_SECRET_KEYS <= gcp_env.WORKER_KEYS)
+
+    def test_frontend_only_anon_key_is_not_in_server_secret_refs(self) -> None:
+        """The browser-only Supabase anon key is not injected into Cloud Run backend."""
+        self.assertNotIn("NEXT_PUBLIC_SUPABASE_ANON_KEY", gcp_env.BACKEND_KEYS)
+
     def test_generated_yaml_contains_credential_encryption_configuration(
         self,
     ) -> None:
@@ -79,6 +104,80 @@ class GcpEnvironmentGenerationTests(unittest.TestCase):
         for rendered in (backend_yaml, worker_yaml):
             for key, value in source_env.items():
                 self.assertIn(f'{key}: "{value}"', rendered)
+
+    def test_managed_secret_mode_omits_secret_values(self) -> None:
+        """Cloud Run env YAML must not duplicate Secret Manager payloads."""
+        rendered = gcp_env.to_yaml(
+            {
+                "APP_NAME": "24x7 AI",
+                "ENCRYPTION_KEY": "do-not-render",
+                "JWT_SECRET_KEY": "do-not-render-either",
+            },
+            {"APP_NAME", "ENCRYPTION_KEY", "JWT_SECRET_KEY"},
+            "gcp",
+        )
+        self.assertIn('APP_NAME: "24x7 AI"', rendered)
+        self.assertNotIn("do-not-render", rendered)
+
+    def test_render_does_not_reactivate_omitted_optional_secrets(self) -> None:
+        """Stale manager versions stay out unless config opts an integration in."""
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.env"
+            output_path = Path(directory) / "rendered.env"
+            config_path.write_text("APP_NAME=24x7 AI\nENCRYPTION_KEY=\n")
+            requested: list[str] = []
+
+            def fake_fetch(_project: str, secret_id: str) -> tuple[str, bool]:
+                requested.append(secret_id)
+                return "managed-value", True
+
+            with patch.object(render_gcp_env, "_fetch_secret", side_effect=fake_fetch):
+                fetched, _value_count = render_gcp_env.render(
+                    config_path,
+                    output_path,
+                    "project",
+                    "247ai-test",
+                    {"JWT_SECRET_KEY"},
+                )
+
+            rendered = output_path.read_text()
+            self.assertEqual(fetched, 2)
+            self.assertIn("247ai-test-encryption-key", requested)
+            self.assertIn("247ai-test-jwt-secret-key", requested)
+            self.assertNotIn("247ai-test-openai-api-key", requested)
+            self.assertIn("ENCRYPTION_KEY=managed-value", rendered)
+            self.assertIn("JWT_SECRET_KEY=managed-value", rendered)
+            self.assertEqual(output_path.stat().st_mode & 0o777, 0o600)
+
+    def test_public_worker_render_contains_only_vault_metadata(self) -> None:
+        """The OCI transfer manifest contains config, never secret values."""
+        rendered = gcp_env.to_dotenv(
+            {
+                "ENVIRONMENT": "production",
+                "OCI_VAULT_ID": "ocid1.vault.example",
+                "OCI_SECRET_NAME_PREFIX": "247ai-production",
+                "GEMINI_API_KEY": "do-not-render",
+            },
+            {"ENVIRONMENT", "GEMINI_API_KEY"},
+            "public",
+            public_worker=True,
+        )
+        self.assertIn("ENVIRONMENT='production'", rendered)
+        self.assertIn("OCI_VAULT_ID='ocid1.vault.example'", rendered)
+        self.assertNotIn("do-not-render", rendered)
+
+    def test_secret_manifest_contains_names_only(self) -> None:
+        """OCI bootstrap manifests derive stable names without payloads."""
+        manifest = gcp_env.to_secret_manifest(
+            "voice-ws",
+            "247ai-production",
+            {"ENCRYPTION_KEY": "", "GEMINI_API_KEY": ""},
+        )
+        self.assertIn("GEMINI_API_KEY=247ai-production-gemini-api-key", manifest)
+        self.assertIn("ENCRYPTION_KEY=247ai-production-encryption-key", manifest)
+        self.assertIn("JWT_SECRET_KEY=247ai-production-jwt-secret-key", manifest)
+        self.assertNotIn("OPENAI_API_KEY=", manifest)
+        self.assertNotIn("=your-", manifest)
 
     def test_generated_service_names_are_distinct(self) -> None:
         """Backend and voice traces must be separable in cloud backends."""

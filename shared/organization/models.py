@@ -61,29 +61,6 @@ class OrganizationBase(BaseModel):
         and will be referenced when interacting with callers.
         """,
     )
-    google_api_key: Optional[str] = Field(
-        None,
-        description="""
-        Organization's own Google API key for voice agents.
-
-        If set, voice agents can use this API key instead of the platform key,
-        allowing billing to go directly to the organization's Google Cloud project.
-        The key is stored encrypted and decrypted only when needed.
-        """,
-    )
-    provider_credentials: Optional[str] = Field(
-        None,
-        description=(
-            "Fernet-encrypted JSON blob of all per-org provider keys via "
-            "encrypt_data/decrypt_data: {google, deepgram, openai, cartesia, "
-            "cerebras, openrouter, fish, resend} (only the set keys "
-            "present). The `resend` key is also stored here for the native "
-            "Resend email tool. Source of truth for the worker's key resolver; the "
-            "legacy plaintext google_api_key column is retained but unused. "
-            "Returned as the opaque encrypted string; never expose decrypted "
-            "values to the frontend."
-        ),
-    )
     public_page_enabled: bool = Field(
         default=False,
         description=(
@@ -161,11 +138,14 @@ class OrganizationUpdate(BaseModel):
     google_api_key: Optional[str] = Field(
         None,
         description="""
-        Organization's own Google API key for voice agents.
+        Write-only legacy input for an organization's Google API key.
 
         If set, voice agents can use this API key instead of the platform key,
         allowing billing to go directly to the organization's Google Cloud project.
+        It is validated, merged into the encrypted provider-credentials blob,
+        and never returned by organization read APIs.
         """,
+        json_schema_extra={"writeOnly": True},
     )
     provider_credentials_input: Optional[Dict[str, Any]] = Field(
         None,
@@ -233,4 +213,26 @@ class Organization(OrganizationBase):
             "Non-secret per-provider reference notes for the organization API "
             "credentials. Read-only; credential values are never included."
         ),
+    )
+
+
+class OrganizationRuntime(Organization):
+    """Internal organization model that carries opaque runtime credentials.
+
+    The worker needs the encrypted provider blob to resolve credentials at call
+    time. These fields are explicitly excluded from Pydantic serialization and
+    are not part of the public ``Organization`` response model.
+    """
+
+    google_api_key: Optional[str] = Field(
+        None,
+        exclude=True,
+        repr=False,
+        description="Transitional legacy credential used only by the runtime resolver.",
+    )
+    provider_credentials: Optional[str] = Field(
+        None,
+        exclude=True,
+        repr=False,
+        description="Opaque Fernet ciphertext used only by the runtime resolver.",
     )

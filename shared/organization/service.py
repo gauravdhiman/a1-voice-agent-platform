@@ -7,10 +7,10 @@ from typing import Optional
 from uuid import UUID
 
 from opentelemetry import trace
-from supabase import Client
 
 from shared.config import supabase_config
-from shared.organization.models import Organization
+from shared.organization.models import OrganizationRuntime
+from supabase import Client
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -42,7 +42,7 @@ class BaseOrganizationService:
     @tracer.start_as_current_span("organization.get_organization_by_id")
     async def get_organization_by_id(
         self, org_id: UUID
-    ) -> tuple[Optional[Organization], Optional[str]]:
+    ) -> tuple[Optional[OrganizationRuntime], Optional[str]]:
         """Get an organization by its ID."""
         try:
             response = (
@@ -57,7 +57,10 @@ class BaseOrganizationService:
                 return None, "Organization not found"
 
             org_dict = response.data[0]
-            organization = Organization(**org_dict)
+            # The worker needs the opaque provider-credentials ciphertext at
+            # runtime. OrganizationRuntime excludes it from serialization so
+            # callers cannot accidentally return it from an API response.
+            organization = OrganizationRuntime(**org_dict)
             return organization, None
 
         except Exception as e:

@@ -18,9 +18,10 @@ Production infrastructure for **247ai.live**:
 | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | **[Quick reference](quick-reference.md)**                                       | Day-to-day deploy commands, prerequisites, smoke checks                                             |
 | **[Runbook](runbook.md)**                                                       | Full architecture, first-time setup, DNS, webhooks, security                                        |
-| **[Environment variables](environment-variables.md)**                           | Every env var by service; `.env.prod` is the manual-deploy file and `ENV_PROD` is its CI equivalent |
+| **[Environment variables](environment-variables.md)**                           | Every env var by service and the non-secret deployment config contract                         |
 | **[Local Docker](local-docker.md)**                                             | docker-compose and manual image builds for development                                              |
 | **[CI / GitHub Actions](ci-github-actions.md)**                                 | Local staging validation, manual production promotion, and required secrets                         |
+| **[Secret management](secret-management.md)**                                   | GCP Secret Manager, OCI Vault, GitHub OIDC, rotation, and credential migration                       |
 | **[Worktree isolation and release strategy](worktree-and-release-strategy.md)** | Per-worktree databases, local staging (shared cloud DB), and production promotion model             |
 
 ## Repo artifacts
@@ -52,9 +53,16 @@ private local stack when a developer needs to inspect a call.
 
 ## Credentials
 
-- **Application secrets:** `.env.prod` for emergency/local deployment, or the protected GitHub `production` environment secret `ENV_PROD` for CI (never commit the file).
+- **Application secrets:** GCP Secret Manager for Cloud Run and OCI Vault for
+  voice-ws. `.env.prod` is a gitignored emergency/local deployment input only;
+  never commit it.
+- **Versioned release config:** `deploy/config/production.env` and
+  `deploy/config/staging.env` contain non-secret values only. GitHub stores
+  deployment identities and transport credentials, authenticates to GCP with
+  OIDC/WIF, and does not store a complete production env file.
 - **OCI VM SSH:** `~/.ssh/oci_voice_ws` (default). Set `OCI_SSH_HOST` when deploying voice-ws.
-- **OCI API / GCP:** local CLI config; CI uses GitHub secrets — see [CI](ci-github-actions.md).
+- **OCI API / GCP:** the VM uses OCI instance principals and CI uses GitHub
+  OIDC/WIF — see [CI](ci-github-actions.md) and [Secret management](secret-management.md).
 
 ## Related docs outside this folder
 

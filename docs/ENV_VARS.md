@@ -13,8 +13,12 @@ Do not create or maintain a root `.env` file. The Compose files and scripts
 select the appropriate canonical file directly.
 
 The design rationale, selection commands, direct-process behavior, Compose
-project isolation, and production-secret migration notes are documented in
-[environment configuration](05_operations/environment_configuration.md).
+project isolation, versioned non-secret config, and production-secret migration
+notes are documented in [environment configuration](05_operations/environment_configuration.md).
+
+Cloud deployment configuration is versioned under `deploy/config/`. Secret
+values are never committed there; managed releases fetch them from GCP Secret
+Manager and OCI Vault.
 
 Production environment variables are documented at:
 

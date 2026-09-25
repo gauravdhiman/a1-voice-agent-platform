@@ -30,13 +30,16 @@ Manual equivalent:
 python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
 ./scripts/deploy.sh migrate --env-file .env.staging
 python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.staging
+python3 scripts/deploy/verify_org_credential_migration.py --env-file .env.staging
 ./scripts/deploy/sync-release-fixtures.sh --env-file .env.staging --project-name 247ai-staging
 ./start.sh start dev --env staging   # direct start after the explicit release bootstrap
 ```
 
 ## Manual or recovery deploy (production, and optional staging Cloud Run)
 
-Credentials live in **`.env.prod`** only (gitignored). Template: **`.env.prod.example`**.
+Manual/recovery credentials may be rendered into **`.env.prod`** (gitignored).
+Managed cloud releases use GCP Secret Manager and OCI Vault; see
+[secret management](secret-management.md). Template: **`.env.prod.example`**.
 
 ```bash
 chmod +x scripts/deploy.sh   # once
