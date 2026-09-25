@@ -108,11 +108,17 @@ def test_org_admin_can_save_oauth_notification_destinations(
     signin_user(page, base_url, wait_for_dashboard=False)
     expect(page).to_have_url(re.compile(r"/dashboard$"), timeout=10000)
     expect(page.get_by_role("link", name="Organization", exact=True)).to_be_visible()
-    step("Open the notification preferences tab")
-    page.goto(f"{base_url}/organization?tab=notifications")
+    step("Open the saved notification deep link")
+    page.goto(f"{base_url}/organization?org_id={ORG_ID}&tab=notifications")
     page.wait_for_load_state("networkidle")
 
-    expect(page.get_by_role("tab", name="Notifications")).to_be_visible()
+    expect(page).to_have_url(
+        re.compile(r"/organization\?.*tab=settings.*section=notifications")
+    )
+    expect(page.get_by_role("tab", name="Settings")).to_be_visible()
+    expect(
+        page.get_by_role("link", name=re.compile("Notifications"))
+    ).to_have_attribute("aria-current", "page")
     expect(page.get_by_text("SMS provider ready")).to_be_visible()
     expect(page.get_by_text("Telegram bot ready")).to_be_visible()
 

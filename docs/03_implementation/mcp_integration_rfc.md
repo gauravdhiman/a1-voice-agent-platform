@@ -384,8 +384,8 @@ organization admin. The email contains only safe tool/agent status and a
 reconnect link; it never contains OAuth credentials or provider error payloads.
 OAuth alerts can also reach configured platform and organization SMS/Telegram
 destinations through the durable outbox. Organization admins set shared
-destinations under Organization → Notifications; platform admins manage
-provider credentials under Platform → Notifications. There is no WhatsApp
+destinations under Organization → Settings → Notifications; platform admins manage
+provider credentials under Platform → Settings → Notifications. There is no WhatsApp
 adapter or per-organization reminder-frequency setting.
 
 This covers all standards-compliant OAuth 2.0 refresh-token integrations that

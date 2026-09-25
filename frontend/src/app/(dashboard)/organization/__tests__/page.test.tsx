@@ -113,6 +113,10 @@ vi.mock("@/components/organizations/organization-edit-dialog", () => ({
   OrganizationEditDialog: () => null,
 }));
 
+vi.mock("@/components/notifications/organization-notification-settings-form", () => ({
+  OrganizationNotificationSettingsForm: () => <div>Organization alert destinations</div>,
+}));
+
 import OrganizationPage from "../page";
 
 const { FIXTURE_ORG, OTHER_ORG } = mocks;
@@ -192,14 +196,37 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows notification settings to organization administrators", async () => {
+  it("shows notification settings inside the selected organization Settings section", async () => {
+    globalThis.__orgPageSearchParams =
+      "org_id=org-1&tab=settings&section=notifications";
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
 
     render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
 
-    expect(await screen.findByRole("tab", { name: "Notifications" })).toBeTruthy();
+    expect(await screen.findByRole("tab", { name: "Settings" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Notifications/ }).getAttribute("aria-current"),
+    ).toBe("page");
+    expect(screen.getByText("Organization alert destinations")).toBeTruthy();
+  });
+
+
+  it("redirects legacy notification tabs into the Settings deep link", async () => {
+    globalThis.__orgPageSearchParams = "org_id=org-1&tab=notifications";
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(<OrganizationPage />, { wrapper: makeWrapper(queryClient) });
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith(
+        "/organization?org_id=org-1&tab=settings&section=notifications",
+        { scroll: false },
+      );
+    });
   });
 
   it("uses ?org_id= when present, ignoring currentOrganization.id", async () => {
@@ -292,7 +319,7 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
     });
   });
 
-  it("renders the Organization Info + API Credentials tabs and defaults to info", async () => {
+  it("renders Settings + API Credentials and defaults to General settings", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -303,17 +330,22 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
       expect(screen.getAllByText("Acme").length).toBeGreaterThan(0);
     });
 
-    // Both tabs are present.
+    // Both top-level areas are present and General is selected by default.
     expect(
-      screen.getByRole("tab", { name: /organization info/i }),
+      screen.getByRole("tab", { name: /^settings$/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: /api credentials/i }),
     ).toBeInTheDocument();
 
-    // Info tab is active by default: its card title is in the document and the
-    // credentials card title is not.
+    expect(
+      screen.getByRole("link", { name: /^general/i }).getAttribute("aria-current"),
+    ).toBe("page");
+    // General settings are active by default; credentials remain a separate area.
     expect(screen.getByText(/Organization Information/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "General organization settings" }),
+    ).toBeTruthy();
     expect(
       screen.queryByText(/Third-party API Credentials/i),
     ).not.toBeInTheDocument();
@@ -331,7 +363,7 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
       expect(screen.getAllByText("Acme").length).toBeGreaterThan(0);
     });
 
-    // Credentials card title is NOT visible while the info tab is active.
+    // Credentials are not visible while the Settings area is active.
     expect(
       screen.queryByText(/Third-party API Credentials/i),
     ).not.toBeInTheDocument();
@@ -346,7 +378,7 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
         screen.getByText(/Third-party API Credentials/i),
       ).toBeInTheDocument();
     });
-    // The info card title is no longer mounted (Radix unmounts inactive content).
+    // The general settings card is no longer mounted (Radix unmounts inactive content).
     expect(
       screen.queryByText(/Organization Information/i),
     ).not.toBeInTheDocument();
@@ -358,7 +390,7 @@ describe("/organization page (N1 — fallback to currentOrganization)", () => {
     );
   });
 
-  it("does not surface a Google API Key field on the Organization Info tab (google is managed in the API Credentials tab)", async () => {
+  it("does not surface a Google API Key field in General settings (google is managed in the API Credentials tab)", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });

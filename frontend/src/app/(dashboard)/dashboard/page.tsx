@@ -1121,8 +1121,8 @@ export default function DashboardPage() {
                   <Link className="underline" href="/organizations/credits">
                     Credit management
                   </Link>
-                  <Link className="underline" href="/platform/phone-numbers">
-                    Phone numbers
+                  <Link className="underline" href="/platform/settings?section=phone-numbers">
+                    Platform settings
                   </Link>
                 </div>
               </div>

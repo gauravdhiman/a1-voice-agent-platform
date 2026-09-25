@@ -277,7 +277,7 @@ export function OrganizationNotificationSettingsForm({
                 disabled={saving}
               />
               <p className="text-xs text-muted-foreground">
-                Add the platform configured bot to the chat first. The platform admin manages the bot in Platform → Notifications.
+                Add the platform configured bot to the chat first. The platform admin manages the bot in Platform → Settings → Notifications.
               </p>
             </div>
           </section>

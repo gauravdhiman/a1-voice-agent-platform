@@ -398,7 +398,7 @@ backend, not the frontend, is the authorization boundary.
 
 Platform administrators can manage rental grace and scheduler retry settings
 with `GET/PUT /api/v1/phone-numbers/admin/settings`; the settings page is
-**Platform → Phone Number Settings**. The initial defaults are a seven-day
+**Platform → Settings → Phone numbers**. The initial defaults are a seven-day
 grace period and daily billing/release checks.
 
 ### Endpoints

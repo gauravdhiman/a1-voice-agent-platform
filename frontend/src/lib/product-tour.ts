@@ -333,19 +333,11 @@ const PLATFORM_ADMIN_STEPS: readonly ProductTourStep[] = [
     placement: "right",
   },
   {
-    id: "notifications",
-    target: '[data-tour="nav-notifications"]',
-    title: "Configure notifications",
+    id: "platform-settings",
+    target: '[data-tour="nav-platform-settings"]',
+    title: "Manage platform settings",
     content:
-      "Control the platform notification settings used to keep users and operators informed.",
-    placement: "right",
-  },
-  {
-    id: "platform-phone-numbers",
-    target: '[data-tour="nav-platform-phone-numbers"]',
-    title: "Set phone-number policies",
-    content:
-      "Manage the platform-level settings that govern phone-number provisioning and lifecycle behavior.",
+      "Configure platform notification delivery and phone-number lifecycle policies in one place.",
     placement: "right",
   },
   {

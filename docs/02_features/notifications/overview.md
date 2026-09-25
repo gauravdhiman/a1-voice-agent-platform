@@ -9,7 +9,7 @@ The notification system delivers transactional emails to users for critical even
 - **Email verification**: Email/password signup sends a Resend verification link; sign-in is blocked until verified.
 - **Lead alerts**: Public demo and interest-form submissions are saved in `interest_leads` and then delivered to the configured platform-admin email and/or Telegram chat.
 - **Telegram alerts**: Platform admins can receive Telegram messages on new signups, invitation joins, and lead submissions.
-- **Settings UI**: Platform admins configure the lead recipient, verification sender, and Telegram credentials at `/platform/notifications`.
+- **Settings UI**: Platform admins configure the lead recipient, verification sender, and Telegram credentials at `/platform/settings?section=notifications`.
 
 Lead delivery is channel-independent. Email requires a configured recipient,
 Resend API key, and sender. Telegram requires the enabled switch, bot token,
@@ -39,9 +39,9 @@ reconnection.
 Platform admins receive alerts at the configured platform email, Telegram,
 and optional SMS destinations. Organization admins continue to receive email;
 they can add a shared email inbox and opt in to SMS and Telegram destinations
-under Organization → Notifications. These channels use a durable outbox with
+under Organization → Settings → Notifications. These channels use a durable outbox with
 independent delivery state and bounded retries. Platform admins manage the
-provider credentials under Platform → Notifications. Per-organization
+provider credentials under Platform → Settings → Notifications. Per-organization
 notification frequency and WhatsApp delivery are not part of this integration.
 
 ## Agent-facing Resend email tool

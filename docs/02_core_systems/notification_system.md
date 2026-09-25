@@ -110,7 +110,7 @@ ENCRYPTION_KEY=your-fernet-key
 ```
 
 Platform admins can override the verification **from email/name** at
-`/platform/notifications` without redeploying. The Resend API key remains
+`/platform/settings?section=notifications` without redeploying. The Resend API key remains
 environment-only. The same page has a **Platform admin email** field for lead
 alerts. A lead email is sent only when that recipient, a sender, and
 `RESEND_API_KEY` are configured.
@@ -211,10 +211,10 @@ response bodies and OAuth secrets are never included.
 
 Every organization admin receives email through the durable notification
 service. An organization admin can add a shared alert inbox and opt in to SMS
-or Telegram on **Organization → Notifications** (`/organization?tab=notifications`).
+or Telegram on **Organization → Settings → Notifications** (`/organization?tab=settings&section=notifications`).
 The shared inbox is an additional email recipient; it does not replace admin
 account emails. Platform admins set their alert email and optional SMS/Telegram
-destinations on **Platform → Notifications**. The platform admin manages the
+destinations on **Platform → Settings → Notifications**. The platform admin manages the
 shared Telegram bot token and Twilio credentials; organization admins only
 supply their own destination and opt-in.
 

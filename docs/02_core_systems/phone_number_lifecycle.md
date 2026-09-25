@@ -124,7 +124,7 @@ eligibility check.
 Platform-owned numbers are charged using the enabled monthly system pricing
 event for their type. The default grace period is seven days. Platform
 administrators can configure the grace period and both scheduler intervals
-from **Platform → Phone Number Settings**. Environment variables remain safe
+from **Platform → Settings → Phone numbers**. Environment variables remain safe
 deployment defaults and fallbacks. On a failed renewal:
 
 1. `billing_status` becomes `past_due`.

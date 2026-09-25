@@ -11,8 +11,8 @@ The token refresh worker checks enabled, authenticated OAuth connections on its
 normal cycle. It emails every organization admin when a connection enters the
 attention window and again when it expires or needs immediate reauthorization.
 An organization admin can add a shared inbox and opt in to SMS or Telegram on
-**Organization → Notifications**. Platform admins set provider credentials and
-their own destinations on **Platform → Notifications**. Email retries use
+**Organization → Settings → Notifications**. Platform admins set provider credentials and
+their own destinations on **Platform → Settings → Notifications**. Email retries use
 `notification_logs`; SMS and Telegram retries use `oauth_attention_outbox`,
 with independent state for each platform and organization channel.
 
@@ -54,7 +54,7 @@ python scripts/seed_notification_events.py
 
 ### 4. Configure Platform Settings (UI)
 
-Platform admins: open **Platform → Notifications** (`/platform/notifications`) to set:
+Platform admins: open **Platform → Settings → Notifications** (`/platform/settings?section=notifications`) to set:
 
 - Platform-admin **recipient email** for demo and interest lead alerts
 - Verification email **from address** and **from name** (Resend)
@@ -62,7 +62,7 @@ Platform admins: open **Platform → Notifications** (`/platform/notifications`)
 - Platform-admin OAuth alert email and optional SMS destination
 
 Organization admins configure an optional shared inbox, SMS number, and
-Telegram chat on **Organization → Notifications** (`/organization?tab=notifications`).
+Telegram chat on **Organization → Settings → Notifications** (`/organization?tab=settings&section=notifications`).
 They do not configure provider credentials. Organization-admin account emails
 remain recipients even when no shared inbox is set.
 
@@ -106,10 +106,10 @@ Triggered on:
 - User joins via invitation (signup or existing user accepting invite)
 - Public demo and interest-form submissions
 
-Configure platform signup alerts at `/platform/notifications`. Platform
+Configure platform signup alerts at `/platform/settings?section=notifications`. Platform
 OAuth alerts use the platform admin's own Telegram/SMS opt-ins. Organization
 OAuth alerts use each organization's opt-ins from
-`/organization?tab=notifications`; an organization Telegram destination uses
+`/organization?tab=settings&section=notifications`; an organization Telegram destination uses
 the platform-managed bot token. An opted-in channel with missing provider
 credentials stays pending in the durable outbox for retry after configuration.
 

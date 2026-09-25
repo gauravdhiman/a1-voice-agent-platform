@@ -34,6 +34,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
+  Bell,
   Building2,
   LayoutDashboard,
   Layers,
@@ -44,10 +45,10 @@ import {
   UsersRound,
   Wallet,
   Wrench,
-  Bell,
   Package,
   FileText,
   Inbox,
+  Settings,
 } from "lucide-react";
 import {
   PERMISSION_ACTIONS,
@@ -246,18 +247,10 @@ export const NAV_SECTIONS: Readonly<Record<NavSection, readonly NavItem[]>> = {
       section: "platform_admin",
     },
     {
-      name: "Notifications",
-      href: "/platform/notifications",
-      tourId: "notifications",
-      icon: Bell,
-      requiredPermission: "platform:admin",
-      section: "platform_admin",
-    },
-    {
-      name: "Phone Number Settings",
-      href: "/platform/phone-numbers",
-      tourId: "platform-phone-numbers",
-      icon: Phone,
+      name: "Platform Settings",
+      href: "/platform/settings",
+      tourId: "platform-settings",
+      icon: Settings,
       requiredPermission: "platform:admin",
       section: "platform_admin",
     },
