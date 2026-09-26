@@ -122,9 +122,12 @@ The outcome allowlist currently contains the three seeded showcase workflows:
   agents. Both demos use a session id for read-before-append deduplication.
 
 The seeded prompts carry the business context that is intentionally absent from
-the shared demo organization. Each demo uses a gender-neutral configured agent
-name, and prompt introductions render it through `{{agent.name}}`; public
-descriptions stay name-free. The appointment agent identifies as an AI
+the shared demo organization. Each demo uses a familiar configured name with
+recent U.S. use close to evenly split between boys and girls. Verify the split
+against current [SSA baby-name data](https://www.ssa.gov/oact/babynames/) when
+adding a demo; use of a name by both genders alone is not enough. Prompt
+introductions render the configured name through `{{agent.name}}`, and static
+public descriptions stay name-free. The appointment agent identifies as an AI
 assistant for the fictional Pleasant Pediatric practice at 1234 Sunbeam Way,
 Peoria, AZ 85383, open Monday-Friday 8:00 AM-5:00 PM and Saturday 9:00 AM-1:00
 PM. The service agent identifies as an AI assistant for the fictional Copper

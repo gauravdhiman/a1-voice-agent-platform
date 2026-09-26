@@ -453,7 +453,7 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
     appointment_agent = {
         "id": STAGING_AGENT_ID,
         "organization_id": organization_id,
-        "name": "Alex",
+        "name": "Robin",
         "phone_number": None,
         "is_active": True,
         "persona": (
@@ -490,7 +490,7 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
     lead_agent = {
         "id": HVAC_AGENT_ID,
         "organization_id": organization_id,
-        "name": "Jordan",
+        "name": "Dakota",
         "phone_number": None,
         "is_active": True,
         "persona": (
@@ -520,7 +520,7 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
     restaurant_agent = {
         "id": RESTAURANT_AGENT_ID,
         "organization_id": organization_id,
-        "name": "Casey",
+        "name": "Tatum",
         "phone_number": None,
         "is_active": True,
         "persona": (

@@ -61,7 +61,7 @@ def test_seed_records_keep_business_context_on_each_demo_agent() -> None:
     assert organization["industry"] is None
     assert organization["location"] is None
     assert organization["business_details"] is None
-    assert agent["name"] == "Alex"
+    assert agent["name"] == "Robin"
     assert "schedule dental appointments" in agent["mission"]
     assert (
         "Read the date, time, service type, name, and email back"
@@ -84,15 +84,15 @@ def test_seed_records_keep_business_context_on_each_demo_agent() -> None:
     assert "# Services and illustrative demo pricing" in agent["custom_instructions"]
     assert "# Appointment workflow" in agent["custom_instructions"]
     assert "# Email follow-up" in agent["custom_instructions"]
-    alex_instructions = " ".join(agent["custom_instructions"].split())
+    instruction_text = " ".join(agent["custom_instructions"].split())
     assert "spell the patient or guardian name one letter at a time" in (
-        alex_instructions.lower()
+        instruction_text.lower()
     )
-    assert "spell the email one character at a time" in alex_instructions.lower()
-    assert "invoke that tool automatically" in alex_instructions
-    assert "email confirmation was not sent" in alex_instructions
-    assert "sent or accepted" in alex_instructions
-    assert "do not repeat the notice" in alex_instructions
+    assert "spell the email one character at a time" in instruction_text.lower()
+    assert "invoke that tool automatically" in instruction_text
+    assert "email confirmation was not sent" in instruction_text
+    assert "sent or accepted" in instruction_text
+    assert "do not repeat the notice" in instruction_text
     assert "AI voice assistant" not in agent["instructions_markdown"]
     assert "{{org.name}}" not in agent["instructions_markdown"]
     assert agent["is_active"] is True
@@ -210,10 +210,13 @@ def test_seed_contains_three_public_demo_workflows() -> None:
         if agent["demo_slug"] == "verdi-table-restaurant"
     )
     assert {agent["name"] for agent in records["agents"]} == {
-        "Alex",
-        "Jordan",
-        "Casey",
+        "Robin",
+        "Dakota",
+        "Tatum",
     }
+    for demo_agent in records["agents"]:
+        assert "{{agent.name}}" in demo_agent["persona"]
+        assert demo_agent["name"] not in _agent_prompt_and_public_copy(demo_agent)
     assert (
         appointment_agent["organization_id"]
         == service_agent["organization_id"]
