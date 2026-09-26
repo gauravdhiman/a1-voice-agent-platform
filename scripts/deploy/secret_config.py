@@ -132,21 +132,46 @@ SERVICE_REQUIRED_SECRET_KEYS = {
 def validate_production_stripe_credentials(
     env: dict[str, str], *, production: bool
 ) -> None:
-    """Reject Stripe test-mode credentials on a production secret path."""
+    """Validate Stripe key mode, requiring an explicit soft-production opt-in.
 
-    if not production:
-        return
+    Production defaults to live mode when ``STRIPE_MODE`` is omitted. A
+    production deployment may use Stripe's isolated test account only when it
+    explicitly sets ``STRIPE_MODE=test`` in its non-secret configuration.
+    Non-production environments are validated when they declare the mode, but
+    remain compatible with older local files that omit it.
+    """
 
-    credentials = {
-        "STRIPE_SECRET_KEY": ("sk_test_", "sk_live_"),
-        "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY": ("pk_test_", "pk_live_"),
+    configured_mode = env.get("STRIPE_MODE", "").strip().lower()
+    if configured_mode and configured_mode not in {"test", "live"}:
+        raise ValueError("STRIPE_MODE must be either test or live")
+    if not configured_mode:
+        if not production:
+            return
+        configured_mode = "live"
+
+    expected_prefixes = {
+        "test": {
+            "STRIPE_SECRET_KEY": "sk_test_",
+            "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_",
+        },
+        "live": {
+            "STRIPE_SECRET_KEY": "sk_live_",
+            "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_",
+        },
     }
-    for key, (test_prefix, live_prefix) in credentials.items():
+    for key, expected_prefix in expected_prefixes[configured_mode].items():
         value = env.get(key, "").strip()
-        if value.startswith(test_prefix):
+        if value and not value.startswith(expected_prefix):
+            if value.startswith(("sk_test_", "pk_test_")):
+                actual_mode = "test"
+            elif value.startswith(("sk_live_", "pk_live_")):
+                actual_mode = "live"
+            else:
+                actual_mode = "unknown"
             raise ValueError(
-                f"refusing to use a test Stripe credential in production: {key} "
-                f"must use {live_prefix}"
+                f"Stripe mode mismatch: {key} is a {actual_mode} Stripe "
+                f"credential; it must use {expected_prefix} when "
+                f"STRIPE_MODE={configured_mode}"
             )
 
 

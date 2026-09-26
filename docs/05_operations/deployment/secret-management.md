@@ -243,11 +243,32 @@ when it deploys a service with `--service-account`. Keep deployment
 administration (`run.admin`, Artifact Registry writer) separate from runtime
 access where practical.
 
-The synchronizer refuses Stripe test-mode credentials (`sk_test_` or `pk_test_`)
-when the prefix identifies production. Replace those credentials with the
-matching live-mode values before running the production import. The protected
-production render repeats the private-key check, so an older bad Secret Manager
-version cannot be deployed accidentally.
+Stripe mode is explicit and fail-closed. Production defaults to live mode when
+`STRIPE_MODE` is omitted, so `sk_test_` and `pk_test_` values are rejected by
+the synchronizer and the protected production render. A temporary
+soft-production release may set `STRIPE_MODE=test` in both the local sync input
+and `deploy/config/production.env`; the same checks then require test-mode
+Stripe keys. Setting `STRIPE_MODE=live` is required for the real launch. A mode
+mismatch is rejected before any Secret Manager write or deployment.
+
+Changing the ignored local `.env.prod` does not update a deployed service by
+itself. It is an operator input for `sync-gcp-secrets.py` and
+`sync-oci-secrets.py`; those commands add managed-secret versions, after which
+the release workflow reads the managers. The public Stripe publishable key is
+non-secret frontend build configuration and must be updated in the reviewed
+`deploy/config/production.env` release config before the frontend is rebuilt.
+
+Soft-production to live cutover:
+
+1. Change `STRIPE_MODE` to `live` in the local sync input and the versioned
+   production config.
+2. Replace `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` with the live Stripe
+   account values, then preview and apply the GCP sync. The webhook secret must
+   match the live Stripe webhook endpoint.
+3. Update `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` in the versioned config and
+   update any live product/price IDs if the Stripe catalog differs.
+4. Promote the reviewed commit. Keep `ENCRYPTION_KEY` unchanged so existing
+   encrypted organization credentials remain decryptable.
 
 The official Cloud Run integration supports Secret Manager values as env vars
 or mounted files; this implementation uses pinned numeric env-var references:

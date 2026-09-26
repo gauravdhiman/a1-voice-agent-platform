@@ -19,6 +19,13 @@ The checked-in config is the release source of truth; `.env.prod` is only a
 generated or emergency local runtime file. Templates: **`.env.prod.example`**
 and `deploy/config/production.env`.
 
+For the temporary soft-production rollout, set `STRIPE_MODE=test` in the
+versioned production config and in the private sync input. The secret sync
+commands must be run explicitly after changing `.env.prod`; a redeploy does
+not read a developer's local file. Before the real launch, set the mode to
+`live`, sync the live backend/webhook values, update the public publishable key
+in the versioned config, and promote the resulting commit.
+
 ## Layout
 
 | Path | Description |

@@ -99,3 +99,32 @@ def test_render_rejects_test_stripe_secret_for_production(
         )
 
     assert not output.exists()
+
+
+def test_render_allows_test_stripe_secret_for_explicit_soft_production(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "production.env"
+    output = tmp_path / ".env.prod"
+    config.write_text(
+        "ENVIRONMENT=production\nSTRIPE_MODE=test\nSTRIPE_SECRET_KEY=\n",
+        encoding="utf-8",
+    )
+
+    def fake_fetch(project: str, secret_id: str) -> tuple[str | None, bool]:
+        del project
+        if secret_id.endswith("stripe-secret-key"):
+            return "sk_test_example", True
+        return None, False
+
+    monkeypatch.setattr(render_gcp_env, "_fetch_secret", fake_fetch)
+
+    render_gcp_env.render(
+        config,
+        output,
+        project="project-id",
+        prefix="247ai-production",
+        required_keys=set(),
+    )
+
+    assert "STRIPE_SECRET_KEY=sk_test_example" in output.read_text()

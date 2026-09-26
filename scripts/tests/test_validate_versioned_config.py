@@ -34,6 +34,7 @@ GCP_SECRET_NAME_PREFIX=247ai-production
 GCP_BACKEND_RUNTIME_SERVICE_ACCOUNT=backend@project-id.iam.gserviceaccount.com
 OCI_VAULT_ID=ocid1.vault.oc1.abc123
 OCI_SECRET_NAME_PREFIX=247ai-production
+STRIPE_MODE=live
 ENCRYPTION_KEY=
 OTEL_ENABLED=false
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://example.invalid/traces
@@ -82,6 +83,36 @@ def test_production_config_rejects_test_stripe_publishable_key(tmp_path: Path) -
     errors = validator.validate(path, environment="production", project="project-id")
 
     assert any("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY" in error for error in errors)
+
+
+def test_production_config_accepts_test_stripe_in_explicit_soft_mode(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "production.env"
+    _write(
+        path,
+        _valid_config().replace("STRIPE_MODE=live", "STRIPE_MODE=test")
+        + "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_abc123\n",
+    )
+
+    assert (
+        validator.validate(path, environment="production", project="project-id") == []
+    )
+
+
+def test_production_config_rejects_live_stripe_in_test_mode(tmp_path: Path) -> None:
+    path = tmp_path / "production.env"
+    _write(
+        path,
+        _valid_config().replace("STRIPE_MODE=live", "STRIPE_MODE=test")
+        + "STRIPE_SECRET_KEY=sk_live_example\n",
+    )
+
+    errors = validator.validate(path, environment="production", project="project-id")
+
+    assert any(
+        "STRIPE_SECRET_KEY" in error and "STRIPE_MODE=test" in error for error in errors
+    )
 
 
 def test_checked_in_environment_configs_contain_no_secret_values() -> None:

@@ -56,6 +56,26 @@ def test_nonproduction_sync_allows_test_stripe_secret(tmp_path: Path) -> None:
     )
 
 
+def test_production_sync_allows_test_stripe_only_in_explicit_soft_mode(
+    tmp_path: Path,
+) -> None:
+    env_file = tmp_path / "production.env"
+    env_file.write_text(
+        "STRIPE_MODE=test\nSTRIPE_SECRET_KEY=sk_test_example\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        sync_gcp_secrets.sync(
+            env_file,
+            project="project-id",
+            prefix="247ai-production",
+            apply=False,
+        )
+        == 1
+    )
+
+
 def test_production_sync_rejects_test_stripe_publishable_key(
     tmp_path: Path,
 ) -> None:
