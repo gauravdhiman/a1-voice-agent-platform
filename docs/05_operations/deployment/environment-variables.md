@@ -18,7 +18,7 @@ Secret Manager. The OCI voice-ws bootstrap receives only public configuration
 and secret names, then reads values from OCI Vault using its instance
 principal.
 
-> **Index:** [deployment/README.md](README.md) · **Local dev config:** [environment_configuration.md](../environment_configuration.md)
+> **Index:** [deployment/README.md](README.md) · **Current secret map:** [production-secret-map.md](production-secret-map.md) · **Local dev config:** [environment_configuration.md](../environment_configuration.md)
 
 ## Local Docker host-port configuration
 

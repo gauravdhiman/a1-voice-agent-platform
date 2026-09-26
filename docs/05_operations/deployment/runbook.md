@@ -94,6 +94,22 @@ See [quick-reference.md](quick-reference.md) for the command cheat sheet.
 **Note:** `worker` refers to the **voice-ws** Pipecat worker on OCI. The legacy
 LiveKit `worker/` service is not deployed in production (`VOICE_TRANSPORT=pipecat`).
 
+## Current production state
+
+The current environment is soft production: the managed secret path is active,
+but Stripe remains in test mode until the launch cutover is deliberately
+approved. The backend and frontend run on GCP Cloud Run, voice-ws runs on the
+OCI VM, and GitHub Actions promotes an exact reviewed commit through the
+protected production workflow. Deployment secrets are resolved from GCP Secret
+Manager and OCI Vault; customer- and agent-specific credentials remain Fernet
+ciphertext in Supabase and are decrypted only by the server-side runtime.
+
+The cloud secret infrastructure and managed deployment are in place. The
+remaining launch gates are the Stripe live cutover, intentional cleanup of
+pre-launch test organizations/agents, and authenticated browser/PSTN voice
+smoke tests. See [Current production secret map](production-secret-map.md) for
+the ownership diagram and the cutover checklist.
+
 ## First-time setup checklist
 
 | Step | Task | Owner |

@@ -192,7 +192,9 @@ remains in the manager.
 
 ## Managed secret flow and IAM
 
-The complete design is documented in [secret management](secret-management.md).
+The complete design is documented in [secret management](secret-management.md),
+and the current ownership map is in
+[Current production secret map](production-secret-map.md).
 The operational boundary is:
 
 - GCP Secret Manager stores Cloud Run backend, migration, and shared runtime
@@ -205,6 +207,11 @@ The operational boundary is:
 - GitHub stores no long-lived GCP service-account key and no complete
   production environment file. Workload Identity Federation gives the runner
   short-lived GCP credentials.
+- The GitHub WIF deployment identity is not the application runtime identity:
+  it has per-secret `roles/secretmanager.secretAccessor` only where the
+  migration/release path must read payloads, plus per-secret
+  `roles/secretmanager.viewer` to list enabled versions for Cloud Run
+  references. Cloud Run uses its own runtime service account.
 - `JWT_SECRET_KEY` and `ENCRYPTION_KEY` must be synchronized in both managers
   because backend and voice-ws share the JWT/encryption trust boundary.
 

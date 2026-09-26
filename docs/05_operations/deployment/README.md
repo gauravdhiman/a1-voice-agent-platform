@@ -22,6 +22,7 @@ Production infrastructure for **247ai.live**:
 | **[Local Docker](local-docker.md)**                                             | docker-compose and manual image builds for development                                              |
 | **[CI / GitHub Actions](ci-github-actions.md)**                                 | Local staging validation, manual production promotion, and required secrets                         |
 | **[Secret management](secret-management.md)**                                   | GCP Secret Manager, OCI Vault, GitHub OIDC, rotation, and credential migration                       |
+| **[Current production secret map](production-secret-map.md)**                   | High-level ownership of secrets, runtime/deployment boundaries, and soft-production launch status   |
 | **[Worktree isolation and release strategy](worktree-and-release-strategy.md)** | Per-worktree databases, local staging (shared cloud DB), and production promotion model             |
 
 ## Repo artifacts
@@ -56,6 +57,10 @@ private local stack when a developer needs to inspect a call.
 - **Application secrets:** GCP Secret Manager for Cloud Run and OCI Vault for
   voice-ws. `.env.prod` is a gitignored emergency/local deployment input only;
   never commit it.
+- **Current ownership map:** read [Current production secret map](production-secret-map.md)
+  first when you need to understand where a value lives. Cloud Run reads with
+  its runtime service account, voice-ws reads through the OCI VM instance
+  principal, and the GitHub deployment identity is separate from both.
 - **Versioned release config:** `deploy/config/production.env` and
   `deploy/config/staging.env` contain non-secret values only. GitHub stores
   deployment identities and transport credentials, authenticates to GCP with
