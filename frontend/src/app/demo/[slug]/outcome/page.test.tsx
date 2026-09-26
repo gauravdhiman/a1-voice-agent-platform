@@ -36,7 +36,7 @@ describe("DemoOutcomePage", () => {
   it("shows the captured fields and provider destination", async () => {
     getDemoOutcomeMock.mockResolvedValue({
       demo_slug: "copper-ridge-service-request",
-      agent_name: "Dakota",
+      agent_name: "Charlie",
       organization_name: "Copper Ridge Heating & Air",
       status: "completed",
       actions: [
@@ -88,7 +88,7 @@ describe("DemoOutcomePage", () => {
         name: /that call just did real work/i,
       }),
     ).toBeTruthy();
-    expect(screen.getByText("What Dakota")).toBeTruthy();
+    expect(screen.getByText("What Charlie")).toBeTruthy();
     expect(screen.getByText("saved for you")).toBeTruthy();
     expect(screen.getByText("Maria Garcia")).toBeTruthy();
     expect(screen.getByText("AC repair")).toBeTruthy();
@@ -109,7 +109,7 @@ describe("DemoOutcomePage", () => {
       within(feedbackRegion).getByText("YOUR TURN · 30 SECONDS"),
     ).toBeTruthy();
     expect(
-      within(feedbackRegion).getByText("How was your demo call with Dakota?"),
+      within(feedbackRegion).getByText("How was your demo call with Charlie?"),
     ).toBeTruthy();
     expect(
       within(feedbackRegion).getByRole("button", {
@@ -136,7 +136,7 @@ describe("DemoOutcomePage", () => {
   it("explains when a call ended before a provider mutation", async () => {
     getDemoOutcomeMock.mockResolvedValue({
       demo_slug: "copper-ridge-service-request",
-      agent_name: "Dakota",
+      agent_name: "Charlie",
       organization_name: "Copper Ridge Heating & Air",
       status: "no_action",
       actions: [],
@@ -155,14 +155,14 @@ describe("DemoOutcomePage", () => {
       name: "Feedback and setup request",
     });
     expect(
-      within(feedbackRegion).getByText("How was your demo call with Dakota?"),
+      within(feedbackRegion).getByText("How was your demo call with Charlie?"),
     ).toBeTruthy();
   });
 
   it("renders a generic Sheets row receipt with its configured business label", async () => {
     getDemoOutcomeMock.mockResolvedValue({
       demo_slug: "verdi-table-restaurant",
-      agent_name: "Tatum",
+      agent_name: "Taylor",
       organization_name: "24x7 AI Demo Studio",
       status: "completed",
       actions: [
@@ -201,7 +201,7 @@ describe("DemoOutcomePage", () => {
   it("uses the configured result URL for a Calendar booking", async () => {
     getDemoOutcomeMock.mockResolvedValue({
       demo_slug: "pleasant-pediatric-appointments",
-      agent_name: "Robin",
+      agent_name: "Alex",
       organization_name: "Pleasant Pediatric",
       status: "completed",
       actions: [
@@ -246,7 +246,7 @@ describe("DemoOutcomePage", () => {
   it("does not show an external CTA when no result URL is configured", async () => {
     getDemoOutcomeMock.mockResolvedValue({
       demo_slug: "pleasant-pediatric-appointments",
-      agent_name: "Robin",
+      agent_name: "Alex",
       organization_name: "Pleasant Pediatric",
       status: "completed",
       actions: [
@@ -282,7 +282,7 @@ describe("DemoOutcomePage", () => {
         name: /that call just did real work/i,
       }),
     ).toBeTruthy();
-    expect(screen.getByText("What Robin")).toBeTruthy();
+    expect(screen.getByText("What Alex")).toBeTruthy();
     expect(screen.getByText("saved for you")).toBeTruthy();
     expect(
       screen.queryByRole("link", { name: "Open Google Calendar result" }),
@@ -292,7 +292,7 @@ describe("DemoOutcomePage", () => {
   it("distinguishes captured details from an unsuccessful provider save", async () => {
     getDemoOutcomeMock.mockResolvedValue({
       demo_slug: "copper-ridge-service-request",
-      agent_name: "Dakota",
+      agent_name: "Charlie",
       organization_name: "Copper Ridge Heating & Air",
       status: "needs_attention",
       actions: [
@@ -329,7 +329,7 @@ describe("DemoOutcomePage", () => {
       name: "Feedback and setup request",
     });
     expect(
-      within(feedbackRegion).getByText("How was your demo call with Dakota?"),
+      within(feedbackRegion).getByText("How was your demo call with Charlie?"),
     ).toBeTruthy();
     expect(screen.getByText("Service request not saved")).toBeTruthy();
     expect(screen.getByText("Didn't go through")).toBeTruthy();

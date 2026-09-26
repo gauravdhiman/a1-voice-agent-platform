@@ -61,7 +61,7 @@ def test_seed_records_keep_business_context_on_each_demo_agent() -> None:
     assert organization["industry"] is None
     assert organization["location"] is None
     assert organization["business_details"] is None
-    assert agent["name"] == "Robin"
+    assert agent["name"] == "Alex"
     assert "schedule dental appointments" in agent["mission"]
     assert (
         "Read the date, time, service type, name, and email back"
@@ -210,9 +210,9 @@ def test_seed_contains_three_public_demo_workflows() -> None:
         if agent["demo_slug"] == "verdi-table-restaurant"
     )
     assert {agent["name"] for agent in records["agents"]} == {
-        "Robin",
-        "Dakota",
-        "Tatum",
+        "Alex",
+        "Charlie",
+        "Taylor",
     }
     for demo_agent in records["agents"]:
         assert "{{agent.name}}" in demo_agent["persona"]
