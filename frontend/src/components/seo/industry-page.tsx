@@ -68,8 +68,6 @@ export interface IndustryPageContent {
   outcomes: IndustryOutcome[];
   /** Demo agent slug to try live, when this vertical has a public demo. */
   demoSlug?: string;
-  /** Demo agent display name, when this vertical has a public demo. */
-  demoName?: string;
   /** One-line demo pitch or a transparent no-demo note. */
   demoBlurb?: string;
   /** Optional benchmark evidence for this vertical. */
@@ -155,12 +153,12 @@ export function IndustryPage({ content }: IndustryPageProps) {
                   alignItems: "center",
                 }}
               >
-                {content.demoSlug && content.demoName ? (
+                {content.demoSlug ? (
                   <Link
                     className={pt.primary}
                     href={`/demo/${content.demoSlug}`}
                   >
-                    Talk to {content.demoName} now
+                    Try the live demo
                     <ArrowRight size={16} />
                   </Link>
                 ) : (
@@ -168,7 +166,7 @@ export function IndustryPage({ content }: IndustryPageProps) {
                     Request this workflow <ArrowRight size={16} />
                   </Link>
                 )}
-                {content.demoSlug && content.demoName ? (
+                {content.demoSlug ? (
                   <Link className={pt.textLink} href="/request-demo">
                     Request a Demo <ArrowUpRight size={16} />
                   </Link>

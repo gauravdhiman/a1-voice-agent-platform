@@ -20,6 +20,36 @@ from shared.voice_agents.prompt_builder import (
 class TestPromptBuilder:
     """Test cases for PromptBuilder."""
 
+    def test_field_based_prompt_renders_agent_name_template(self):
+        """Every field-based prompt uses the configured agent name."""
+        now = datetime.now(timezone.utc)
+        org = Organization(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            name="Test Company",
+            slug="test-company",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        agent = VoiceAgent(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            organization_id=org.id,
+            name="Casey",
+            persona="{{agent.name}}, a calm AI assistant",
+            mission="Help {{agent.name}} support callers clearly",
+            custom_instructions="Introduce yourself as {{agent.name}}.",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        prompt = PromptBuilder.build_system_prompt(org, agent)
+
+        assert "You are Casey, a calm AI assistant" in prompt
+        assert "Help Casey support callers clearly" in prompt
+        assert "Introduce yourself as Casey." in prompt
+        assert "{{agent.name}}" not in prompt
+
     def test_build_system_prompt_complete(self):
         """Test building system prompt with all fields populated."""
         now = datetime.now(timezone.utc)

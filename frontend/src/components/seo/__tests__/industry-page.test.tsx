@@ -12,7 +12,6 @@ const content: IndustryPageContent = {
   pains: ["Missed after-hours calls."],
   outcomes: [{ title: "Booking", description: "Books visits." }],
   demoSlug: "pleasant-pediatric-appointments",
-  demoName: "Alex",
   demoBlurb: "Try the live demo.",
   proof: {
     eyebrow: "THE CALL, BY THE NUMBERS",
@@ -36,7 +35,7 @@ describe("IndustryPage", () => {
     ).not.toBeNull();
     expect(screen.getByText("Missed after-hours calls.")).not.toBeNull();
     const demoLinks = screen.getAllByRole("link", {
-      name: /talk to alex now/i,
+      name: /try the live demo/i,
     });
     expect(demoLinks.length).toBeGreaterThan(0);
     expect(demoLinks[0].getAttribute("href")).toBe(
@@ -74,7 +73,6 @@ describe("IndustryPage", () => {
     const noDemoContent: IndustryPageContent = {
       ...content,
       demoSlug: undefined,
-      demoName: undefined,
       demoBlurb: "No public demo yet.",
     };
 
@@ -86,7 +84,7 @@ describe("IndustryPage", () => {
         .getAttribute("href"),
     ).toBe("/request-demo");
     expect(
-      screen.queryByRole("link", { name: /talk to alex now/i }),
+      screen.queryByRole("link", { name: /try the live demo/i }),
     ).toBeNull();
     expect(screen.getByText("No public demo yet.")).not.toBeNull();
   });

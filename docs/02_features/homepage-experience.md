@@ -17,8 +17,8 @@ customer results.
   layouts and the dashboard keeps its existing design.
 - `frontend/src/app/page.tsx` renders `components/home/home-page.tsx`.
 - Primary actions lead to `/request-demo`; sign-in leads to `/auth/signin`.
-- Alex, Jordan, and Sofia retain their appointment, service-request, and
-  restaurant-order demo routes. The homepage itself does not request microphone
+- The appointment, service-request, and restaurant-order demos keep their
+  dedicated routes. The homepage itself does not request microphone
   access or start calls.
 - The proof strip leads with three simple signals: up to 85% of unanswered
   callers may not call back (CallRail), 42% of phone leads convert on the call

@@ -1,4 +1,4 @@
-"""Deprecated Jordan-specific Sheets adapter kept for migration compatibility."""
+"""Deprecated prototype-specific Sheets adapter kept for migration compatibility."""
 
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -29,7 +29,7 @@ class GoogleSheetsLeadCaptureTool(BaseTool):
 
     # Kept for backwards-compatible imports and migration tests only. New
     # catalog syncs and runtime assembly use the configurable Google_Sheets
-    # row operations instead of this Jordan-specific action.
+    # row operations instead of this legacy action.
     DEPRECATED_TOOL = True
 
     class AuthConfig(GoogleAuthConfig):

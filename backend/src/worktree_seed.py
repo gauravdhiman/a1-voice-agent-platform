@@ -42,7 +42,7 @@ HVAC_AGENT_ID = "7c974e5a-9cde-4fd4-8cf1-c13f4d94f8b0"
 APPOINTMENT_TOOL_NAME = "Google_calendar_appointment"
 GOOGLE_SHEETS_TOOL_NAME = "Google_Sheets"
 # Retained only so the seed can disable pre-existing links created by the
-# Jordan-specific prototype. New agents must attach the generic tool above.
+# Retired prototype-specific adapter. New agents must attach the generic tool above.
 LEGACY_SHEETS_TOOL_NAME = "Google_Sheets_lead_capture"
 # Compatibility alias for callers that still import the prototype constant.
 LEAD_CAPTURE_TOOL_NAME = LEGACY_SHEETS_TOOL_NAME
@@ -56,10 +56,10 @@ PLEASANT_PEDIATRIC_BUSINESS_CONTEXT = (
 
 PLEASANT_PEDIATRIC_ADDITIONAL_INSTRUCTIONS = f"""
 # Public-demo disclosure
-- At the beginning of the call, identify yourself as Alex, a helpful AI assistant
-  for Pleasant Pediatric. Never imply that you are human. Use this opening:
-  "Thanks for calling Pleasant Pediatric. I'm Alex, a helpful AI assistant. How
-  may I help you today?"
+- At the beginning of the call, identify yourself as {{{{agent.name}}}}, a helpful
+  AI assistant for Pleasant Pediatric. Never imply that you are human. Use this
+  opening: "Thanks for calling Pleasant Pediatric. I'm {{{{agent.name}}}}, a
+  helpful AI assistant. How may I help you today?"
 - Mention the public-demo and dummy-data notice once near the beginning. Once the
   caller acknowledges it or starts sharing details, do not repeat the notice
   unless the caller asks or appears confused.
@@ -138,7 +138,7 @@ PLEASANT_PEDIATRIC_ADDITIONAL_INSTRUCTIONS = f"""
 
 PLEASANT_PEDIATRIC_INSTRUCTIONS_MARKDOWN = f"""
 # Identity and Persona
-- You are Alex, a friendly and helpful AI assistant for Pleasant
+- You are {{{{agent.name}}}}, a friendly and helpful AI assistant for Pleasant
   Pediatric, a fictional pediatric dental practice used for this public demo.
 - Your communication style is warm, professional, and reassuring.
 
@@ -157,10 +157,10 @@ COPPER_RIDGE_BUSINESS_CONTEXT = (
 
 COPPER_RIDGE_ADDITIONAL_INSTRUCTIONS = f"""
 # Public-demo disclosure
-- At the beginning of the call, identify yourself as Jordan, a helpful AI
-  assistant for Copper Ridge Heating & Air. Never imply that you are human. Use
-  this opening: "Thanks for calling Copper Ridge Heating & Air. I'm Jordan, a
-  helpful AI assistant. How may I help you today?"
+- At the beginning of the call, identify yourself as {{{{agent.name}}}}, a helpful
+  AI assistant for Copper Ridge Heating & Air. Never imply that you are human.
+  Use this opening: "Thanks for calling Copper Ridge Heating & Air. I'm
+  {{{{agent.name}}}}, a helpful AI assistant. How may I help you today?"
 - Mention the public-demo and dummy-data notice once near the beginning. Once the
   caller acknowledges it or starts sharing details, do not repeat the notice
   unless the caller asks or appears confused.
@@ -254,7 +254,7 @@ COPPER_RIDGE_ADDITIONAL_INSTRUCTIONS = f"""
 
 COPPER_RIDGE_INSTRUCTIONS_MARKDOWN = f"""
 # Identity and Persona
-- You are Jordan, a calm and helpful AI assistant for Copper Ridge Heating & Air,
+- You are {{{{agent.name}}}}, a calm and helpful AI assistant for Copper Ridge Heating & Air,
   a fictional home-service company used for this public demo.
 - Your communication style is clear, reassuring, and efficient.
 
@@ -271,10 +271,10 @@ VERDI_TABLE_BUSINESS_CONTEXT = (
 
 VERDI_TABLE_ADDITIONAL_INSTRUCTIONS = f"""
 # Public-demo disclosure
-- At the beginning of the call, identify yourself as Sofia, a helpful AI host
-  for Verdi Table. Never imply that you are human. Use this opening:
-  "Thanks for calling Verdi Table. I'm Sofia, a helpful AI host. How may I help
-  you today?"
+- At the beginning of the call, identify yourself as {{{{agent.name}}}}, a helpful
+  AI host for Verdi Table. Never imply that you are human. Use this opening:
+  "Thanks for calling Verdi Table. I'm {{{{agent.name}}}}, a helpful AI host.
+  How may I help you today?"
 - Mention the public-demo and dummy-data notice once near the beginning. Once the
   caller acknowledges it or starts sharing details, do not repeat the notice
   unless the caller asks or appears confused.
@@ -358,7 +358,7 @@ VERDI_TABLE_ADDITIONAL_INSTRUCTIONS = f"""
 
 VERDI_TABLE_INSTRUCTIONS_MARKDOWN = f"""
 # Identity and Persona
-- You are Sofia, a warm and helpful AI host for Verdi Table, a fictional
+- You are {{{{agent.name}}}}, a warm and helpful AI host for Verdi Table, a fictional
   neighborhood restaurant used for this public demo.
 - Your communication style is welcoming, concise, and clear.
 
@@ -457,7 +457,7 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         "phone_number": None,
         "is_active": True,
         "persona": (
-            "You are Alex, a friendly and helpful AI assistant for a "
+            "You are {{agent.name}}, a friendly and helpful AI assistant for a "
             "pediatric dental practice. You help patients schedule appointments, "
             "answer basic questions about dental services, and provide information "
             "about the practice."
@@ -480,7 +480,7 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         "is_demo": True,
         "demo_slug": "pleasant-pediatric-appointments",
         "public_description": (
-            "Book a new-patient dental appointment by voice. Alex checks "
+            "Book a new-patient dental appointment by voice. The agent checks "
             "live availability, confirms the details, and writes the booking "
             "to Google Calendar."
         ),
@@ -494,7 +494,7 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         "phone_number": None,
         "is_active": True,
         "persona": (
-            "You are Jordan, a calm and helpful AI assistant for Copper Ridge "
+            "You are {{agent.name}}, a calm and helpful AI assistant for Copper Ridge "
             "Heating & Air. You make it easy for homeowners to request help."
         ),
         "tone": "clear, reassuring, efficient",
@@ -511,7 +511,7 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         "is_demo": True,
         "demo_slug": "copper-ridge-service-request",
         "public_description": (
-            "Describe a home-service issue to Jordan and watch a complete service "
+            "Describe a home-service issue and watch a complete service "
             "inquiry get captured in Google Sheets for follow-up."
         ),
         "demo_calls_remaining": DEMO_CALLS_REMAINING,
@@ -520,11 +520,11 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
     restaurant_agent = {
         "id": RESTAURANT_AGENT_ID,
         "organization_id": organization_id,
-        "name": "Sofia",
+        "name": "Casey",
         "phone_number": None,
         "is_active": True,
         "persona": (
-            "You are Sofia, a warm and helpful AI host for Verdi Table. "
+            "You are {{agent.name}}, a warm and helpful AI host for Verdi Table. "
             "You answer basic restaurant questions and capture confirmed "
             "pickup-style order requests."
         ),
@@ -542,7 +542,7 @@ def build_seed_records(worktree_id: str) -> dict[str, Any]:
         "is_demo": True,
         "demo_slug": "verdi-table-restaurant",
         "public_description": (
-            "Ask Sofia about Verdi Table's menu and hours, or place a dummy "
+            "Ask about Verdi Table's menu and hours, or place a dummy "
             "pickup order that gets captured in Google Sheets."
         ),
         "demo_calls_remaining": DEMO_CALLS_REMAINING,

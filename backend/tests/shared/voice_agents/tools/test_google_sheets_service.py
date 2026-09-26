@@ -612,7 +612,7 @@ async def test_create_row_supports_use_case_specific_agent_columns() -> None:
 async def test_restaurant_schema_keeps_quantities_in_items_when_no_quantity_header() -> (
     None
 ):
-    """Sofia's compact sheet stores item names and quantities in one business cell."""
+    """The restaurant demo sheet stores items and quantities in one business cell."""
     headers = [
         "Submission ID",
         "Captured at",

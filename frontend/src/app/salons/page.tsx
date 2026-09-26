@@ -52,7 +52,6 @@ const content: IndustryPageContent = {
     },
   ],
   demoSlug: "pleasant-pediatric-appointments",
-  demoName: "Alex",
   demoBlurb:
     "No public salon demo yet. Request the workflow and we will shape it around your services, stylists, chairs, and policies.",
   proof: {

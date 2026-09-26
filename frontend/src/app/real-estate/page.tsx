@@ -52,7 +52,6 @@ const content: IndustryPageContent = {
     },
   ],
   demoSlug: "copper-ridge-service-request",
-  demoName: "Jordan",
   demoBlurb:
     "No public real-estate demo yet. Request the workflow and we will shape it around your listings, viewing calendar, and qualification questions.",
   proof: {

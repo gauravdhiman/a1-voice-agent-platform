@@ -124,8 +124,11 @@ class PromptBuilder:
     Supports two prompt building strategies:
     - **Field-based** (legacy): Assembles prompt from individual agent fields
       (persona, tone, mission, custom_instructions) via build_system_prompt().
-    - **Markdown-based**: Uses agent's instructions_markdown directly, rendering
-      template variables like {{org.name}}, via build_from_markdown().
+    - **Markdown-based**: Uses agent's instructions_markdown directly via
+      build_from_markdown().
+
+    Both strategies render the same configured organization and agent template
+    variables in their prompt text.
 
     The build() method auto-selects the appropriate strategy based on
     whether instructions_markdown is set on the agent.
@@ -139,6 +142,25 @@ class PromptBuilder:
         "org.business_details": lambda org, agent: org.business_details or "",
         "agent.name": lambda org, agent: agent.name or "",
     }
+
+    @staticmethod
+    def _render_template_variables(
+        org: Organization, agent: VoiceAgent, prompt_text: str
+    ) -> str:
+        """Render configured organization and agent values in prompt text.
+
+        Args:
+            org: Organization values available to the prompt.
+            agent: Agent values available to the prompt.
+            prompt_text: Markdown or field-based prompt content.
+
+        Returns:
+            Prompt content with supported variables replaced.
+        """
+        rendered = prompt_text
+        for var_name, resolver in PromptBuilder.TEMPLATE_VARS.items():
+            rendered = rendered.replace("{{" + var_name + "}}", resolver(org, agent))
+        return rendered
 
     @staticmethod
     def _build_skills_metadata_block(agent_skills: list) -> Optional[str]:
@@ -234,11 +256,7 @@ class PromptBuilder:
         Returns:
             Complete system prompt string with rendered variables and appended guardrails.
         """
-        # Render template variables
-        rendered = markdown
-        for var_name, resolver in PromptBuilder.TEMPLATE_VARS.items():
-            placeholder = "{{" + var_name + "}}"
-            rendered = rendered.replace(placeholder, resolver(org, agent))
+        rendered = PromptBuilder._render_template_variables(org, agent, markdown)
 
         sections: List[str] = []
         if current_datetime:
@@ -281,7 +299,8 @@ class PromptBuilder:
                 :func:`build_current_datetime_section`).
 
         Returns:
-            Complete system prompt string
+            Complete system prompt string with supported variables rendered in
+            persona, tone, mission, and additional instructions.
         """
         sections: List[str] = []
 
@@ -290,7 +309,9 @@ class PromptBuilder:
             sections.append(current_datetime)
 
         # 1. Identity & Persona
-        role = agent.persona or "a helpful AI voice assistant"
+        role = PromptBuilder._render_template_variables(
+            org, agent, agent.persona or "a helpful AI voice assistant"
+        )
         identity_text = (
             role if role.lower().startswith("you are") else f"You are {role}"
         )
@@ -298,13 +319,17 @@ class PromptBuilder:
             identity_text += f" representing {org.name}"
 
         if agent.tone:
-            identity_text += f". Your communication style is {agent.tone}."
+            tone = PromptBuilder._render_template_variables(org, agent, agent.tone)
+            identity_text += f". Your communication style is {tone}."
 
         sections.append(f"# IDENTITY AND PERSONA\n{identity_text}")
 
         # 2. Your Mission
         if agent.mission:
-            sections.append(f"# YOUR MISSION\n{agent.mission}")
+            mission = PromptBuilder._render_template_variables(
+                org, agent, agent.mission
+            )
+            sections.append(f"# YOUR MISSION\n{mission}")
 
         # 3. Business Context
         business_info = []
@@ -322,7 +347,10 @@ class PromptBuilder:
 
         # 4. Specific Instructions
         if agent.custom_instructions:
-            sections.append(f"# ADDITIONAL INSTRUCTIONS\n{agent.custom_instructions}")
+            instructions = PromptBuilder._render_template_variables(
+                org, agent, agent.custom_instructions
+            )
+            sections.append(f"# ADDITIONAL INSTRUCTIONS\n{instructions}")
 
         # 5. Skill metadata (progressive disclosure — names only, not content)
         skills_block = PromptBuilder._build_skills_metadata_block(agent_skills)

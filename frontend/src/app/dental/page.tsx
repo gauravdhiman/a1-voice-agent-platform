@@ -52,9 +52,8 @@ const content: IndustryPageContent = {
     },
   ],
   demoSlug: "pleasant-pediatric-appointments",
-  demoName: "Alex",
   demoBlurb:
-    "Try the live demo: book a dental visit with Alex and watch the example calendar update. In a real setup, we connect the workflow to the scheduling tools your practice already uses.",
+    "Try the live demo: book a dental visit and watch the example calendar update. In a real setup, we connect the workflow to the scheduling tools your practice already uses.",
   proof: {
     eyebrow: "THE HEALTHCARE CALL, BY THE NUMBERS",
     title: "The patient is already asking for the next step.",

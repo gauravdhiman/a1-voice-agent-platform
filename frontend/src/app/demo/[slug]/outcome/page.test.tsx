@@ -162,7 +162,7 @@ describe("DemoOutcomePage", () => {
   it("renders a generic Sheets row receipt with its configured business label", async () => {
     getDemoOutcomeMock.mockResolvedValue({
       demo_slug: "verdi-table-restaurant",
-      agent_name: "Sofia",
+      agent_name: "Casey",
       organization_name: "24x7 AI Demo Studio",
       status: "completed",
       actions: [

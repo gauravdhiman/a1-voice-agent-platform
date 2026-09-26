@@ -54,21 +54,21 @@ const TRY_SCRIPTS: Record<string, { lines: string[]; note: string }> = {
       "I need a cleaning for my daughter next Thursday.",
       "Do you take new patients?",
     ],
-    note: "Alex will check real availability and book it.",
+    note: "The agent will check real availability and make the booking.",
   },
   "copper-ridge-service-request": {
     lines: [
       "My AC is blowing warm air upstairs.",
       "Can someone come out Thursday morning?",
     ],
-    note: "Jordan will capture the full request for dispatch.",
+    note: "The agent will capture the full request for dispatch.",
   },
   "verdi-table-restaurant": {
     lines: [
       "What time do you close tonight?",
       "I'd like two Sonoran grain bowls for pickup.",
     ],
-    note: "Sofia will answer questions or capture a confirmed dummy order.",
+    note: "The agent will answer questions or capture a confirmed demo order.",
   },
 };
 

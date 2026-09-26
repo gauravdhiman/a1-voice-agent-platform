@@ -130,12 +130,15 @@ class VoiceAgentBase(BaseModel):
         When provided, this markdown is used as the primary system prompt
         instead of building it from individual fields (persona, tone, mission, etc.).
 
-        Supports template variables for dynamic context injection:
+        Prompt text fields support template variables for dynamic context injection:
         - {{org.name}} — Organization name
         - {{org.industry}} — Organization industry
         - {{org.location}} — Organization location
         - {{org.business_details}} — Business description
         - {{agent.name}} — Agent name
+
+        Persona, tone, mission, and additional instructions use the same variables
+        when the field-based prompt strategy is active.
 
         System guardrails and tool guidelines are always appended
         regardless of whether markdown instructions are used.

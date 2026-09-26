@@ -122,37 +122,39 @@ The outcome allowlist currently contains the three seeded showcase workflows:
   agents. Both demos use a session id for read-before-append deduplication.
 
 The seeded prompts carry the business context that is intentionally absent from
-the shared demo organization. Alex identifies as an AI assistant for the
-fictional Pleasant Pediatric practice at 1234 Sunbeam Way, Peoria, AZ 85383,
-open Monday-Friday 8:00 AM-5:00 PM and Saturday 9:00 AM-1:00 PM. Jordan
-identifies as an AI assistant for the fictional Copper Ridge Heating & Air at
-4550 N Copper Ridge Way, Phoenix, AZ 85032, open Monday-Friday 7:00 AM-6:00 PM
-and Saturday 8:00 AM-2:00 PM. Alex can describe the fictional demo services
-and prices: a new-patient exam with standard X-rays ($95), routine pediatric
-cleaning ($85), fluoride treatment ($25), and dental sealants ($45 per tooth).
-Jordan can describe the fictional demo services and prices: an HVAC diagnostic
-or inspection visit ($89), an air-conditioning tune-up ($129), a heating-system
-tune-up ($129), and an indoor-air-quality assessment ($79). Sofia identifies as
-an AI host for the fictional Verdi Table restaurant at 2201 E Juniper Lane,
-Phoenix, AZ 85016,
+the shared demo organization. Each demo uses a gender-neutral configured agent
+name, and prompt introductions render it through `{{agent.name}}`; public
+descriptions stay name-free. The appointment agent identifies as an AI
+assistant for the fictional Pleasant Pediatric practice at 1234 Sunbeam Way,
+Peoria, AZ 85383, open Monday-Friday 8:00 AM-5:00 PM and Saturday 9:00 AM-1:00
+PM. The service agent identifies as an AI assistant for the fictional Copper
+Ridge Heating & Air at 4550 N Copper Ridge Way, Phoenix, AZ 85032, open
+Monday-Friday 7:00 AM-6:00 PM and Saturday 8:00 AM-2:00 PM. The appointment
+agent can describe fictional demo services and prices: a new-patient exam with
+standard X-rays ($95), routine pediatric cleaning ($85), fluoride treatment
+($25), and dental sealants ($45 per tooth). The service agent can describe
+fictional demo services and prices: an HVAC diagnostic or inspection visit
+($89), an air-conditioning tune-up ($129), a heating-system tune-up ($129), and
+an indoor-air-quality assessment ($79). The restaurant agent is an AI host for
+the fictional Verdi Table restaurant at 2201 E Juniper Lane, Phoenix, AZ 85016,
 open Monday-Thursday 11:00 AM-9:00 PM, Friday-Saturday 11:00 AM-10:00 PM, and
 Sunday 10:00 AM-3:00 PM, with illustrative menu items including Sonoran grain
 bowls ($16), ember chicken sandwiches ($15), and Verde pasta ($17). All three
 prompts identify the agent as a helpful AI assistant or host, spell names and
 email addresses back for confirmation when collected, repeat the exact address
-read-back before every send or resend, redirect unrelated
-requests, require explicit confirmation before provider mutations, and prohibit
-unsupported claims. Prices are clearly presented as illustrative demo rates,
-not binding quotes. The HVAC prompt also handles out-of-hours requests and
-immediate gas, carbon-monoxide, fire, or smoke hazards. The dental prompt is
-limited to new bookings and does not expose or modify existing appointment
-records. The restaurant prompt handles only menu, hours, address, and
-pickup-order questions and never processes payment or promises inventory. The
-prompt content is grouped into short sections and bullets for disclosure,
-business facts, services and prices, workflow, email follow-up, and safety
-rules. The public-data notice is intentionally a one-time opening reminder;
-after the caller acknowledges it or starts sharing details, the agent moves on
-unless the caller asks or appears confused.
+read-back before every send or resend, redirect unrelated requests, require
+explicit confirmation before provider mutations, and prohibit unsupported
+claims. Prices are clearly presented as illustrative demo rates, not binding
+quotes. The HVAC prompt also handles out-of-hours requests and immediate gas,
+carbon-monoxide, fire, or smoke hazards. The dental prompt is limited to new
+bookings and does not expose or modify existing appointment records. The
+restaurant prompt handles only menu, hours, address, and pickup-order
+questions and never processes payment or promises inventory. The prompt content
+is grouped into short sections and bullets for disclosure, business facts,
+services and prices, workflow, email follow-up, and safety rules. The
+public-data notice is intentionally a one-time opening reminder; after the
+caller acknowledges it or starts sharing details, the agent moves on unless the
+caller asks or appears confused.
 
 The allowlist also records an independently attached `send_email`,
 `send_email_reply`, or `send_resend_email` call as a separate `email_delivery`
@@ -224,13 +226,13 @@ different tab names and different business headers. Choose the headers that
 match each workflow after discovery; only the optional platform-managed columns
 need stable metadata roles.
 
-Jordan's seeded lead sheet uses a header row like this in its tab:
+The seeded service-agent sheet uses a header row like this in its tab:
 
 ```text
 Submission ID | Captured at | Lead source | Caller name | Caller email | Caller phone | Service needed | Issue summary | Service address | Urgency | Preferred callback window | Status
 ```
 
-Sofia's seeded restaurant tab uses the smaller use-case-specific row
+The seeded restaurant tab uses the smaller use-case-specific row
 `Submission ID | Captured at | Lead source | Customer Name | Phone | Items`.
 
 The administrator does not need to type A1 ranges or header names. Selecting a
@@ -242,15 +244,15 @@ read-only submission-id check first, appends one row keyed by the sheet headers,
 and reports a retryable provider error without automatically repeating a
 mutation.
 
-For the seeded lead attachment, select all eight caller and service fields as
-Agent fields and mark all eight required so Jordan cannot save a partial
+For the seeded service attachment, select all eight caller and service fields
+as Agent fields and mark all eight required so the agent cannot save a partial
 inquiry. For the seeded restaurant attachment, select `Customer Name`, `Phone`,
-and `Items` as Agent fields and mark all three required. Sofia keeps quantities
-in the `Items` value when the sheet has no separate quantity column. An optional
-email can still be collected for an independently attached email tool even when
-the order sheet does not store it. Generated metadata such as `Submission ID`,
-`Captured at`, `Lead source`, and `Status` stays out of the Agent fields and is
-filled by the attachment.
+and `Items` as Agent fields and mark all three required. The restaurant agent
+keeps quantities in the `Items` value when the sheet has no separate quantity
+column. An optional email can still be collected for an independently attached
+email tool even when the order sheet does not store it. Generated metadata such
+as `Submission ID`, `Captured at`, `Lead source`, and `Status` stays out of the
+Agent fields and is filled by the attachment.
 
 `Google_Sheets` is intentionally generic. Its model-facing operations never
 accept a spreadsheet id or an arbitrary tab: the agent attachment owns the

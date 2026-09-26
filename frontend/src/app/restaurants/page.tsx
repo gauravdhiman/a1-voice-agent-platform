@@ -52,9 +52,8 @@ const content: IndustryPageContent = {
     },
   ],
   demoSlug: "verdi-table-restaurant",
-  demoName: "Sofia",
   demoBlurb:
-    "Try a live order or ask Sofia a menu question. Your version is trained on your menu, hours, and tables.",
+    "Try a live order or ask a menu question. Your version is trained on your menu, hours, and tables.",
   proof: {
     eyebrow: "THE LOCAL CALL, BY THE NUMBERS",
     title: "Your busiest minutes are when the phone matters most.",

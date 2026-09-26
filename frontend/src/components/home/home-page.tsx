@@ -423,7 +423,7 @@ export function HomePage() {
             >
               <div className={styles.demoArt} aria-hidden="true">
                 <div className={styles.dotReceiver} />
-                <span>ALEX / APPOINTMENTS</span>
+                <span>APPOINTMENT BOOKINGS</span>
                 <ArrowUpRight />
               </div>
               <div className={styles.demoBody}>
@@ -434,7 +434,7 @@ export function HomePage() {
                   Becomes a booked chair.
                 </h3>
                 <p>
-                  Try booking a dental visit with Alex. Real availability,
+                  Try booking a dental visit in the live demo. Real availability,
                   confirmation, and a calendar event your front desk didn&apos;t
                   have to touch.
                 </p>
@@ -442,7 +442,7 @@ export function HomePage() {
                   <span className={styles.playCircle}>
                     <Play size={11} fill="currentColor" />
                   </span>{" "}
-                  Talk to Alex <ArrowUpRight size={17} />
+                  Try the appointment demo <ArrowUpRight size={17} />
                 </span>
               </div>
             </Link>
@@ -452,7 +452,7 @@ export function HomePage() {
             >
               <div className={styles.demoArt} aria-hidden="true">
                 <div className={styles.dotWave} />
-                <span>JORDAN / SERVICE REQUESTS</span>
+                <span>SERVICE REQUESTS</span>
                 <ArrowUpRight />
               </div>
               <div className={styles.demoBody}>
@@ -463,7 +463,7 @@ export function HomePage() {
                   Still winning the next.
                 </h3>
                 <p>
-                  Ask Jordan for HVAC service. Symptoms, address, and time
+                  Ask for HVAC service in the live demo. Symptoms, address, and time
                   window captured into a clean request. Emergencies flagged,
                   routine booked.
                 </p>
@@ -471,7 +471,7 @@ export function HomePage() {
                   <span className={styles.playCircle}>
                     <Play size={11} fill="currentColor" />
                   </span>{" "}
-                  Talk to Jordan <ArrowUpRight size={17} />
+                  Try the service demo <ArrowUpRight size={17} />
                 </span>
               </div>
             </Link>
@@ -481,7 +481,7 @@ export function HomePage() {
             >
               <div className={styles.demoArt} aria-hidden="true">
                 <div className={styles.dotReceiver} />
-                <span>SOFIA / RESTAURANT ORDERS</span>
+                <span>RESTAURANT ORDERS</span>
                 <ArrowUpRight />
               </div>
               <div className={styles.demoBody}>
@@ -492,7 +492,7 @@ export function HomePage() {
                   Still serving the next table.
                 </h3>
                 <p>
-                  Ask Sofia about the menu or place a pickup order. Items,
+                  Ask about the menu or place a pickup order in the live demo. Items,
                   quantities, and contact details captured while your team
                   keeps the room moving.
                 </p>
@@ -500,7 +500,7 @@ export function HomePage() {
                   <span className={styles.playCircle}>
                     <Play size={11} fill="currentColor" />
                   </span>{" "}
-                  Talk to Sofia <ArrowUpRight size={17} />
+                  Try the restaurant demo <ArrowUpRight size={17} />
                 </span>
               </div>
             </Link>
