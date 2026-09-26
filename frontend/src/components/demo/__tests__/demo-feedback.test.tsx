@@ -26,7 +26,7 @@ describe("DemoFeedback", () => {
 
   it("emits one rating event with slug and no PII", async () => {
     const user = userEvent.setup();
-    render(<DemoFeedback agentName="Dakota" demoSlug="dental" />);
+    render(<DemoFeedback agentName="Alex" demoSlug="dental" />);
 
     await user.click(screen.getByRole("button", { name: "Rate 4 out of 5" }));
 
@@ -40,7 +40,7 @@ describe("DemoFeedback", () => {
 
   it("ignores repeat clicks after the first rating", async () => {
     const user = userEvent.setup();
-    render(<DemoFeedback agentName="Dakota" demoSlug="dental" />);
+    render(<DemoFeedback agentName="Alex" demoSlug="dental" />);
 
     await user.click(screen.getByRole("button", { name: "Rate 5 out of 5" }));
     expect(screen.queryByRole("button", { name: /rate/i })).toBeNull();
@@ -52,7 +52,7 @@ describe("DemoFeedback", () => {
     submitMock.mockResolvedValue(undefined);
     render(
       <DemoFeedback
-        agentName="Dakota"
+        agentName="Alex"
         demoSlug="dental"
         receiptToken="receipt-token"
       />,
@@ -66,7 +66,7 @@ describe("DemoFeedback", () => {
 
   it("keeps analytics-only behavior without a receipt token", async () => {
     const user = userEvent.setup();
-    render(<DemoFeedback agentName="Dakota" demoSlug="dental" />);
+    render(<DemoFeedback agentName="Alex" demoSlug="dental" />);
 
     await user.click(screen.getByRole("button", { name: "Rate 4 out of 5" }));
 
@@ -80,7 +80,7 @@ describe("DemoFeedback", () => {
     submitMock.mockRejectedValue(new Error("Network down"));
     render(
       <DemoFeedback
-        agentName="Dakota"
+        agentName="Alex"
         demoSlug="dental"
         receiptToken="receipt-token"
       />,
