@@ -86,6 +86,7 @@ flow, rotation, and the staged organization-credential migration.
 | `ENCRYPTION_KEY_FALLBACKS`                           | Optional comma-separated previous Fernet keys during controlled rotation                                     | **Yes**                               |
 | `STRIPE_SECRET_KEY`                                  | Stripe secret key                                                                                            | **Yes**                               |
 | `STRIPE_WEBHOOK_SECRET`                              | Stripe webhook signing secret                                                                                | **Yes**                               |
+| `STRIPE_MODE`                                        | Explicit Stripe account mode: `test` for soft production/staging or `live` for real production              | No                                    |
 | `TWILIO_ACCOUNT_SID`                                 | Twilio account SID                                                                                           | No                                    |
 | `TWILIO_AUTH_TOKEN`                                  | Twilio auth token                                                                                            | **Yes**                               |
 | `TWILIO_PHONE_NUMBER_SID`                            | Default Twilio phone number SID                                                                              | No                                    |
