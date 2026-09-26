@@ -212,8 +212,9 @@ so multiple stacks can run without exhausting Docker resources. See
 [`docs/05_operations/deployment/worktree-and-release-strategy.md`](docs/05_operations/deployment/worktree-and-release-strategy.md).
 
 Each worktree receives the same staging-shaped manual-test fixture: the
-`Pleasant Pediatric` organization, agent `Alex` with Call History enabled, and
-the native `Google_calendar_appointment` tool (without copied OAuth state).
+`Pleasant Pediatric` organization, its dental demo agent with Call History
+enabled, and the native `Google_calendar_appointment` tool (without copied
+OAuth state).
 The launcher prints these fixed local credentials:
 
 | Role | Email | Password |

@@ -23,9 +23,9 @@ def test_homepage_theme_motion_and_demo_entry(page: Page, base_url: str):
     expect(
         page.get_by_role("heading", name="Don’t take our word. Have a word.")
     ).to_be_visible()
-    expect(page.get_by_role("link", name=re.compile("Talk to Alex"))).to_have_attribute(
-        "href", "/demo/pleasant-pediatric-appointments"
-    )
+    expect(
+        page.get_by_role("link", name=re.compile("Talk to Robin"))
+    ).to_have_attribute("href", "/demo/pleasant-pediatric-appointments")
     expect(
         page.get_by_role("heading", name=re.compile("Plugs into the tools"))
     ).to_be_visible()

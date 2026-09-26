@@ -58,7 +58,7 @@ describe("DemoAgentPage", () => {
     useSearchParamsMock.mockReturnValue(new URLSearchParams());
     getDemoAgentMock.mockResolvedValue({
       id: "agent-1",
-      name: "Jordan",
+      name: "Dakota",
       demo_slug: "copper-ridge-service-request",
       persona: "Service coordinator",
       mission: "Capture service inquiries",
@@ -96,13 +96,13 @@ describe("DemoAgentPage", () => {
     );
 
     render(<DemoAgentPage />);
-    await screen.findByRole("button", { name: "Talk to Jordan" });
+    await screen.findByRole("button", { name: "Talk to Dakota" });
     await user.click(
       screen.getByRole("checkbox", {
         name: "I understand this is a public demo and will use dummy information.",
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Talk to Jordan" }));
+    await user.click(screen.getByRole("button", { name: "Talk to Dakota" }));
 
     await waitFor(() => expect(connectMock).toHaveBeenCalled());
     await act(async () => {
@@ -124,13 +124,13 @@ describe("DemoAgentPage", () => {
     });
 
     render(<DemoAgentPage />);
-    await screen.findByRole("button", { name: "Talk to Jordan" });
+    await screen.findByRole("button", { name: "Talk to Dakota" });
     await user.click(
       screen.getByRole("checkbox", {
         name: "I understand this is a public demo and will use dummy information.",
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Talk to Jordan" }));
+    await user.click(screen.getByRole("button", { name: "Talk to Dakota" }));
 
     expect(
       await screen.findByText(
@@ -145,7 +145,7 @@ describe("DemoAgentPage", () => {
 
     render(<DemoAgentPage />);
     const startButton = await screen.findByRole("button", {
-      name: "Talk to Jordan",
+      name: "Talk to Dakota",
     });
 
     expect(startButton).toBeDisabled();
