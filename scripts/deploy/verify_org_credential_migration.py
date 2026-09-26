@@ -9,13 +9,21 @@ decrypted provider values never appear in command output.
 from __future__ import annotations
 
 import os
+import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
 import sqlalchemy as sa
 from dotenv import dotenv_values
 
-from shared.common.security import decrypt_data
+# This script is executed directly by the release workflow and OCI deploy
+# helper. Add the repository root explicitly so ``shared`` resolves without
+# requiring every caller to set PYTHONPATH first.
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from shared.common.security import decrypt_data  # noqa: E402
 
 
 def _parse_args() -> object:
