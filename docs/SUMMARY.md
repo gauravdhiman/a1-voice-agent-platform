@@ -102,7 +102,8 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 5. **[Local Docker](05_operations/deployment/local-docker.md)** — docker-compose for development
 6. **[CI / GitHub Actions](05_operations/deployment/ci-github-actions.md)** — local staging validation, manual production promotion, and workflow secrets
 7. **[Secret management](05_operations/deployment/secret-management.md)** — GCP Secret Manager, OCI Vault, GitHub OIDC, rotation, and migration safety
-8. **[Worktree isolation and release strategy](05_operations/deployment/worktree-and-release-strategy.md)** — local Supabase sandboxes, shared staging, and production promotion
+8. **[Current production secret map](05_operations/deployment/production-secret-map.md)** — where each secret category lives, how GitHub/GCP/OCI interact, and the soft-production launch checklist
+9. **[Worktree isolation and release strategy](05_operations/deployment/worktree-and-release-strategy.md)** — local Supabase sandboxes, shared staging, and production promotion
 
 #### Other operations
 

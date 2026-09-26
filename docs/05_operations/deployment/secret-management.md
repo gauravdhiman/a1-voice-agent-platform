@@ -181,6 +181,9 @@ it does not make a running process unable to read its own secrets.
 
 ## GitHub Actions flow
 
+For a concise current-state map of storage ownership and the soft-production
+launch status, see [Current production secret map](production-secret-map.md).
+
 `deploy/config/production.env` and `deploy/config/staging.env` are reviewed,
 version-controlled deployment configurations containing non-secret values only.
 They must not contain `DATABASE_URL`, `ENCRYPTION_KEY`, provider keys, OAuth
@@ -236,12 +239,15 @@ The command adds versions and does not print payloads. Review the output and
 remove any old complete GitHub environment secret after the managed values have
 been verified. The Cloud Run runtime service account needs
 `roles/secretmanager.secretAccessor` on only the production secret resources;
-the GitHub WIF service account needs access to read versions during rendering
-and permission to list enabled versions during deployment. The WIF deployment
-identity also needs `iam.serviceAccountUser` on the Cloud Run runtime identity
-when it deploys a service with `--service-account`. Keep deployment
-administration (`run.admin`, Artifact Registry writer) separate from runtime
-access where practical.
+the GitHub WIF deployment identity needs
+`roles/secretmanager.secretAccessor` on the production secrets whose payloads
+the migration/release path must read, and `roles/secretmanager.viewer` on each
+production secret so the deploy step can list enabled numeric versions for
+Cloud Run pinning. These grants are per-secret rather than project-wide. The
+WIF deployment identity also needs `iam.serviceAccountUser` on the Cloud Run
+runtime identity when it deploys a service with `--service-account`. Keep
+deployment administration (`run.admin`, Artifact Registry writer) separate
+from runtime access where practical.
 
 Stripe mode is explicit and fail-closed. Production defaults to live mode when
 `STRIPE_MODE` is omitted, so `sk_test_` and `pk_test_` values are rejected by
