@@ -13,8 +13,8 @@
 - **Branded 404** (`not-found.tsx`): "This page didn't pick up" + Home /
   Request-demo paths.
 - **Restaurants page restored** with a dedicated Verdi Table demo link. It now
-  points callers to Sofia's restaurant order and Q&A workflow instead of using
-  the unrelated dental or HVAC demos. Launch verticals: dental + HVAC +
+  points callers to the restaurant agent's order and Q&A workflow instead of
+  using the unrelated dental or HVAC demos. Launch verticals: dental + HVAC +
   restaurants.
 - **Demo feedback loop closed** (was: neither agent-prompted nor form):
   outcome page carries a one-click 1–5 `DemoFeedback` widget emitting

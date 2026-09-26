@@ -23,6 +23,18 @@ from backend.src.worktree_seed import (
 )
 
 
+def _agent_prompt_and_public_copy(agent: dict[str, object]) -> str:
+    """Join the agent-owned prompt and public-copy fields for assertions."""
+    fields = (
+        "persona",
+        "mission",
+        "custom_instructions",
+        "instructions_markdown",
+        "public_description",
+    )
+    return " ".join(str(agent.get(field) or "") for field in fields)
+
+
 def test_seed_records_are_stable_across_worktrees() -> None:
     """Every isolated database receives the same local demo fixture."""
     first = build_seed_records("calendar-contract")
@@ -57,7 +69,9 @@ def test_seed_records_keep_business_context_on_each_demo_agent() -> None:
     )
     assert "Pleasant Pediatric" in agent["instructions_markdown"]
     assert "helpful AI assistant" in agent["instructions_markdown"]
-    assert "I'm Alex, a helpful AI assistant" in agent["custom_instructions"]
+    appointment_instructions = " ".join(agent["custom_instructions"].split())
+    assert "I'm {{agent.name}}, a helpful AI assistant" in appointment_instructions
+    assert agent["name"] not in _agent_prompt_and_public_copy(agent)
     assert "helpful AI assistant" in agent["persona"]
     assert "1234 Sunbeam Way" in agent["instructions_markdown"]
     assert (
@@ -180,58 +194,88 @@ def test_seed_contains_three_public_demo_workflows() -> None:
     assert all(
         agent["demo_max_call_duration_seconds"] == 900 for agent in records["agents"]
     )
-    alex = next(agent for agent in records["agents"] if agent["name"] == "Alex")
-    jordan = next(agent for agent in records["agents"] if agent["name"] == "Jordan")
-    sofia = next(agent for agent in records["agents"] if agent["name"] == "Sofia")
+    appointment_agent = next(
+        agent
+        for agent in records["agents"]
+        if agent["demo_slug"] == "pleasant-pediatric-appointments"
+    )
+    service_agent = next(
+        agent
+        for agent in records["agents"]
+        if agent["demo_slug"] == "copper-ridge-service-request"
+    )
+    restaurant_agent = next(
+        agent
+        for agent in records["agents"]
+        if agent["demo_slug"] == "verdi-table-restaurant"
+    )
+    assert {agent["name"] for agent in records["agents"]} == {
+        "Alex",
+        "Jordan",
+        "Casey",
+    }
     assert (
-        alex["organization_id"]
-        == jordan["organization_id"]
-        == sofia["organization_id"]
+        appointment_agent["organization_id"]
+        == service_agent["organization_id"]
+        == restaurant_agent["organization_id"]
         == DEMO_ORGANIZATION_ID
     )
     assert (
         "never disclose, search for, reschedule, cancel, or modify"
-        in alex["custom_instructions"].lower()
+        in appointment_agent["custom_instructions"].lower()
     )
-    assert "4550 N Copper Ridge Way" in jordan["instructions_markdown"]
-    assert "out-of-hours callback" in jordan["instructions_markdown"]
-    assert "helpful AI assistant" in jordan["instructions_markdown"]
-    jordan_instructions = " ".join(jordan["custom_instructions"].split())
-    assert "I'm Jordan, a helpful AI assistant" in jordan_instructions
-    assert "helpful AI assistant" in jordan["persona"]
-    assert "$89" in jordan["instructions_markdown"]
-    assert "$129" in jordan["instructions_markdown"]
-    assert "# Public-demo disclosure" in jordan["custom_instructions"]
-    assert "# Business context" in jordan["custom_instructions"]
-    assert "# Services and illustrative demo pricing" in jordan["custom_instructions"]
-    assert "# Service-inquiry workflow" in jordan["custom_instructions"]
-    assert "# Email follow-up" in jordan["custom_instructions"]
-    assert "spell the caller's name one letter at a time" in jordan_instructions.lower()
-    assert "spell the email one character at a time" in jordan_instructions.lower()
+    assert "4550 N Copper Ridge Way" in service_agent["instructions_markdown"]
+    assert "out-of-hours callback" in service_agent["instructions_markdown"]
+    assert "helpful AI assistant" in service_agent["instructions_markdown"]
+    service_instructions = " ".join(service_agent["custom_instructions"].split())
+    assert "I'm {{agent.name}}, a helpful AI assistant" in service_instructions
+    assert "helpful AI assistant" in service_agent["persona"]
+    assert "$89" in service_agent["instructions_markdown"]
+    assert "$129" in service_agent["instructions_markdown"]
+    assert "# Public-demo disclosure" in service_agent["custom_instructions"]
+    assert "# Business context" in service_agent["custom_instructions"]
+    assert (
+        "# Services and illustrative demo pricing"
+        in service_agent["custom_instructions"]
+    )
+    assert "# Service-inquiry workflow" in service_agent["custom_instructions"]
+    assert "# Email follow-up" in service_agent["custom_instructions"]
+    assert (
+        "spell the caller's name one letter at a time" in service_instructions.lower()
+    )
+    assert "spell the email one character at a time" in service_instructions.lower()
     assert "do not rename them, convert them to snake_case, or invent aliases" in (
-        jordan_instructions.lower()
+        service_instructions.lower()
     )
-    assert "invoke that tool automatically" in jordan_instructions
-    assert "email confirmation was not sent" in jordan_instructions
-    assert "do not repeat the notice" in jordan_instructions
-    assert "capture_lead" not in jordan_instructions
-    assert "create_row" in jordan_instructions
-    assert "AI voice assistant" not in jordan["instructions_markdown"]
-    sofia_instructions = " ".join(sofia["custom_instructions"].split())
-    assert "Verdi Table" in sofia["instructions_markdown"]
-    assert "2201 E Juniper Lane" in sofia["instructions_markdown"]
-    assert "$16" in sofia["instructions_markdown"]
+    assert "invoke that tool automatically" in service_instructions
+    assert "email confirmation was not sent" in service_instructions
+    assert "do not repeat the notice" in service_instructions
+    assert "capture_lead" not in service_instructions
+    assert "create_row" in service_instructions
+    assert "AI voice assistant" not in service_agent["instructions_markdown"]
+    restaurant_instructions = " ".join(restaurant_agent["custom_instructions"].split())
+    assert "Verdi Table" in restaurant_agent["instructions_markdown"]
+    assert "2201 E Juniper Lane" in restaurant_agent["instructions_markdown"]
+    assert "$16" in restaurant_agent["instructions_markdown"]
     assert (
         "Do not call `create_row` for a menu or hours question"
-        in sofia["custom_instructions"]
+        in restaurant_agent["custom_instructions"]
     )
-    assert "create_row" in sofia_instructions
+    assert "create_row" in restaurant_instructions
     assert "do not rename them, convert them to snake_case, or invent aliases" in (
-        sofia_instructions.lower()
+        restaurant_instructions.lower()
     )
-    assert "spell the caller's name one letter at a time" in sofia_instructions
-    assert "email confirmation was not sent" in sofia_instructions
-    assert "quick 1-to-5 rating" in sofia_instructions
+    assert "spell the caller's name one letter at a time" in restaurant_instructions
+    assert "email confirmation was not sent" in restaurant_instructions
+    assert "quick 1-to-5 rating" in restaurant_instructions
+    assert all(
+        agent["name"] not in _agent_prompt_and_public_copy(agent)
+        for agent in records["agents"]
+    )
+    assert all(
+        "{{agent.name}}" in agent["instructions_markdown"]
+        for agent in records["agents"]
+    )
     assert records["retired_organization_ids"] == [LEGACY_HVAC_ORGANIZATION_ID]
 
 

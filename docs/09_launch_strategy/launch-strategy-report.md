@@ -190,7 +190,7 @@ Don't fight Vapi/Retell on "lowest $/min for developers." Don't fight Smith.ai o
 
 | Segment (start here) | Pain | Your wedge |
 |---|---|---|
-| **Dental (1–3 chairs, Peoria-style)** | 30–50% after-hours missed; no-show 15% | Alex-style receptionist + Google Calendar double-book guard + SMS confirm (you already seed this) |
+| **Dental (1–3 chairs, Peoria-style)** | 30–50% after-hours missed; no-show 15% | Appointment receptionist + Google Calendar double-book guard + SMS confirm (you already seed this) |
 | **HVAC / trades (dispatch)** | After-hours emergency triage, recall | Diagnosis-triage + escalation + transfer-after-hours (on `codex/human-call-transfer`) |
 | **Restaurant (reservations + takeout intent)** | Weekend rush, no-shows | Reservation skill + special-request handoff; do NOT promise cart/payment yet — skills-only today |
 
@@ -327,7 +327,7 @@ gantt
 2. **Your billing engine is over-built for where you are and under-published for what you need.** Atomic RPCs, grace schedulers, migration service — excellent. But none of it matters if the catalog is still `free`-only and demos don't capture leads. Finish the last mile (catalog + overage + recovery UI), not another entitlement kind.
 3. **Don't let Stripe plans decide positioning.** $49/$149/$399 was a cost-plus guess. SMBs don't buy credits; they buy "no missed calls + calendar full." Price the outcome, meter the minutes.
 4. **With a tiny team, concierge isn't a compromise — it's the moat.** Goodcall + Smith win on "we set it up for you." Vapi/Retell win on "you wire it yourself." You win in the middle: **live in 48h without hiring an engineer.**
-5. **Merge the demo branch before any pricing debate.** If a dentist can't hear Alex book a cleaning in 60 seconds and leave an email, pricing is irrelevant.
+5. **Merge the demo branch before any pricing debate.** If a dentist can't hear the appointment agent book a cleaning in 60 seconds and leave an email, pricing is irrelevant.
 
 ---
 

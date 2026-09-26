@@ -91,7 +91,7 @@ class TestCheckToolConfiguration:
 
         This is the systematic audit: adding a tool with required
         attachment fields must add an override (and a row here), or the
-        card silently stays green like Jordan's Sheets card did.
+        card silently stays green when the service demo sheet is unhealthy.
         """
         assert check_tool_configuration("CalCom", {}) == [
             "default event type is not set"

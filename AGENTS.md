@@ -432,6 +432,9 @@ docs/04_development_guides/agent-evaluations.md.
   workflow, scope, and guardrails in that agent's instructions; operational
   settings such as timezone may remain organization-level when required by the
   runtime.
+- Give every demo agent a gender-neutral configured name. Reference it in
+  prompts through `{{agent.name}}`; keep non-templated public copy name-free.
+  Never hard-code demo agent names in prompts or public copy.
 - Never log access tokens, full request bodies containing PII, or provider
   secrets. Redact structured logs and traces at the boundary.
 

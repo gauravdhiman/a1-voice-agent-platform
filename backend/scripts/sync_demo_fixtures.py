@@ -3,7 +3,7 @@
 
 This command is intentionally separate from application startup and from the
 local worktree account seed. It creates only the shared public demo tenant,
-Alex, Jordan, Sofia, and their repository-owned tool links.
+the three code-owned demo agents, and their repository-owned tool links.
 """
 
 from __future__ import annotations

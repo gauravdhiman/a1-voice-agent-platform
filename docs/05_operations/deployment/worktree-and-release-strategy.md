@@ -128,20 +128,22 @@ refreshed on each `config` or `up`, so adding or rotating the key after the
 first setup is picked up automatically.
 
 The default seed creates a neutral `24x7 AI Demo Studio` organization in
-`America/Phoenix` with three active demos: `Alex` for Pleasant Pediatric dental
-appointments, `Jordan` for Copper Ridge Heating & Air service inquiries, and
-`Sofia` for Verdi Table restaurant orders and questions. Business context lives
-in each agent's instructions; the organization has no industry, location, or
-free-form business details. All demos have unlimited calls (`-1`) and a
-15-minute per-call cap, with call recording enabled so the agent detail page
-exposes Call History. The seed attaches the native Google Calendar appointment
-tool to Alex and the configurable Google Sheets row tool to Jordan and Sofia,
-with only the row-creation function enabled for those demos. OAuth state stays
-empty so each worktree can authorize providers
-independently. Any old HVAC prototype organization is marked inactive during
-reseeding rather than deleted. Future code-owned demo fixtures must reuse this
-same organization rather than creating a new tenant; keep business identity,
-hours, and workflow guardrails in each agent's instructions.
+`America/Phoenix` with three active demos: Pleasant Pediatric dental
+appointments, Copper Ridge Heating & Air service inquiries, and Verdi Table
+restaurant orders and questions. Business context lives in each agent's
+instructions; the organization has no industry, location, or free-form business
+details. All demos have unlimited calls (`-1`) and a 15-minute per-call cap,
+with call recording enabled so the agent detail page exposes Call History. The
+seed attaches the native Google Calendar appointment tool to the appointment
+agent and the configurable Google Sheets row tool to the service and restaurant
+agents, with only the row-creation function enabled for those demos. OAuth state
+stays empty so each worktree can authorize providers independently. Any old HVAC
+prototype organization is marked inactive during reseeding rather than deleted.
+Future code-owned demo fixtures must reuse this same organization rather than
+creating a new tenant, use gender-neutral configured names, and reference those
+names in prompts through `{{agent.name}}`; keep non-templated public copy
+name-free. Put business identity, hours, and workflow guardrails in each agent's
+instructions.
 The public Calendar fixture exposes availability lookup and new booking only;
 existing-event search, update, and cancellation functions remain disabled.
 
@@ -190,11 +192,11 @@ starts.
 
 The release fixture bootstrap is deliberately separate from application
 startup. It creates or refreshes the neutral `24x7 AI Demo Studio` organization,
-Alex, Jordan, Sofia, and their required native tool links. It is safe to rerun and
-preserves customer credit balances, provider credentials, phone assignments,
-selected voice presets, and public-organization publishing settings. It does
-not create the three local test accounts or grant the local demo credit
-allowance.
+the three code-owned demo agents, and their required native tool links. It is
+safe to rerun and preserves customer credit balances, provider credentials,
+phone assignments, selected voice presets, and public-organization publishing
+settings. It does not create the three local test accounts or grant the local
+demo credit allowance.
 
 See `docs/05_operations/staging_environment.md` for `.env.staging` setup,
 bootstrap, and verification checklist.

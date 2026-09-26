@@ -52,9 +52,8 @@ const content: IndustryPageContent = {
     },
   ],
   demoSlug: "copper-ridge-service-request",
-  demoName: "Jordan",
   demoBlurb:
-    "Try the live demo: request HVAC service with Jordan and watch the example request land in a spreadsheet. In a real setup, we connect it to the tools your dispatch team already uses.",
+    "Try the live demo: request HVAC service and watch the example request land in a spreadsheet. In a real setup, we connect it to the tools your dispatch team already uses.",
   proof: {
     eyebrow: "THE HOME-SERVICE CALL, BY THE NUMBERS",
     title: "Speed is part of the service.",

@@ -50,12 +50,12 @@ telemetry disabled and do not start an observability service.
 The launcher creates a worktree-specific Supabase CLI project, applies the
 worktree's Alembic migrations, synchronizes master data, and seeds the same
 three local email/password accounts plus a staging-shaped `Pleasant Pediatric`
-organization, `Alex` appointment agent with Call History enabled, and native
-Google Calendar appointment tool link. OAuth state is intentionally not copied. It then starts
-frontend/backend/voice-ws on a deterministic port slot. Its local seed creates
-the neutral `24x7 AI Demo Studio` organization with the Pleasant Pediatric
-appointment demo and Copper Ridge Heating & Air lead-capture demo. See [the
-worktree and release strategy](worktree-and-release-strategy.md) for setup,
+organization, appointment demo agent with Call History enabled, and native
+Google Calendar appointment tool link. OAuth state is intentionally not copied.
+It then starts frontend/backend/voice-ws on a deterministic port slot. Its local
+seed creates the neutral `24x7 AI Demo Studio` organization with the Pleasant
+Pediatric appointment demo and Copper Ridge Heating & Air lead-capture demo. See
+[the worktree and release strategy](worktree-and-release-strategy.md) for setup,
 cleanup, and the shared-staging rule.
 
 Provider settings for a worktree are copied from `--source-env` when supplied,
