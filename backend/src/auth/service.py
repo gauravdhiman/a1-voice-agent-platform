@@ -773,6 +773,10 @@ class AuthService:
 
         return None
 
+    async def auth_user_exists(self, email: str) -> bool:
+        """Return whether a Supabase Auth account already uses the email."""
+        return await self._find_auth_user_by_email(email) is not None
+
     async def _record_last_sign_in_method(
         self, user_id: str, method: SignInMethod
     ) -> None:

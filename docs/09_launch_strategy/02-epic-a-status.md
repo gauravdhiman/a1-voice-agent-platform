@@ -7,9 +7,11 @@
 
 - Closed-signup gate: `PUBLIC_SIGNUP_ENABLED=false` default + `PLATFORM_ADMIN_ALLOWLIST`
   (`shared/config/settings.py`; synced across all three `.env.*.example`).
-- Enforcement: `POST /auth/signup` → 403 `signup_disabled`; Google/LinkedIn
-  callbacks redirect to the invite-only error page after provider exchange;
-  new public `GET /auth/signup-status` for UX redirect (backend authoritative).
+- Enforcement: `POST /auth/signup` → 403 `signup_disabled` for new accounts;
+  Google/LinkedIn callbacks allow existing Auth accounts to sign in and route
+  genuinely new, uninvited accounts to the invite-only error page after the
+  provider exchange; new public `GET /auth/signup-status` for UX redirect
+  (backend authoritative).
   New module `backend/src/auth/signup_gate.py` (read-only invitation check —
   no token-validity oracle, no side effects).
 - Interest funnel: `interest_leads` table (migration `20260903000001`, single

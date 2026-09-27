@@ -7,10 +7,10 @@ else is directed to the interest form (``/request-demo``).
 Enforcement points (all in ``src.auth.routes``):
 
 - ``POST /api/v1/auth/signup`` — hard 403 ``signup_disabled``.
-- Google/LinkedIn OAuth callbacks — error redirect *after* the provider
-  exchange, because the caller's email is only known then. The
-  ``/authorize`` endpoints intentionally stay open: starting an OAuth flow
-  creates no account and costs nothing.
+- Google/LinkedIn OAuth callbacks — existing Auth accounts may sign in after
+  the provider exchange; genuinely new accounts must pass the invitation or
+  allowlist gate. The ``/authorize`` endpoints intentionally stay open:
+  starting an OAuth flow creates no account and costs nothing.
 - The frontend ``/auth/signup`` page redirects to ``/request-demo`` based
   on ``GET /api/v1/auth/signup-status`` (defense in depth; the backend
   gate is authoritative).

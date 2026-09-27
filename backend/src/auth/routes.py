@@ -37,6 +37,7 @@ from src.auth.models import (
     SignUpResponse,
     UserProfile,
 )
+from src.auth.oauth_identity import OAuthVerifiedIdentity
 from src.auth.service import auth_service
 from src.auth.audit import (
     OAUTH_DENIED,
@@ -81,6 +82,32 @@ class ProcessInvitationRequest(BaseModel):
 
     token: str = Field(..., description="Invitation token")
     user_id: UUID = Field(..., description="User ID to add to organization")
+
+
+async def _is_oauth_identity_allowed(
+    identity: OAuthVerifiedIdentity,
+) -> tuple[bool, Optional[str]]:
+    """Apply the signup gate without blocking existing OAuth accounts.
+
+    The provider exchange has already verified the email before this helper is
+    called. Existing Auth accounts bypass the new-account signup gate; unknown
+    accounts must still pass the normal public-signup, invitation, or
+    platform-admin allowlist checks. Auth lookup failures are propagated so the
+    OAuth callback can fail closed instead of creating an account while account
+    state is unavailable.
+    """
+    allowed, denial = await is_signup_allowed(
+        identity.email,
+        invitation_token=identity.invitation_token,
+        supabase=organization_service.supabase,
+    )
+    if allowed:
+        return True, None
+
+    if await auth_service.auth_user_exists(identity.email):
+        return True, None
+
+    return False, denial
 
 
 @auth_router.post(
@@ -487,11 +514,18 @@ async def linkedin_callback(
             status_code=status.HTTP_302_FOUND,
         )
 
-    allowed, _denial = await is_signup_allowed(
-        identity.email,
-        invitation_token=identity.invitation_token,
-        supabase=organization_service.supabase,
-    )
+    try:
+        allowed, _denial = await _is_oauth_identity_allowed(identity)
+    except Exception:
+        current_span.set_attribute("oauth.account_lookup_failed", True)
+        current_span.set_status(
+            trace.Status(trace.StatusCode.ERROR, "oauth_account_lookup_failed")
+        )
+        logger.error("LinkedIn OAuth existing-account lookup failed", exc_info=True)
+        return RedirectResponse(
+            oauth_error_redirect("LinkedIn authentication could not be completed."),
+            status_code=status.HTTP_302_FOUND,
+        )
     if not allowed:
         current_span.set_attribute("oauth.gated", True)
         current_span.set_status(
@@ -633,11 +667,18 @@ async def google_callback(
             status_code=status.HTTP_302_FOUND,
         )
 
-    allowed, _denial = await is_signup_allowed(
-        identity.email,
-        invitation_token=identity.invitation_token,
-        supabase=organization_service.supabase,
-    )
+    try:
+        allowed, _denial = await _is_oauth_identity_allowed(identity)
+    except Exception:
+        current_span.set_attribute("oauth.account_lookup_failed", True)
+        current_span.set_status(
+            trace.Status(trace.StatusCode.ERROR, "oauth_account_lookup_failed")
+        )
+        logger.error("Google OAuth existing-account lookup failed", exc_info=True)
+        return RedirectResponse(
+            oauth_error_redirect("Google authentication could not be completed."),
+            status_code=status.HTTP_302_FOUND,
+        )
     if not allowed:
         current_span.set_attribute("oauth.gated", True)
         current_span.set_status(
