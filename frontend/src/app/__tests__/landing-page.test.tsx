@@ -199,26 +199,26 @@ describe("Homepage experience", () => {
     write.mockRestore();
   });
 
-  it("provides a reversible pause control", () => {
+  it("provides a reversible message-rotation control", () => {
     render(
       <ThemeProvider>
         <LandingPage />
       </ThemeProvider>,
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Pause ambient animation" }),
+      screen.getByRole("button", { name: "Pause message rotation" }),
     );
     expect(
       screen
-        .getByRole("button", { name: "Resume ambient animation" })
+        .getByRole("button", { name: "Play message rotation" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     fireEvent.click(
-      screen.getByRole("button", { name: "Resume ambient animation" }),
+      screen.getByRole("button", { name: "Play message rotation" }),
     );
     expect(
       screen
-        .getByRole("button", { name: "Pause ambient animation" })
+        .getByRole("button", { name: "Pause message rotation" })
         .getAttribute("aria-pressed"),
     ).toBe("false");
   });

@@ -11,11 +11,14 @@ customer results.
 
 ## Scope and entry points
 
-- Only the homepage carries the particle journey. The day/night choice,
+- Only the homepage carries the aurora hero and concurrency story. The day/night choice,
   atmosphere tokens, and public header are shared with the other public pages
   (see [public theme](public-theme.md)). Other public routes keep their own
   layouts and the dashboard keeps its existing design.
 - `frontend/src/app/page.tsx` renders `components/home/home-page.tsx`.
+  The previous particle-journey experience is preserved unchanged as
+  `components/home/home-page-legacy.tsx` and served at `/home-classic`
+  (kept out of the sitemap) as a fallback while the new presentation rolls out.
 - Primary actions lead to `/request-demo`; sign-in leads to `/auth/signin`.
 - The appointment, service-request, and restaurant-order demos keep their
   dedicated routes. The homepage itself does not request microphone
@@ -53,26 +56,27 @@ active, and trustworthy. The CSS module scopes both palettes to the homepage.
 `247ai-home-theme` remembers an explicit choice. Blocked local storage does not
 prevent switching; the choice then lasts only for the current mount.
 
-The decorative canvas transitions between a ringing counter service bell, a
-voice wave, a booking calendar with frame and header guides, and a
-three-ring captured-lead check as the visitor scrolls normally. Each
-formation holds still for roughly 60% of its chapter (see `shapeProgress` in
-`particle-field.tsx`) before easing into the next, so the bell, calendar,
-and check can actually be read instead of blurring past. A live caption
-under the field names the current formation. There is no scroll hijack
-or timed requirement to read a chapter. Semantic headings, copy, navigation, and
-calls to action render independently of canvas support.
+The hero pairs the unchanged business story with a live concurrency
+simulation: a shared 24x7 AI front-desk strip above three self-contained
+caller → outcome lanes (Maria's question answered, Sam's urgent job
+captured, Priya's table booked), each joined by a short CSS beam with a
+traveling pulse. Lanes stack in the same story order on narrow screens, so
+the diagram reads identically on mobile and desktop. Beams are transform-only
+CSS (in the spirit of MagicUI's Animated Beam, but measuring-free); there is
+no WebGL or physics engine. The transcript ticker below the lanes pauses on
+hover/focus, via its own play/stop button, the page pause control, or
+reduced motion.
 
-Canvas work is bounded to 2,400 points on desktop and half that on narrow screens,
-with a 1.5 device-pixel-ratio cap and approximately 30fps scheduling. Day-mode
-dots render larger with boosted alpha, and dots grow up to 1.45x on very wide
-viewports so formations stay solid past 1600px. Animation
-stops when the journey leaves the viewport or the document is hidden. The effect
-cleans up observers, listeners, and pending frames on unmount. Pointer movement
-adds a small decorative offset without React state updates per frame.
-
-The pause button stops ambient movement and reveal animations; scrolling can
-still select a new static formation. OS reduced-motion preference disables
+The ambient background is a lightweight 2D canvas (`aurora-field.tsx`):
+14 gradient orbs plus ~90 specks with mouse parallax, capped at ~30fps
+with a 1.5 device-pixel-ratio ceiling. It pauses offscreen, in hidden
+tabs, when the visitor pauses motion, and for reduced motion (one static
+frame). Section reveals are a tiny IntersectionObserver wrapper with
+transform/opacity CSS only.
+The ambient canvas has no manual stop control: it pauses offscreen, in
+hidden tabs, and renders one static frame for reduced motion. The transcript
+ticker provides its own play/stop plus hover/focus hold, which freezes only
+the message rotation — beam and wave motion continue while a visitor reads. OS reduced-motion preference disables
 ambient movement and CSS transitions/reveals, including when changed mid-session.
 The shared public mobile navigation opens as a right-side drawer, supports
 Escape, and closes after selecting a destination or clicking outside it.
@@ -91,7 +95,8 @@ npx eslint src/components/home src/app/page.tsx
 The browser contracts live in `e2e/tests/test_homepage_experience.py` and run with
 the existing E2E suite. They cover theme persistence, pause control, demo-request
 navigation, mobile navigation, reduced motion, and horizontal overflow. Also
-visually inspect both themes and the scroll formations on desktop and mobile.
+visually inspect both themes and the concurrency simulation on mobile (390px),
+tablet (768px), laptop (1280px), desktop (1440px), and widescreen (1920px).
 
 The shared PostCSS configuration uses the object plugin form supported by both
 Next.js and Vitest/Vite so CSS modules run through the same Tailwind processor.

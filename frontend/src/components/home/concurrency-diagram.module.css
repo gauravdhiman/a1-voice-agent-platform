@@ -1,0 +1,447 @@
+.diagram {
+  --beam: color-mix(in srgb, var(--accent) 60%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 18px;
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--glow), transparent 60%),
+    color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow:
+    0 24px 80px -24px var(--glow),
+    0 2px 6px var(--public-shadow);
+  overflow: hidden;
+  position: relative;
+  isolation: isolate;
+}
+
+.diagram::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 55%, transparent),
+    transparent 30%,
+    transparent 70%,
+    color-mix(in srgb, var(--accent) 45%, transparent)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.liveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
+  animation: ping 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  flex-shrink: 0;
+}
+
+.liveText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.illustrative {
+  margin-left: auto;
+  font-size: 9px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Shared front-desk strip: one desk, every line. */
+.core {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 16px;
+  background:
+    radial-gradient(90% 120% at 50% 0%, var(--glow), transparent 70%),
+    color-mix(in srgb, var(--surface) 60%, transparent);
+}
+
+.coreIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--button);
+  color: var(--button-ink);
+  box-shadow: 0 6px 22px var(--glow);
+  flex-shrink: 0;
+}
+
+.coreText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.coreText strong {
+  font-size: 14px;
+  letter-spacing: -0.02em;
+}
+
+.coreText small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.wave {
+  margin-left: auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.wave i {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: wave 1.6s ease-in-out infinite;
+}
+
+.wave i:nth-child(1) { height: 40%; animation-delay: 0s; }
+.wave i:nth-child(2) { height: 80%; animation-delay: 0.2s; }
+.wave i:nth-child(3) { height: 100%; animation-delay: 0.4s; }
+.wave i:nth-child(4) { height: 60%; animation-delay: 0.6s; }
+
+/* Lanes: one self-contained caller → outcome story each. */
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0;
+}
+
+.caller,
+.outcome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  min-width: 0;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #fff;
+  border-color: transparent;
+  flex-shrink: 0;
+}
+
+.tone-a .avatar {
+  background: linear-gradient(135deg, #1d4fd7, #6ea8ff);
+}
+
+.tone-b .avatar {
+  background: linear-gradient(135deg, #0f766e, #4cc7b3);
+}
+
+.tone-c .avatar {
+  background: linear-gradient(135deg, #7c3aed, #c4b5fd);
+}
+
+.callerText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.callerText strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.callerText em {
+  font-style: normal;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--accent);
+}
+
+.beam {
+  position: relative;
+  align-self: center;
+  height: 2px;
+  margin: 0 6px;
+  background: linear-gradient(90deg, transparent, var(--beam), transparent);
+  overflow: visible;
+}
+
+.pulse {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  transform: translateY(-50%);
+  animation: travel 2.8s linear infinite;
+}
+
+.outcome {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.outcomeIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  flex-shrink: 0;
+}
+
+/* Transcript ticker with its own play/stop. */
+.ticker {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  min-height: 70px;
+}
+
+.tickerToggle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.tickerToggle:hover {
+  border-color: var(--accent);
+}
+
+.tickerIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.tickerText {
+  min-width: 0;
+  flex: 1;
+  animation: tickerIn 0.5s ease-out both;
+}
+
+.tickerText p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.agentLine {
+  color: var(--accent);
+}
+
+.tickerDots {
+  display: flex;
+  gap: 5px;
+  padding-top: 6px;
+  flex-shrink: 0;
+}
+
+.tickerDots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.tickerDots i[data-active="true"] {
+  background: var(--accent);
+}
+
+@keyframes travel {
+  from {
+    left: -4px;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    left: calc(100% - 2px);
+    opacity: 0;
+  }
+}
+
+@keyframes ping {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(52, 211, 153, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+
+@keyframes wave {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes tickerIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.diagram[data-paused="true"] .pulse,
+.diagram[data-paused="true"] .wave i,
+.diagram[data-paused="true"] .liveDot {
+  animation: none;
+}
+
+/* Narrow screens keep the same left-to-right lane story, just tightened:
+ * slimmer beam, smaller avatars, compact type. Lanes never stack. */
+@media (max-width: 560px) {
+  .diagram {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .lane {
+    grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
+  }
+
+  .caller,
+  .outcome {
+    padding: 8px 9px;
+    gap: 8px;
+    border-radius: 12px;
+  }
+
+  .avatar {
+    width: 26px;
+    height: 26px;
+    font-size: 9.5px;
+  }
+
+  .callerText strong {
+    font-size: 11.5px;
+  }
+
+  .callerText em {
+    font-size: 10.5px;
+  }
+
+  .beam {
+    margin: 0 3px;
+  }
+
+  .outcome {
+    font-size: 11px;
+  }
+
+  .outcomeIcon {
+    width: 26px;
+    height: 26px;
+    border-radius: 9px;
+  }
+
+  .core {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .coreIcon {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse,
+  .wave i,
+  .liveDot,
+  .tickerText {
+    animation: none !important;
+  }
+}
