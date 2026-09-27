@@ -75,6 +75,36 @@ class TestCheckEmailAvailability:
         assert "Google" in (result.message or "")
 
 
+class TestAuthUserExists:
+    """Internal existence checks used by verified OAuth callbacks."""
+
+    @pytest.mark.asyncio
+    async def test_returns_true_for_existing_auth_user(
+        self, auth_service: AuthService
+    ) -> None:
+        with patch.object(
+            auth_service,
+            "_find_auth_user_by_email",
+            new=AsyncMock(return_value=object()),
+        ) as lookup:
+            assert await auth_service.auth_user_exists("existing@example.com") is True
+
+        lookup.assert_awaited_once_with("existing@example.com")
+
+    @pytest.mark.asyncio
+    async def test_returns_false_for_unknown_auth_user(
+        self, auth_service: AuthService
+    ) -> None:
+        with patch.object(
+            auth_service,
+            "_find_auth_user_by_email",
+            new=AsyncMock(return_value=None),
+        ) as lookup:
+            assert await auth_service.auth_user_exists("new@example.com") is False
+
+        lookup.assert_awaited_once_with("new@example.com")
+
+
 class TestSignUpExistingUserConflict:
     """Signup conflicts should include structured sign-in guidance."""
 

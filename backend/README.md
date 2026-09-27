@@ -144,10 +144,11 @@ The implementation lives in `src/organization/public_routes.py` and
 
 ### Controlled-SaaS entry (gated signup + interest funnel)
 
-While `PUBLIC_SIGNUP_ENABLED=false` (default), email signup and OAuth
-sign-in only succeed for invitation holders and allowlisted platform
-admins (`PLATFORM_ADMIN_ALLOWLIST`); see `src/auth/signup_gate.py`.
-Everyone else is directed to the interest form.
+While `PUBLIC_SIGNUP_ENABLED=false` (default), new email and OAuth accounts
+must use an invitation or the platform-admin allowlist
+(`PLATFORM_ADMIN_ALLOWLIST`). Existing Auth accounts can still sign in with
+their verified credentials or OAuth provider; only genuinely new accounts are
+directed to the interest form. See `src/auth/signup_gate.py`.
 
 | Endpoint                     | Method | Description                                                              |
 | ---------------------------- | ------ | ------------------------------------------------------------------------ |
