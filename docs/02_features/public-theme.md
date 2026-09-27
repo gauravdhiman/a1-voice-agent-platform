@@ -28,8 +28,10 @@ dashboard. Dashboard styling is otherwise unaffected.
   cards, alerts) as well as the token-based chrome.
 - `public-theme.module.css` holds the token values (mirroring the homepage
   atmosphere) plus the shared header, footer, eyebrow, panel, button, and
-  split-layout primitives. Industry pages also use a quiet secondary AI
+  split-layout primitives. The filled primary CTA has an outlined secondary
+  sibling for paired hero actions. Industry pages also use a quiet secondary AI
   solutions callout near the bottom. Root-scoped color rules (`.root .primary`,
+  `.root a.secondaryOutline`,
   `.root .signIn`) keep button and link colors winning over the generic
   `.root a` reset.
 - `theme-switch.tsx` is the single switch visual for the whole site (sun,
@@ -58,11 +60,14 @@ dashboard. Dashboard styling is otherwise unaffected.
 
 ## Page coverage
 
-- `/` renders the particle journey on the shared theme (see
-  [homepage experience](homepage-experience.md)) and uses the same shared
+- `/` renders the aurora hero with the live concurrency story on the shared theme (see
+  [homepage experience](homepage-experience.md); the previous particle journey
+  is preserved at `/home-classic`) and uses the same shared
   header component as every other public route.
 - The descriptive industry routes render the shared `IndustryPage` template on
-  the public theme. Each page includes a fifth outcome card for existing
+  the public theme. Their heroes fill the first viewport like the homepage
+  hero, pair the filled primary CTA with the outlined secondary, and stack
+  both full-width on mobile. Each page includes a fifth outcome card for existing
   business-tool integrations and a secondary AI-solutions callout below the
   main conversion path. The shared footer includes the same subtle attribution
   link.

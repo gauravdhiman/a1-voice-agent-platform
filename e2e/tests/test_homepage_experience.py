@@ -6,7 +6,7 @@ from playwright.sync_api import Page, expect
 
 
 def test_homepage_theme_motion_and_demo_entry(page: Page, base_url: str):
-    """Theme persists; motion can stop; the primary funnel remains reachable."""
+    """Theme persists; message rotation can stop; the primary funnel remains reachable."""
     page.goto(base_url)
     expect(page.get_by_role("heading", level=1)).to_have_text(
         "Never miss a call.Never miss a customer."
@@ -15,9 +15,9 @@ def test_homepage_theme_motion_and_demo_entry(page: Page, base_url: str):
     expect(page.locator('[data-theme="day"]')).to_be_visible()
     page.reload()
     expect(page.get_by_role("switch", name="Switch to night mode")).to_be_visible()
-    page.get_by_role("button", name="Pause ambient animation").click()
+    page.get_by_role("button", name="Pause message rotation").click()
     expect(
-        page.get_by_role("button", name="Resume ambient animation")
+        page.get_by_role("button", name="Play message rotation")
     ).to_have_attribute("aria-pressed", "true")
     page.get_by_role("link", name="Hear it handle a real call").click()
     expect(

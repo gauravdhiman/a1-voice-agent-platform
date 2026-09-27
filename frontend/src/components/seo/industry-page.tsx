@@ -119,9 +119,14 @@ export function IndustryPage({ content }: IndustryPageProps) {
         <PublicHeader />
 
         <main style={{ position: "relative" }}>
-          <section style={{ padding: "88px 6.5% 72px" }}>
+          <section className={pt.industryHero}>
             <div
-              style={{ maxWidth: 760, margin: "0 auto", textAlign: "center" }}
+              style={{
+                maxWidth: 760,
+                margin: "0 auto",
+                textAlign: "center",
+                width: "100%",
+              }}
             >
               <p className={pt.eyebrow} style={{ justifyContent: "center" }}>
                 <span className={pt.statusDot} />
@@ -143,16 +148,7 @@ export function IndustryPage({ content }: IndustryPageProps) {
               >
                 {content.subhead}
               </p>
-              <div
-                style={{
-                  marginTop: 36,
-                  display: "flex",
-                  gap: 22,
-                  justifyContent: "center",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
+              <div className={pt.industryHeroActions}>
                 {content.demoSlug ? (
                   <Link
                     className={pt.primary}
@@ -167,7 +163,7 @@ export function IndustryPage({ content }: IndustryPageProps) {
                   </Link>
                 )}
                 {content.demoSlug ? (
-                  <Link className={pt.textLink} href="/request-demo">
+                  <Link className={pt.secondaryOutline} href="/request-demo">
                     Request a Demo <ArrowUpRight size={16} />
                   </Link>
                 ) : null}
@@ -349,8 +345,8 @@ export function IndustryPage({ content }: IndustryPageProps) {
               </h2>
               <p className={pt.lede} style={{ marginTop: 16 }}>
                 Request a demo, we configure your number, calendar or scheduling
-                system, and test calls around your business. You approve every
-                word before it answers. Pilot plans from $79/mo as you grow.
+                system, and test calls around your business. You test and
+                approve before it goes live. Pilot plans from $79/mo as you grow.
               </p>
               <div style={{ marginTop: 32 }}>
                 <Link className={pt.primary} href="/request-demo">

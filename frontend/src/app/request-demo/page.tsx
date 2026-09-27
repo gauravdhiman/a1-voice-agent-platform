@@ -140,7 +140,7 @@ export default function RequestDemoPage() {
                 </li>
                 <li>
                   <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
-                  <span>You approve every word before it answers</span>
+                  <span>You test and approve before it answers</span>
                 </li>
                 <li>
                   <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
