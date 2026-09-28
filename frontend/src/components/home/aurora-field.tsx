@@ -97,8 +97,8 @@ export function AuroraField({ theme, paused }: AuroraFieldProps) {
 
     const palette = () =>
       theme === "night"
-        ? { orb: "120,170,255", speck: "150,195,255", glow: "80,130,255" }
-        : { orb: "40,90,220", speck: "20,70,180", glow: "60,110,230" };
+        ? { orb: "120,170,255", speck: "150,195,255" }
+        : { orb: "40,90,220", speck: "20,70,180" };
 
     const draw = () => {
       const colors = palette();
@@ -137,14 +137,6 @@ export function AuroraField({ theme, paused }: AuroraFieldProps) {
         context.fill();
       }
 
-      // One quiet horizon glow line near the bottom of the hero.
-      const glowY = height * 0.88;
-      const glow = context.createLinearGradient(0, glowY - 60, 0, glowY + 40);
-      glow.addColorStop(0, `rgba(${colors.glow},0)`);
-      glow.addColorStop(0.5, `rgba(${colors.glow},0.12)`);
-      glow.addColorStop(1, `rgba(${colors.glow},0)`);
-      context.fillStyle = glow;
-      context.fillRect(0, glowY - 60, width, 100);
     };
 
     const step = () => {

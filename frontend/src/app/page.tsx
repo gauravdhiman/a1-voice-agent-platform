@@ -5,9 +5,9 @@ import { createMarketingMetadata } from "@/lib/marketing-seo";
 
 export const metadata: Metadata = createMarketingMetadata({
   path: "",
-  title: "AI Voice Agents for Small Business Calls",
+  title: "Answer more calls. Capture more business.",
   description:
-    "24x7 AI voice agents answer small-business calls, handle routine questions, book work, and capture leads in the tools your team already uses.",
+    "Our 24x7 AI phone assistant answers customer calls, handles common questions, books appointments, takes orders, and records callback requests, even when you’re busy or closed. More answered calls and bookings can mean more business.",
   keywords: [
     "AI voice agents for small business",
     "AI receptionist",

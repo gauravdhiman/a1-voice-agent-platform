@@ -553,12 +553,23 @@
  * (the shared header is sticky: 86px desktop, 70px mobile). Actions pair
  * primary + outlined secondary and stack full-width on small screens. */
 .industryHero {
+  position: relative;
   min-height: calc(100vh - 86px);
   min-height: calc(100svh - 86px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 64px 6.5%;
+  padding: 64px 6.5% 94px;
+}
+.heroScrollCue {
+  position: absolute;
+  left: 50%;
+  bottom: 25px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.scrollTarget {
+  scroll-margin-top: 86px;
 }
 .industryHeroActions {
   margin-top: 36px;
@@ -817,7 +828,13 @@
   .industryHero {
     min-height: calc(100vh - 70px);
     min-height: calc(100svh - 70px);
-    padding: 48px 7%;
+    padding: 48px 7% 88px;
+  }
+  .heroScrollCue {
+    bottom: 20px;
+  }
+  .scrollTarget {
+    scroll-margin-top: 70px;
   }
   .industryHeroActions {
     flex-direction: column;

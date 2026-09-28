@@ -25,6 +25,7 @@
 .chapters {
   border-top: 1px solid var(--line, var(--site-line));
   padding: 96px 6.5% 40px;
+  scroll-margin-top: 86px;
 }
 
 .chaptersTitle {
@@ -1014,6 +1015,12 @@
   text-align: center;
   color: var(--public-muted, var(--site-muted));
   max-width: 92px;
+}
+
+@media (max-width: 760px) {
+  .chapters {
+    scroll-margin-top: 70px;
+  }
 }
 
 @media (max-width: 560px) {
