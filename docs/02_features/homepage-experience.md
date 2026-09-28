@@ -77,6 +77,12 @@ with a 1.5 device-pixel-ratio ceiling. It pauses offscreen, in hidden
 tabs, when the visitor pauses motion, and for reduced motion (one static
 frame). Section reveals are a tiny IntersectionObserver wrapper with
 transform/opacity CSS only.
+The hero keeps the floating orbs and specks without a bottom horizon band.
+Day mode uses a higher-contrast grid, and the small hero scroll cue points to
+the feature section with a gentle bounce that respects reduced-motion
+preferences. The homepage share title leads with "Answer more calls. Capture
+more business." and the 24x7 AI brand; its description names call answering,
+appointments, orders, and callback requests.
 The ambient canvas has no manual stop control: it pauses offscreen, in
 hidden tabs, and renders one static frame for reduced motion. The transcript
 ticker provides its own play/stop plus hover/focus hold, which freezes only

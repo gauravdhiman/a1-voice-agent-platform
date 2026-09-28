@@ -30,6 +30,8 @@ stays owner-first (easy setup, test-and-approve before anything goes live).
 - The page is in the sitemap (`monthly`, `0.9`). It is linked from the
   shared header nav and from a guided-tour band on the homepage (with deep
   links into each chapter).
+- The hero scroll cue points to the five chapters and leaves room for the
+  sticky public header when navigating to the section.
 
 ## Validation
 

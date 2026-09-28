@@ -1,0 +1,47 @@
+.cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--public-muted, var(--site-muted, var(--muted)));
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.35;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: color 0.2s ease;
+}
+
+.cue:hover {
+  color: var(--public-accent, var(--site-accent, var(--accent)));
+}
+
+.cue:focus-visible {
+  outline: 2px solid var(--public-accent, var(--site-accent, var(--accent)));
+  outline-offset: 5px;
+  border-radius: 3px;
+}
+
+.arrow {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  animation: scrollCueBounce 1.8s ease-in-out infinite;
+}
+
+@keyframes scrollCueBounce {
+  0%,
+  100% {
+    transform: translateY(-1px);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrow {
+    animation: none;
+  }
+}

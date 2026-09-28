@@ -5,6 +5,7 @@ import { PublicHeader } from "@/components/public-theme/public-header";
 import { PublicFooter } from "@/components/public-theme/public-footer";
 import { SITE_AI_SERVICES_URL } from "@/lib/site-config";
 import pt from "@/components/public-theme/public-theme.module.css";
+import { ScrollCue } from "@/components/public-theme/scroll-cue";
 
 /** One outcome block: what the AI handles for this vertical. */
 export interface IndustryOutcome {
@@ -176,9 +177,16 @@ export function IndustryPage({ content }: IndustryPageProps) {
                   "No public demo yet - tell us what your calls need and we will shape the first workflow with you."}
               </p>
             </div>
+            <ScrollCue
+              href="#industry-pain-points"
+              label="Scroll to explore"
+              className={pt.heroScrollCue}
+            />
           </section>
 
           <section
+            id="industry-pain-points"
+            className={pt.scrollTarget}
             style={{ borderTop: "1px solid var(--line)", padding: "64px 6.5%" }}
           >
             <div style={{ maxWidth: 680, margin: "0 auto" }}>

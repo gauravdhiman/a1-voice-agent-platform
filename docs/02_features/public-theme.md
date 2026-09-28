@@ -55,6 +55,10 @@ dashboard. Dashboard styling is otherwise unaffected.
   drawer approximately 80% of the viewport wide; selecting a destination or
   clicking the scrim closes it, and the drawer intentionally keeps the
   homepage's compact navigation without duplicating the conversation CTA.
+- `scroll-cue.tsx` provides a small, keyboard-accessible hero link on the
+  homepage, industry pages, and `/how-it-works`. It points to the next section,
+  uses a gentle bounce, and disables that motion for reduced-motion
+  preferences. Scroll targets account for the sticky public header.
 - Demo call cards use a compact short-desktop layout so the call action stays
   reachable on 1280×720 screens while the full spacing remains available on
   taller displays.

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {
-  ArrowDown,
   ArrowRight,
   ArrowUpRight,
   AudioLines,
@@ -28,6 +27,7 @@ import {
 } from "@/lib/site-config";
 import { usePublicTheme } from "@/components/public-theme/public-theme-context";
 import { PublicHeader } from "@/components/public-theme/public-header";
+import { ScrollCue } from "@/components/public-theme/scroll-cue";
 import { AuroraField } from "./aurora-field";
 import { ConcurrencyDiagram } from "./concurrency-diagram";
 import { Reveal } from "./reveal";
@@ -159,9 +159,11 @@ export function HomePage() {
             </div>
           </div>
           <div className={styles.heroBottom}>
-            <a href="#features">
-              <ArrowDown size={15} /> SCROLL TO SEE WHAT’S POSSIBLE
-            </a>
+            <ScrollCue
+              href="#features"
+              label="Scroll to see what’s possible"
+              className={styles.homeScrollCue}
+            />
             <span className={styles.heroBottomRight}>
               <span className={styles.heroBottomTag}>
                 HUMAN CONNECTION. MEET ALWAYS ON.

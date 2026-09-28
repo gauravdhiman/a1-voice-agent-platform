@@ -6,6 +6,7 @@ import { SITE_SALES_EMAIL } from "@/lib/site-config";
 import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
 import { PublicHeader } from "@/components/public-theme/public-header";
 import { PublicFooter } from "@/components/public-theme/public-footer";
+import { ScrollCue } from "@/components/public-theme/scroll-cue";
 import pt from "@/components/public-theme/public-theme.module.css";
 import { TourSections } from "./tour-sections";
 import styles from "./platform-tour.module.css";
@@ -81,6 +82,11 @@ export function PlatformTourPage() {
                 WE SET IT UP · YOU TEST AND APPROVE · THEN IT GOES LIVE
               </p>
             </div>
+            <ScrollCue
+              href="#tour-chapters"
+              label="Scroll to see the five steps"
+              className={pt.heroScrollCue}
+            />
           </section>
 
           <section
