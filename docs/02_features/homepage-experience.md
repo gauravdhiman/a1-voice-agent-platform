@@ -45,6 +45,10 @@ customer results.
   links to the broader custom-AI-solutions practice without competing with the
   voice-agent conversion path. The footer carries the same secondary
   attribution link.
+- A guided-tour band sits between the live demos and the industries: one
+  primary CTA plus deep links into each `/how-it-works` chapter, so
+  post-demo curiosity has somewhere to go (see
+  [platform tour](platform-tour.md)).
 - Pricing retains the existing concierge-pilot positioning and $79 starting
   monthly-plan copy. There is no new checkout or independently maintained plan table.
 

@@ -48,8 +48,9 @@ dashboard. Dashboard styling is otherwise unaffected.
   since a binary switch cannot express "follow system."
 - `public-header.tsx` / `public-footer.tsx` are the common chrome for the
   homepage, landing pages, demos, request-demo, and auth routes. Header
-  anchors point at homepage sections (`/#features`, `/#demos`, `/#industries`,
-  `/#integrations`, `/#pricing`) so they work from every public page. At the
+  anchors point at homepage sections (`/#features`, `/#demos`,
+  `/#industries`, `/#integrations`, `/#pricing`) with one route link to
+  `/how-it-works`, so they work from every public page. At the
   mobile breakpoint the same header exposes a keyboard-dismissible right-side
   drawer approximately 80% of the viewport wide; selecting a destination or
   clicking the scrim closes it, and the drawer intentionally keeps the

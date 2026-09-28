@@ -30,6 +30,11 @@ describe("public SEO routes", () => {
         priority: 0.9,
       },
       {
+        url: "https://www.247ai.live/how-it-works",
+        changeFrequency: "monthly",
+        priority: 0.9,
+      },
+      {
         url: "https://www.247ai.live/dental-appointment-booking",
         changeFrequency: "monthly",
         priority: 0.8,

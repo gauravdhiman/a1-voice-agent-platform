@@ -865,6 +865,90 @@
   margin-top: 20px;
 }
 
+/* Guided-tour band: bridges the live demos to the industry guides. ----- */
+
+.tourBand {
+  border-top: 1px solid var(--line);
+  padding: 110px 6.5%;
+  background: color-mix(in srgb, var(--panel) 38%, var(--surface));
+}
+
+.tourInner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 90px);
+  align-items: center;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.tourInner h2 {
+  margin: 26px 0 0;
+}
+
+.tourInner .ctaRow {
+  margin-top: 30px;
+}
+
+.tourCopy {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.8;
+  max-width: 440px;
+  margin-top: 22px;
+}
+
+.tourChapters {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.tourChapters li + li {
+  border-top: 1px solid var(--line);
+}
+
+.tourChapters a {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 24px;
+  transition: background-color 0.25s, padding-left 0.25s;
+}
+
+.tourChapters a:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  padding-left: 30px;
+}
+
+.tourChapters a > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tourChapters strong {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.tourChapters small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tourChapters svg {
+  margin-left: auto;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
 /* Industries -------------------------------------------------------------- */
 
 .industries {
@@ -997,6 +1081,10 @@
 }
 
 .setup .textLink {
+  margin-top: 24px;
+}
+
+.setup .primary {
   margin-top: 24px;
 }
 
@@ -1314,6 +1402,15 @@
     grid-template-columns: 1fr;
   }
 
+  .tourInner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+  }
+
+  .tourChapters a {
+    padding: 18px 20px;
+  }
+
   .industryList > a {
     grid-template-columns: 24px 1fr 28px;
     gap: 16px;
@@ -1393,6 +1490,7 @@
   .features,
   .proof,
   .demos,
+  .tourBand,
   .industries,
   .integrations,
   .setup,

@@ -246,30 +246,49 @@
   transform: translateX(13px);
 }
 .signIn {
-  display: flex;
+  display: inline-flex;
   gap: 7px;
   align-items: center;
+  padding: 10px 16px;
+  border: 1px solid var(--line, var(--site-line));
+  border-radius: 4px;
   color: var(--public-muted, var(--muted));
-  transition: color 0.2s;
+  transition: color 0.2s, border-color 0.2s;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .signIn:hover {
   color: var(--public-accent, var(--accent));
+  border-color: var(--public-accent, var(--accent));
 }
 .headerCta {
-  display: flex;
+  display: inline-flex;
   gap: 7px;
   align-items: center;
   padding: 11px 17px;
-  border: 1px solid var(--line, var(--site-line));
+  border: 0;
   border-radius: 4px;
-  transition: background-color 0.2s;
+  color: var(--button-ink);
+  background: var(--button);
+  font-weight: 500;
+  transition:
+    transform 0.25s,
+    box-shadow 0.25s;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .headerCta:hover {
-  background: var(--panel, var(--site-panel));
+  transform: translateY(-2px);
+  box-shadow: 0 8px 35px var(--glow);
+}
+/* Doubled classes (0,2,0) so the header button colors win over page-level
+ * generic link resets such as `.home a` / `.root a` (0,1,1), no matter
+ * which page shell the shared header renders inside. */
+.headerCta.headerCta {
+  color: var(--button-ink);
+}
+.signIn.signIn {
+  color: var(--public-muted, var(--muted));
 }
 .menuToggle {
   display: none;
