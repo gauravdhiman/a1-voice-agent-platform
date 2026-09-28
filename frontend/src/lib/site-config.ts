@@ -25,6 +25,13 @@ export const SITE_DESCRIPTION =
 /** Canonical public marketing site URL (production). */
 export const SITE_URL = "https://www.247ai.live";
 
+/** Absolute site path used for social preview images. */
+export const SITE_SHARE_IMAGE = "/og-image.png";
+
+/** Accessible description for the shared site preview image. */
+export const SITE_SHARE_IMAGE_ALT =
+  "24x7 AI — an always-on AI front desk for small-business calls, represented by a blue phone handset with ringing arcs.";
+
 /** External destination for the broader custom AI solutions practice. */
 export const SITE_AI_SERVICES_URL = "https://cognients.com";
 

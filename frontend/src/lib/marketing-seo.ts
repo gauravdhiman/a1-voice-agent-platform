@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 
-import { SITE_NAME, SITE_URL } from "@/lib/site-config";
+import {
+  SITE_NAME,
+  SITE_SHARE_IMAGE,
+  SITE_SHARE_IMAGE_ALT,
+  SITE_URL,
+} from "@/lib/site-config";
 
 interface MarketingMetadataOptions {
   /** Canonical public path, including the leading slash. */
@@ -34,11 +39,20 @@ export function createMarketingMetadata({
       siteName: SITE_NAME,
       title: brandedTitle,
       description,
+      images: [
+        {
+          url: SITE_SHARE_IMAGE,
+          width: 1200,
+          height: 630,
+          alt: SITE_SHARE_IMAGE_ALT,
+        },
+      ],
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title: brandedTitle,
       description,
+      images: [SITE_SHARE_IMAGE],
     },
   };
 }

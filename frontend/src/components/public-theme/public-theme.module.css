@@ -180,7 +180,7 @@
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   font-size: 23px;
   letter-spacing: -0.06em;
   font-weight: 600;
@@ -188,24 +188,14 @@
   flex-shrink: 0;
 }
 .brandMark {
-  width: 23px;
-  height: 23px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
-  transform: rotate(-10deg);
+  width: 30px;
+  height: 30px;
+  display: block;
+  background: center / contain no-repeat url("/brand-mark.svg");
   flex-shrink: 0;
 }
-.brandMark i {
-  background: var(--public-accent, var(--accent));
-  border-radius: 50%;
-}
-.brandMark i:nth-child(2),
-.brandMark i:nth-child(6) {
-  opacity: 0.5;
-}
-.brandMark i:nth-child(3) {
-  opacity: 0.18;
+:global([data-theme="night"]) .brandMark {
+  background-image: url("/brand-mark-on-dark.svg");
 }
 .nav {
   display: flex;
@@ -799,8 +789,8 @@
     font-size: 22px;
   }
   .brandMark {
-    width: 21px;
-    height: 21px;
+    width: 27px;
+    height: 27px;
   }
   .headerActions {
     gap: 16px;

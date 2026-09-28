@@ -9,7 +9,7 @@ import { ThemeSwitch } from "./theme-switch";
 import styles from "./public-theme.module.css";
 
 /**
- * Shared public-site header: dot-grid brand, homepage anchors, the shared
+ * Shared public-site header: voice-call brand, homepage anchors, the shared
  * day/night switch, sign-in, and the conversation CTA. The same component is
  * used by the homepage, landing pages, and demo pages so public navigation
  * never drifts between routes.
@@ -43,17 +43,7 @@ export function PublicHeader() {
   return (
     <header className={styles.header}>
       <Link href="/" className={styles.brand} aria-label={`${SITE_NAME} home`}>
-        <span className={styles.brandMark} aria-hidden="true">
-          <i />
-          <i />
-          <i />
-          <i />
-          <i />
-          <i />
-          <i />
-          <i />
-          <i />
-        </span>
+        <span className={styles.brandMark} aria-hidden="true" />
         <span>{SITE_NAME}</span>
       </Link>
       <nav className={styles.nav} aria-label="Main navigation">
