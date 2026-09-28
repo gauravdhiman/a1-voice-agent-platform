@@ -14,6 +14,7 @@ Central index for all documentation in the AI Voice Agent Platform.
 
 - **[Homepage experience](02_features/homepage-experience.md)** — Home-only visual design, particle storytelling, day/night themes, and validation.
 - **[Public theme](02_features/public-theme.md)** — Shared day/night atmosphere, header, and footer across homepage, industry pages, demos, request-demo, and auth.
+- **[Platform tour](02_features/platform-tour.md)** — Guided /how-it-works chapters with replayable app-view previews.
 
 ### 00_getting_started/ - Getting Started
 

@@ -8,6 +8,7 @@ describe("sitemap", () => {
     expect(urls).toEqual([
       `${SITE_URL}`,
       `${SITE_URL}/request-demo`,
+      `${SITE_URL}/how-it-works`,
       `${SITE_URL}/dental-appointment-booking`,
       `${SITE_URL}/hvac-service-call-answering`,
       `${SITE_URL}/restaurant-order-taking`,

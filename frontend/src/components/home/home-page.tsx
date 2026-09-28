@@ -590,7 +590,7 @@ export function HomePage() {
               </Reveal>
             ))}
           </div>
-          <Link className={styles.textLink} href="/request-demo">
+          <Link className={styles.secondaryBtn} href="/request-demo">
             Tell us what you run. We&apos;ll connect it <ArrowUpRight size={16} />
           </Link>
           </div>
@@ -614,7 +614,7 @@ export function HomePage() {
                 We build your front desk with you. You approve the experience
                 before it answers your customers.
               </p>
-              <Link className={styles.textLink} href="/request-demo">
+              <Link className={styles.primary} href="/request-demo">
                 Request a demo <ArrowUpRight size={16} />
               </Link>
             </div>
