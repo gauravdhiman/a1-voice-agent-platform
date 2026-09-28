@@ -34,6 +34,16 @@ def test_homepage_theme_motion_and_demo_entry(page: Page, base_url: str):
     expect(page.get_by_role("heading", name="Request a demo")).to_be_visible()
 
 
+def test_homepage_tour_entry(page: Page, base_url: str):
+    """The guided-tour band reaches the platform tour."""
+    page.goto(base_url)
+    page.get_by_role("link", name="Take the guided tour").click()
+    expect(page).to_have_url(re.compile(r"/how-it-works$"))
+    expect(page.get_by_role("heading", level=1)).to_have_text(
+        "From hello to booked, on every call."
+    )
+
+
 def test_homepage_mobile_and_reduced_motion(page: Page, base_url: str):
     """Reduced-motion visitors can navigate the full page without horizontal overflow."""
     page.set_viewport_size({"width": 390, "height": 844})

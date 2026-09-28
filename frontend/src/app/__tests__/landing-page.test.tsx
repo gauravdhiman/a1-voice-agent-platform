@@ -63,6 +63,27 @@ describe("Homepage experience", () => {
     expect(screen.queryByText(/\$99|\$0/)).toBeNull();
   });
 
+  it("links the guided tour band to the platform tour", () => {
+    render(
+      <ThemeProvider>
+        <LandingPage />
+      </ThemeProvider>,
+    );
+    expect(
+      screen.getByRole("heading", { name: /see the whole front desk/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /take the guided tour/i }).getAttribute(
+        "href",
+      ),
+    ).toBe("/how-it-works");
+    expect(
+      screen
+        .getByRole("link", { name: /teach skills.*rules, not code/i })
+        .getAttribute("href"),
+    ).toBe("/how-it-works#tour-teach-skills");
+  });
+
   it("covers one use case per chapter and generalizes tooling in the journey", () => {
     render(
       <ThemeProvider>

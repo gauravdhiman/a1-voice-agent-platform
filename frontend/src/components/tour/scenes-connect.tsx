@@ -60,7 +60,9 @@ export function BookingFlowScene() {
         </span>
         <Beam id="tour-book-call" />
         <span className={`${styles.beamNode} ${styles.beamCore}`}>
-          <Phone size={14} />
+          <span className={styles.beamNodeIcon}>
+            <Phone size={15} strokeWidth={1.75} />
+          </span>
           <small>Front desk</small>
         </span>
         <Beam id="tour-book-cal" />

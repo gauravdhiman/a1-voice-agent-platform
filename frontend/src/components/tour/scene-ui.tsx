@@ -34,27 +34,87 @@ export function Waveform({ bars = 7 }: { bars?: number }) {
 
 /**
  * Traveling-pulse flow connector in the spirit of MagicUI's Animated Beam,
- * but fully declarative: a fixed-viewBox SVG path with SMIL pulses, so no
- * layout measuring is needed and it survives every form factor. Pauses
- * itself for reduced motion. Pass `reverse` when the flow runs right to
- * left (every flow here is inbound: callers ring the agent).
+ * but fully declarative geometry with a tiny rAF driver: two beads ride a
+ * fixed-viewBox SVG path back and forth together (there and back again),
+ * one trailing the other, so no layout measuring is needed and it survives
+ * every form factor. Parks statically for reduced motion and idles
+ * offscreen.
  */
 export function Beam({ id, label, reverse }: { id: string; label?: string; reverse?: boolean }) {
-  const ref = useRef<SVGSVGElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const pathRef = useRef<SVGPathElement>(null);
+  const dotsRef = useRef<Array<SVGCircleElement | null>>([]);
 
   useEffect(() => {
+    const svg = svgRef.current;
+    const path = pathRef.current;
+    const dots = dotsRef.current;
+    if (!svg || !path || dots.some((dot) => !dot)) return;
+    let length = 0;
+    try {
+      length = path.getTotalLength();
+    } catch {
+      return;
+    }
+    if (length <= 0) return;
+
+    const place = (fraction: number, index: number) => {
+      const point = path.getPointAtLength(length * fraction);
+      dots[index]?.setAttribute("cx", String(point.x));
+      dots[index]?.setAttribute("cy", String(point.y));
+    };
+
     if (
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
-      ref.current?.pauseAnimations();
+      place(0.42, 0);
+      place(0.58, 1);
+      return;
     }
-  }, []);
+
+    let frame = 0;
+    let visible = true;
+    const TRAVERSE_MS = 1900;
+    // Small phase trail so the second bead follows the first; both always
+    // travel the same direction and never cross.
+    const TRAIL = 0.16;
+    const tick = (now: number) => {
+      frame = 0;
+      if (!visible || document.hidden) return;
+      for (let i = 0; i < dots.length; i += 1) {
+        const phase = ((((now - i * TRAIL * TRAVERSE_MS) / TRAVERSE_MS) % 2) + 2) % 2;
+        place(1 - Math.abs(1 - phase), i);
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    const schedule = () => {
+      if (!frame && visible && !document.hidden)
+        frame = requestAnimationFrame(tick);
+    };
+
+    let observer: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== "undefined") {
+      observer = new IntersectionObserver(([entry]) => {
+        visible = entry.isIntersecting;
+        if (!visible) {
+          cancelAnimationFrame(frame);
+          frame = 0;
+        } else schedule();
+      });
+      observer.observe(svg);
+    }
+    schedule();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [id]);
 
   return (
     <span className={styles.beamWrap}>
       <svg
-        ref={ref}
+        ref={svgRef}
         viewBox="0 0 300 72"
         preserveAspectRatio="none"
         className={styles.beamSvg}
@@ -68,7 +128,7 @@ export function Beam({ id, label, reverse }: { id: string; label?: string; rever
           </linearGradient>
         </defs>
         <path
-          id={`${id}-beam-path`}
+          ref={pathRef}
           d={
             reverse
               ? "M294 56 C 220 56, 210 16, 150 16 S 80 56, 6 56"
@@ -83,11 +143,10 @@ export function Beam({ id, label, reverse }: { id: string; label?: string; rever
             key={n}
             r="4.5"
             style={{ fill: "var(--public-accent)" }}
-          >
-            <animateMotion dur="2s" begin={`${n * -1}s`} repeatCount="indefinite">
-              <mpath href={`#${id}-beam-path`} />
-            </animateMotion>
-          </circle>
+            ref={(node) => {
+              dotsRef.current[n] = node;
+            }}
+          />
         ))}
       </svg>
       {label && <small className={styles.beamLabel}>{label}</small>}
@@ -111,7 +170,7 @@ export function CallCard({
         {state === "live" ? (
           <AudioLines size={17} />
         ) : (
-          <PhoneCall size={17} />
+          <PhoneCall size={15} strokeWidth={1.75} style={{ transform: "scale(0.85)" }} />
         )}
       </span>
       <span className={styles.callText}>

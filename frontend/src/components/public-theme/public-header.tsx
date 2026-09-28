@@ -49,6 +49,7 @@ export function PublicHeader() {
       <nav className={styles.nav} aria-label="Main navigation">
         <Link href="/#features">Use cases</Link>
         <Link href="/#demos">Live demos</Link>
+        <Link href="/how-it-works">How it works</Link>
         <Link href="/#industries">For your business</Link>
         <Link href="/#integrations">Integrations</Link>
         <Link href="/#pricing">Pricing</Link>
@@ -98,6 +99,9 @@ export function PublicHeader() {
             </Link>
             <Link href="/#demos" onClick={closeMenu}>
               Live demos
+            </Link>
+            <Link href="/how-it-works" onClick={closeMenu}>
+              How it works
             </Link>
             <Link href="/#pricing" onClick={closeMenu}>
               Pricing

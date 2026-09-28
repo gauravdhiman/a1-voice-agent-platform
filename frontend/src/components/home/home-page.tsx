@@ -493,6 +493,57 @@ export function HomePage() {
           </p>
         </section>
 
+        {/* ── Guided tour ──────────────────────────────────── */}
+        <section
+          id="tour"
+          className={styles.tourBand}
+          aria-labelledby="tour-heading"
+        >
+          <Reveal>
+            <div className={styles.tourInner}>
+              <div>
+                <p className={styles.eyebrow}>HOW IT WORKS · FIVE-MINUTE TOUR</p>
+                <h2 id="tour-heading">
+                  See the whole front desk
+                  <br />
+                  <span>at work.</span>
+                </h2>
+                <p className={styles.tourCopy}>
+                  Tried a demo and wondering how it all fits together? Walk
+                  through the platform chapter by chapter — create, answer,
+                  connect, teach, review — with a live illustration at every
+                  step.
+                </p>
+                <div className={styles.ctaRow}>
+                  <Link className={styles.primary} href="/how-it-works">
+                    Take the guided tour <ArrowUpRight size={18} />
+                  </Link>
+                </div>
+              </div>
+              <ol className={styles.tourChapters}>
+                {[
+                  ["01", "Create", "Describe it in plain words", "tour-create"],
+                  ["02", "Answer everywhere", "Number + website, one agent", "tour-answer-everywhere"],
+                  ["03", "Connect tools", "Bookings land themselves", "tour-connect-tools"],
+                  ["04", "Teach skills", "Rules, not code", "tour-teach-skills"],
+                  ["05", "Review calls", "Every call, on record", "tour-review-calls"],
+                ].map(([number, name, detail, anchor]) => (
+                  <li key={number}>
+                    <Link href={`/how-it-works#${anchor}`}>
+                      <span className={styles.smallDetail}>{number}</span>
+                      <span>
+                        <strong>{name}</strong>
+                        <small>{detail}</small>
+                      </span>
+                      <ArrowUpRight size={17} />
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </Reveal>
+        </section>
+
         {/* ── Industries ───────────────────────────────────── */}
         <section
           id="industries"

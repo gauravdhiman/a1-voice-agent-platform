@@ -101,17 +101,23 @@ export function BothScene() {
     <div className={styles.scene} aria-hidden="true">
       <div className={styles.beamRow}>
         <span className={styles.beamNode}>
-          <Globe size={15} />
+          <span className={styles.beamNodeIcon}>
+            <Globe size={15} />
+          </span>
           <small>Website visitor calling…</small>
         </span>
         <Beam id="tour-both" />
         <span className={`${styles.beamNode} ${styles.beamCore}`}>
-          <AudioLines size={15} />
+          <span className={styles.beamNodeIcon}>
+            <AudioLines size={15} />
+          </span>
           <small>Front desk</small>
         </span>
         <Beam id="tour-both2" reverse />
         <span className={styles.beamNode}>
-          <Phone size={15} />
+          <span className={styles.beamNodeIcon}>
+            <Phone size={15} strokeWidth={1.75} />
+          </span>
           <small>(555) 014-2200 calling…</small>
         </span>
       </div>

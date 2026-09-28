@@ -27,9 +27,9 @@ stays owner-first (easy setup, test-and-approve before anything goes live).
   shows a static first step with manual dots.
 - Motion is transform/opacity plus one interval per visible section; there
   is no canvas on this page.
-- The page is in the sitemap (`monthly`, `0.9`). It is intentionally not
-  linked from the shared header or homepage yet; a homepage section can
-  point at it in a follow-up.
+- The page is in the sitemap (`monthly`, `0.9`). It is linked from the
+  shared header nav and from a guided-tour band on the homepage (with deep
+  links into each chapter).
 
 ## Validation
 

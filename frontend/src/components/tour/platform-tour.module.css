@@ -818,7 +818,7 @@
   flex-direction: column;
   gap: 8px;
   border-top: 1px solid var(--line, var(--site-line));
-  padding-top: 12px;
+  padding: 12px 14px 10px;
 }
 
 .transcript p {
@@ -1045,7 +1045,7 @@
   min-width: 64px;
 }
 
-.beamNode > :first-child {
+.beamNodeIcon {
   width: 38px;
   height: 38px;
   border-radius: 50%;
@@ -1064,7 +1064,7 @@
   line-height: 1.3;
 }
 
-.beamCore > :first-child {
+.beamCore .beamNodeIcon {
   background: var(--button, var(--site-button));
   color: var(--button-ink, var(--site-button-ink));
   border-color: transparent;
@@ -1444,6 +1444,10 @@
   animation: btnFill 0.45s ease-out 2s both;
 }
 
+.fillAfterTyping {
+  animation: btnFill 0.45s ease-out 3.5s both;
+}
+
 @keyframes btnFill {
   from {
     background: transparent;
@@ -1464,6 +1468,10 @@
 .delayCheck {
   opacity: 0;
   animation: savedIn 0.5s ease-out 2.4s both;
+}
+
+.skillSaved {
+  animation-delay: 4s;
 }
 
 /* Test-call scene: nothing call-related exists before the click lands
@@ -1517,6 +1525,14 @@
 
 .cursorDelayMid i {
   animation-delay: 2s;
+}
+
+.cursorAfterTyping {
+  animation-delay: 2.8s;
+}
+
+.cursorAfterTyping i {
+  animation-delay: 3.5s;
 }
 
 .agentTestCard,

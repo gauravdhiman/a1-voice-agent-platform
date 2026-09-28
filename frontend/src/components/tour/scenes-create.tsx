@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Mic } from "lucide-react";
+import { AudioLines, Check, Mic, Phone } from "lucide-react";
 import styles from "./platform-tour.module.css";
 import { Beam, CallCard, CheckBadge, Cursor, SceneNote, Waveform } from "./scene-ui";
 
@@ -91,8 +91,20 @@ export function CreateTestScene() {
       <div className={`${styles.sceneCenter} ${styles.delayWave}`}>
         <Waveform bars={9} />
       </div>
-      <div className={styles.delayBeam}>
-        <Beam id="tour-testcall" label="you hear exactly what callers hear" />
+      <div className={`${styles.beamRow} ${styles.delayBeam}`}>
+        <span className={styles.beamNode}>
+          <span className={styles.beamNodeIcon}>
+            <Phone size={15} strokeWidth={1.75} />
+          </span>
+          <small>Caller</small>
+        </span>
+        <Beam id="tour-testcall" />
+        <span className={`${styles.beamNode} ${styles.beamCore}`}>
+          <span className={styles.beamNodeIcon}>
+            <AudioLines size={15} />
+          </span>
+          <small>24/7 front desk</small>
+        </span>
       </div>
     </div>
   );

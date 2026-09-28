@@ -172,12 +172,18 @@ describe("Public chrome", () => {
     for (const name of [
       "Use cases",
       "Live demos",
+      "How it works",
       "For your business",
       "Integrations",
       "Pricing",
     ]) {
       expect(screen.getAllByRole("link", { name }).length).toBeGreaterThan(0);
     }
+    expect(
+      screen
+        .getAllByRole("link", { name: "How it works" })
+        .every((link) => link.getAttribute("href") === "/how-it-works"),
+    ).toBe(true);
     expect(
       screen
         .getAllByRole("link", { name: /let's talk/i })

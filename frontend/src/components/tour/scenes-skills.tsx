@@ -1,8 +1,8 @@
 "use client";
 
-import { Mic, Sparkles } from "lucide-react";
+import { Bot, Flag, Mic, Phone, Sparkles } from "lucide-react";
 import styles from "./platform-tour.module.css";
-import { Beam, CallCard, Cursor, SceneNote } from "./scene-ui";
+import { Beam, Cursor, SceneNote } from "./scene-ui";
 
 /** Chapter 04 · Teach skills. */
 
@@ -17,18 +17,18 @@ export function SkillWriteScene() {
       <div className={styles.mockRow}>
         <span className={styles.mockLabel}>The rule · plain words</span>
         <span className={styles.mockArea}>
-          <span className={styles.mockTyped}>
+          <span className={`${styles.mockTyped} ${styles.typeSlow}`}>
             After 6 PM, capture name, number, reason. Flag urgent leaks.
             <i className={styles.caret} />
           </span>
         </span>
       </div>
       <div className={styles.mockFoot}>
-        <span className={`${styles.mockBtn} ${styles.fillAt20}`}>
+        <span className={`${styles.mockBtn} ${styles.fillAfterTyping}`}>
           Save skill
-          <Cursor motionClass={`${styles.cursorOnBtn} ${styles.cursorDelayMid}`} />
+          <Cursor motionClass={`${styles.cursorOnBtn} ${styles.cursorAfterTyping}`} />
         </span>
-        <span className={`${styles.mockSavedPill} ${styles.delayCheck}`}>
+        <span className={`${styles.mockSavedPill} ${styles.skillSaved}`}>
           Skill saved ✓
         </span>
       </div>
@@ -70,17 +70,29 @@ export function SkillAttachScene() {
 export function SkillFollowedScene() {
   return (
     <div className={styles.scene} aria-hidden="true">
-      <CallCard
-        caller="Sam R. · 9:14 PM"
-        detail="Live call · after hours"
-        state="live"
-      />
+      <div className={styles.beamRow}>
+        <span className={styles.beamNode}>
+          <span className={styles.beamNodeIcon}>
+            <Phone size={15} strokeWidth={1.75} />
+          </span>
+          <small>Caller</small>
+        </span>
+        <Beam id="tour-skill" label="name, number, reason captured…" />
+        <span className={`${styles.beamNode} ${styles.beamCore}`}>
+          <span className={styles.beamNodeIcon}>
+            <Bot size={16} />
+          </span>
+          <small>24/7 AI agent</small>
+        </span>
+      </div>
       <div className={`${styles.skillApplied} ${styles.delay1}`}>
         <Sparkles size={13} />
         After-hours intake applied
       </div>
-      <Beam id="tour-skill" label="name, number, reason captured…" />
       <div className={`${styles.mockTool} ${styles.mockConnected} ${styles.delay2}`}>
+        <span className={styles.mockToolIcon}>
+          <Flag size={16} />
+        </span>
         <span className={styles.mockToolText}>
           <strong>Urgent job flagged</strong>
           <small>Sent to you in seconds</small>
