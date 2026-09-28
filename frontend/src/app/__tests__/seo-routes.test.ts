@@ -10,7 +10,11 @@ import { metadata as autoRepairMetadata } from "../auto-repair-service-booking/p
 import { metadata as veterinaryMetadata } from "../veterinary-appointment-booking/page";
 import { metadata as salonMetadata } from "../salon-appointment-booking/page";
 import { metadata as realEstateMetadata } from "../real-estate-lead-capture/page";
-import { SITE_URL } from "@/lib/site-config";
+import {
+  SITE_SHARE_IMAGE,
+  SITE_SHARE_IMAGE_ALT,
+  SITE_URL,
+} from "@/lib/site-config";
 
 describe("public SEO routes", () => {
   it("publishes the canonical marketing origin plus funnel and vertical pages", () => {
@@ -95,6 +99,18 @@ describe("public SEO routes", () => {
       expect(metadata.alternates?.canonical).toBe(`${SITE_URL}${path}`);
       expect(metadata.description).toBeTruthy();
       expect(metadata.keywords).toBeTruthy();
+      expect(metadata.openGraph?.images).toEqual([
+        {
+          url: SITE_SHARE_IMAGE,
+          width: 1200,
+          height: 630,
+          alt: SITE_SHARE_IMAGE_ALT,
+        },
+      ]);
+      expect(metadata.twitter).toMatchObject({
+        card: "summary_large_image",
+        images: [SITE_SHARE_IMAGE],
+      });
     }
   });
 });

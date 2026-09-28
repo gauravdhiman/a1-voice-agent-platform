@@ -10,6 +10,8 @@ import {
 import {
   SITE_DESCRIPTION,
   SITE_NAME,
+  SITE_SHARE_IMAGE,
+  SITE_SHARE_IMAGE_ALT,
   SITE_TAGLINE,
   SITE_URL,
 } from "@/lib/site-config";
@@ -35,6 +37,9 @@ const SITE_TITLE = `${SITE_NAME} - ${SITE_TAGLINE}`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
+  icons: {
+    icon: [{ url: "/brand-mark.svg", type: "image/svg+xml", sizes: "any" }],
+  },
   title: {
     default: SITE_TITLE,
     template: `%s - ${SITE_NAME}`,
@@ -50,11 +55,20 @@ export const metadata: Metadata = {
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
     locale: "en_US",
+    images: [
+      {
+        url: SITE_SHARE_IMAGE,
+        width: 1200,
+        height: 630,
+        alt: SITE_SHARE_IMAGE_ALT,
+      },
+    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
+    images: [SITE_SHARE_IMAGE],
   },
 };
 

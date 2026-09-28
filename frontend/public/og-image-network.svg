@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#08192c"/>
+  <circle cx="950" cy="313" r="218" fill="#0b2140"/>
+  <circle cx="950" cy="313" r="186" fill="#0e294a"/>
+  <circle cx="950" cy="313" r="160" fill="#102a4a"/>
+  <circle cx="950" cy="313" r="188" fill="none" stroke="#315c89" stroke-width="2"/>
+  <circle cx="950" cy="313" r="135" fill="none" stroke="#376790" stroke-width="2"/>
+  <circle cx="950" cy="313" r="126" fill="#112844" stroke="#4a789f" stroke-width="2"/>
+  <g transform="translate(824 185) scale(4)">
+    <g fill="none" stroke="#9fb1ff" stroke-width="2.8" stroke-linecap="round">
+      <line x1="26.4" y1="26.9" x2="18.8" y2="19.6"/><line x1="35.1" y1="24.8" x2="40" y2="15"/>
+      <line x1="39.5" y1="31.6" x2="46.8" y2="31.3"/><line x1="34.2" y1="39.5" x2="37.8" y2="45.4"/>
+      <line x1="25.1" y1="36.8" x2="17.2" y2="42.3"/>
+    </g>
+    <circle cx="15" cy="16" r="5.1" fill="#8399f3"/><circle cx="42" cy="11" r="4.2" fill="#a0afff"/>
+    <circle cx="52" cy="31" r="5.2" fill="#718bed"/><circle cx="38" cy="50" r="4.4" fill="#91a4fa"/>
+    <circle cx="14" cy="45" r="5.2" fill="#8095ef"/><circle cx="31.5" cy="32" r="7.8" fill="#4968e6"/>
+    <circle cx="31.5" cy="32" r="2.1" fill="#e6ebff"/>
+  </g>
+  <g transform="translate(78 64) scale(1.03125)">
+    <g fill="none" stroke="#9fb1ff" stroke-width="2.8" stroke-linecap="round">
+      <line x1="26.4" y1="26.9" x2="18.8" y2="19.6"/><line x1="35.1" y1="24.8" x2="40" y2="15"/>
+      <line x1="39.5" y1="31.6" x2="46.8" y2="31.3"/><line x1="34.2" y1="39.5" x2="37.8" y2="45.4"/>
+      <line x1="25.1" y1="36.8" x2="17.2" y2="42.3"/>
+    </g>
+    <circle cx="15" cy="16" r="5.1" fill="#8399f3"/><circle cx="42" cy="11" r="4.2" fill="#a0afff"/>
+    <circle cx="52" cy="31" r="5.2" fill="#718bed"/><circle cx="38" cy="50" r="4.4" fill="#91a4fa"/>
+    <circle cx="14" cy="45" r="5.2" fill="#8095ef"/><circle cx="31.5" cy="32" r="7.8" fill="#4968e6"/>
+    <circle cx="31.5" cy="32" r="2.1" fill="#e6ebff"/>
+  </g>
+  <text x="164" y="108" fill="#f7fbff" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700">24x7 AI</text>
+  <text x="82" y="224" fill="#91c2f5" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700">AI VOICE AGENTS FOR SMALL BUSINESS</text>
+  <text x="78" y="323" fill="#f7fbff" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="700">Your AI front desk.</text>
+  <text x="78" y="402" fill="#8de8dd" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="700">Always on.</text>
+  <text x="82" y="462" fill="#c6d5e8" font-family="Arial, Helvetica, sans-serif" font-size="24">Answer calls, book work, and capture leads.</text>
+  <text x="82" y="568" fill="#9cb4ce" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700">247ai.live</text>
+  <rect x="814" y="518" width="266" height="54" rx="27" fill="#122a46" stroke="#385f87" stroke-width="2"/>
+  <circle cx="843" cy="545" r="6" fill="#8de8dd"/>
+  <text x="862" y="551" fill="#d8e8f7" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">Always-on call coverage</text>
+</svg>
