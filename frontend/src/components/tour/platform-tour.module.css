@@ -1,7 +1,6 @@
 /* Guided platform tour (/how-it-works). Built on the shared public theme
- * tokens; this module owns the tabbed showcase and the illustrative
- * app-view mocks. Motion is transform/opacity plus one interval-driven
- * step engine — no canvas, no libraries. */
+ * tokens; this module owns the highlight showcase and illustrative app-view
+ * mocks. Motion uses CSS animations with no canvas or added libraries. */
 
 .skip {
   position: fixed;
@@ -40,7 +39,7 @@
   color: var(--public-accent, var(--site-accent));
 }
 
-/* Chapter nav + alternating sections ------------------------------------- */
+/* Chapter navigation + always-visible highlights -------------------------- */
 
 .tour {
   margin-top: 40px;
@@ -79,31 +78,60 @@
 }
 
 .chapter {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: clamp(28px, 4vw, 64px);
-  align-items: center;
-  padding: 64px 0;
+  margin: 32px 0;
+  padding: clamp(24px, 3.2vw, 42px);
+  scroll-margin-top: 150px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--line, var(--site-line)) 74%,
+      var(--public-accent, var(--site-accent)) 26%
+    );
+  border-top: 2px solid
+    color-mix(
+      in srgb,
+      var(--line, var(--site-line)) 35%,
+      var(--public-accent, var(--site-accent)) 65%
+    );
+  border-radius: 24px;
+  background: color-mix(
+    in srgb,
+    var(--panel, var(--site-panel)) 28%,
+    var(--surface, var(--site-surface))
+  );
 }
 
 .chapter + .chapter {
-  border-top: 1px solid var(--line, var(--site-line));
+  margin-top: 28px;
 }
 
-.chapter[data-flip="true"] .chapterCopy {
-  order: 2;
+.chapterHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: clamp(28px, 4vw, 64px);
+  align-items: end;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--line, var(--site-line));
 }
 
-.chapterCopy {
+.chapterHeading {
   min-width: 0;
 }
 
-.chapterCopy h3 {
+.chapterHeading h3 {
   font-size: clamp(26px, 2.6vw, 36px);
   font-weight: 400;
   letter-spacing: -0.04em;
   line-height: 1.15;
-  margin: 16px 0 0;
+  margin: 14px 0 0;
+}
+
+.chapterLede {
+  color: var(--public-muted, var(--site-muted));
+  font-size: 15px;
+  line-height: 1.8;
+  margin: 0;
+  max-width: 620px;
 }
 
 .tabNumber {
@@ -112,116 +140,98 @@
   color: var(--public-accent, var(--site-accent));
 }
 
-/* Stage (per-section run-through) ------------------------------------------ */
+/* Highlight rows ----------------------------------------------------------- */
 
 .stageKicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 6px 10px;
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: 0.12em;
   color: var(--public-accent, var(--site-accent));
   margin: 0;
-}
-
-.stageLede {
-  color: var(--public-muted, var(--site-muted));
-  font-size: 15px;
-  line-height: 1.8;
-  margin: 16px 0 0;
-  max-width: 420px;
-}
-
-.stepList {
-  list-style: none;
-  margin: 28px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.stepList li button {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-  width: 100%;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: 0;
-  border-radius: 12px;
-  padding: 12px 14px;
-  cursor: pointer;
-}
-
-.stepList li[data-active="true"] button {
-  background: var(--panel, var(--site-panel));
-  border: 1px solid var(--line, var(--site-line));
-  margin: -1px;
-}
-
-.stepDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1px solid var(--line, var(--site-line));
-  margin-top: 5px;
-  flex-shrink: 0;
-  transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
-}
-
-.stepList li[data-done="true"] .stepDot {
-  background: var(--public-muted, var(--site-muted));
-  border-color: transparent;
-}
-
-.stepList li[data-active="true"] .stepDot {
-  background: var(--public-accent, var(--site-accent));
-  border-color: transparent;
-  box-shadow: 0 0 12px var(--glow, var(--site-glow));
-}
-
-.stepList strong {
-  display: block;
-  font-size: 14.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.stepList em {
-  display: block;
-  font-style: normal;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--public-muted, var(--site-muted));
-  margin-top: 4px;
-  animation: stepIn 0.45s ease-out both;
-}
-
-.stageControls {
-  display: flex;
-  gap: 10px;
-  margin-top: 22px;
-}
-
-.stageToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  color: var(--public-muted, var(--site-muted));
-  background: none;
-  border: 1px solid var(--line, var(--site-line));
+  border: 1px solid
+    color-mix(in srgb, var(--public-accent, var(--site-accent)) 28%, transparent);
   border-radius: 999px;
-  padding: 9px 15px;
-  cursor: pointer;
+  background: color-mix(
+    in srgb,
+    var(--public-accent, var(--site-accent)) 8%,
+    transparent
+  );
 }
 
-.stageToggle:hover {
+.highlightList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.highlightItem {
+  display: grid;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: clamp(28px, 4vw, 64px);
+  align-items: center;
+  padding: 30px 0;
+  border-top: 1px solid var(--line, var(--site-line));
+}
+
+.highlightItem:first-child {
+  border-top: 0;
+}
+
+.highlightItem:last-child {
+  border-bottom: 0;
+}
+
+.highlightItem[data-reverse="true"] .highlightCopy {
+  order: 2;
+}
+
+.highlightItem[data-reverse="true"] .stageView {
+  order: 1;
+}
+
+.highlightCopy {
+  min-width: 0;
+  max-width: 440px;
+}
+
+.highlightNumber {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.13em;
   color: var(--public-accent, var(--site-accent));
-  border-color: var(--public-accent, var(--site-accent));
+  margin: 0;
+  border: 1px solid
+    color-mix(in srgb, var(--public-accent, var(--site-accent)) 24%, var(--line, var(--site-line)));
+  border-radius: 50%;
+  background: color-mix(
+    in srgb,
+    var(--public-accent, var(--site-accent)) 7%,
+    transparent
+  );
+}
+
+.highlightCopy h4 {
+  display: block;
+  font-size: clamp(20px, 2vw, 25px);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+  margin: 14px 0 0;
+}
+
+.highlightCopy > p:last-child {
+  color: var(--public-muted, var(--site-muted));
+  font-size: 14px;
+  line-height: 1.75;
+  margin: 10px 0 0;
 }
 
 /* App-view frame ------------------------------------------------------ */
@@ -271,6 +281,11 @@
 .viewBody {
   padding: 22px;
   animation: stepIn 0.45s ease-out both;
+}
+
+.viewBody[data-playing="false"],
+.viewBody[data-playing="false"] :global(*) {
+  animation-play-state: paused !important;
 }
 
 /* Mock primitives ------------------------------------------------------ */
@@ -669,18 +684,18 @@
 /* Number scene: the call appears only after Save is clicked. */
 .delayCall {
   opacity: 0;
-  animation: savedIn 0.5s ease-out 3.4s both;
+  animation: savedIn 0.5s ease-out 5.35s both;
 }
 
 .ringLate {
-  animation: swapOut 0.45s ease-in 3.9s both;
+  animation: swapOut 0.45s ease-in 5.85s both;
 }
 
 .liveLate {
   position: absolute;
   inset: 0;
   opacity: 0;
-  animation: swapIn 0.45s ease-out 3.9s both;
+  animation: swapIn 0.45s ease-out 5.85s both;
 }
 
 /* Log scene: the Phone filter activates on click. */
@@ -771,7 +786,8 @@
   overflow: hidden;
   white-space: nowrap;
   vertical-align: bottom;
-  animation: typeIn 2.3s steps(18) both;
+  width: 0ch;
+  animation: typeDigitsIn 3.5s steps(14) both;
 }
 
 .mockBrowser {
@@ -782,8 +798,6 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  opacity: 0;
-  animation: savedIn 0.5s ease-out both;
 }
 
 .mockBrowser small {
@@ -795,8 +809,8 @@
 .mockGlowIn {
   align-self: flex-start;
   animation:
-    savedIn 0.5s ease-out both,
-    glowPulse 1.8s 1.2s ease-in-out 3;
+    savedIn 0.5s ease-out 4.1s both,
+    glowPulse 1.8s ease-in-out 4.7s 3;
 }
 
 .swapWrap {
@@ -1336,12 +1350,12 @@
   }
 }
 
-@keyframes typeIn {
+@keyframes typeDigitsIn {
   from {
-    max-width: 0;
+    width: 0ch;
   }
   to {
-    max-width: 100%;
+    width: calc(14ch + 0.3em);
   }
 }
 
@@ -1472,6 +1486,14 @@
   animation-delay: 3.5s;
 }
 
+.delayPhoneSaved {
+  animation-delay: 4.8s;
+}
+
+.fillPhoneNumber {
+  animation: btnFill 0.45s ease-out 4.3s both;
+}
+
 .delayCheck {
   opacity: 0;
   animation: savedIn 0.5s ease-out 2.4s both;
@@ -1519,11 +1541,11 @@
 }
 
 .cursorDelayLong {
-  animation-delay: 2s;
+  animation-delay: 3.6s;
 }
 
 .cursorDelayLong i {
-  animation-delay: 3s;
+  animation-delay: 4.3s;
 }
 
 .cursorDelayMid {
@@ -1783,17 +1805,52 @@
 }
 
 @media (max-width: 1020px) {
-  .chapter {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 48px 0;
+  .chapterHeader {
+    gap: 24px;
   }
 
-  .chapter[data-flip="true"] .chapterCopy {
-    order: 0;
+  .highlightItem {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 26px;
   }
 
   .setupList {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .chapterHeader {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    padding-bottom: 20px;
+  }
+
+  .highlightItem,
+  .highlightItem[data-reverse="true"] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    padding: 26px 0;
+  }
+
+  .highlightItem[data-reverse="true"] .highlightCopy,
+  .highlightItem[data-reverse="true"] .stageView {
+    order: initial;
+  }
+
+  .highlightCopy {
+    max-width: none;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1100px) {
+  .flowTrio .beamWrap {
+    min-width: 18px;
+  }
+
+  .flowCaller small,
+  .flowCal small {
+    max-width: 68px;
   }
 }
 
@@ -1818,6 +1875,32 @@
     white-space: nowrap;
   }
 
+  .chapter {
+    margin: 22px 0;
+    padding: 24px 16px 28px;
+    border-radius: 18px;
+    scroll-margin-top: 130px;
+  }
+
+  .chapterHeader {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    padding-bottom: 20px;
+  }
+
+  .chapterLede {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .highlightCopy h4 {
+    margin-top: 10px;
+  }
+
+  .highlightCopy > p:last-child {
+    font-size: 13.5px;
+  }
+
   .viewBody {
     padding: 16px;
   }
@@ -1832,6 +1915,42 @@
 
   .scrollHint > span {
     display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .flowTrio,
+  .beamRow {
+    gap: 0;
+  }
+
+  .flowTrio .beamWrap,
+  .beamRow .beamWrap {
+    min-width: 12px;
+  }
+
+  .flowCaller small,
+  .flowCal small {
+    max-width: 56px;
+  }
+
+  .flowCal > :first-child {
+    width: 28px;
+    height: 28px;
+  }
+
+  .beamNode {
+    min-width: 52px;
+  }
+
+  .beamNodeIcon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .beamNode small {
+    max-width: 56px;
+    font-size: 8.5px;
   }
 }
 

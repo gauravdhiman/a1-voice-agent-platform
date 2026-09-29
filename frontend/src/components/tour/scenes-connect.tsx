@@ -43,7 +43,7 @@ export function ToolsPickScene() {
           </span>
         </div>
       ))}
-      <SceneNote>Connected during setup — change anytime</SceneNote>
+      <SceneNote>Connected during setup; change anytime</SceneNote>
     </div>
   );
 }
@@ -71,7 +71,7 @@ export function BookingFlowScene() {
           <small>Thu 2:00 PM booked</small>
         </span>
       </div>
-      <SceneNote>Checks real availability — no double-booking</SceneNote>
+      <SceneNote>Checks availability to prevent double-booking</SceneNote>
     </div>
   );
 }

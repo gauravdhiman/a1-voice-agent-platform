@@ -170,8 +170,20 @@ export function IndustryPage({ content }: IndustryPageProps) {
                 ) : null}
               </div>
               <p
+                className={pt.lede}
+                style={{
+                  maxWidth: 620,
+                  margin: "18px auto 0",
+                  fontSize: 13,
+                }}
+              >
+                No press-1 menus or hold music. Your 24x7 AI assistant answers
+                right away, follows your instructions, and records callback
+                requests when a caller needs your team.
+              </p>
+              <p
                 className={pt.smallDetail}
-                style={{ marginTop: 22, fontSize: 10 }}
+                style={{ marginTop: 14, fontSize: 10 }}
               >
                 {content.demoBlurb ??
                   "No public demo yet - tell us what your calls need and we will shape the first workflow with you."}
