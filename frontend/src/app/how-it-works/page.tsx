@@ -7,9 +7,9 @@ export const metadata: Metadata = createMarketingMetadata({
   path: "/how-it-works",
   title: "How it works: your AI front desk in five steps",
   description:
-    "Create your voice agent in plain words, answer on your number and website, connect the tools you already use, and review every call. No coding required.",
+    "See how a 24x7 AI phone assistant answers your number and website, handles questions, bookings and orders, and records callback requests. No phone menus or hold music.",
   keywords: [
-    "how AI voice agent works",
+    "how AI phone assistant works",
     "AI front desk setup",
     "AI call answering for small business",
     "voice agent integrations",

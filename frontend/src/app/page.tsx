@@ -7,7 +7,7 @@ export const metadata: Metadata = createMarketingMetadata({
   path: "",
   title: "Answer more calls. Capture more business.",
   description:
-    "Our 24x7 AI phone assistant answers customer calls, handles common questions, books appointments, takes orders, and records callback requests, even when you’re busy or closed. More answered calls and bookings can mean more business.",
+    "A 24x7 AI phone assistant answers calls on your business number and website, handles questions, bookings and orders, and records callback requests. No phone menus or hold music.",
   keywords: [
     "AI voice agents for small business",
     "AI receptionist",

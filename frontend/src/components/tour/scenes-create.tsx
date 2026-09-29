@@ -85,7 +85,7 @@ export function CreateTestScene() {
           <strong>Caller:</strong> Do you take new patients?
         </p>
         <p className={styles.tLate3}>
-          <strong>Front desk:</strong> We do — want me to hold a slot for you?
+          <strong>Front desk:</strong> We do. Want me to hold a slot for you?
         </p>
       </div>
       <div className={`${styles.sceneCenter} ${styles.delayWave}`}>

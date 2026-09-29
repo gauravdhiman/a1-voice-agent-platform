@@ -10,20 +10,26 @@ import { Beam, CallCard, Cursor, SceneNote } from "./scene-ui";
  * answered. No website elements anywhere in this scene. */
 export function NumberScene() {
   return (
-    <div className={styles.scene} aria-hidden="true">
+    <div
+      className={styles.scene}
+      aria-hidden="true"
+      data-tour-scene="phone-number"
+    >
       <div className={styles.mockRow}>
         <span className={styles.mockLabel}>Business phone number</span>
         <span className={`${styles.mockField} ${styles.mockMono}`}>
-          <span className={styles.typeDigits}>(555) 014-2200</span>
+          <span className={styles.typeDigits} data-phone-number>
+            (555) 014-2200
+          </span>
           <i className={styles.caret} />
         </span>
       </div>
       <div className={styles.mockFoot}>
-        <span className={`${styles.mockBtn} ${styles.fillAt32}`}>
+        <span className={`${styles.mockBtn} ${styles.fillPhoneNumber}`}>
           Save number
           <Cursor motionClass={`${styles.cursorOnBtn} ${styles.cursorDelayLong}`} />
         </span>
-        <span className={`${styles.mockSavedPill} ${styles.delaySave}`}>
+        <span className={`${styles.mockSavedPill} ${styles.delayPhoneSaved}`}>
           Number saved ✓
         </span>
       </div>
@@ -52,7 +58,11 @@ export function NumberScene() {
  * voice button lights up. */
 export function EmbedScene() {
   return (
-    <div className={styles.scene} aria-hidden="true">
+    <div
+      className={styles.scene}
+      aria-hidden="true"
+      data-tour-scene="website-embed"
+    >
       <div className={styles.mockRow}>
         <span className={styles.mockLabel}>Website voice button</span>
         <span className={`${styles.mockField} ${styles.mockMono} ${styles.mockCode}`}>
@@ -77,15 +87,23 @@ export function EmbedScene() {
         <span className={`${styles.mockField} ${styles.mockMono} ${styles.mockCode} ${styles.pasteCode}`}>
           &lt;script src=“…/voice.js” data-agent=“front-desk”&gt;
         </span>
-        <span className={`${styles.mockSavedPill} ${styles.delayLive}`}>Saved ✓</span>
+        <span
+          className={`${styles.mockSavedPill} ${styles.delayLive}`}
+          data-embed-saved
+        >
+          Saved ✓
+        </span>
       </div>
-      <div className={`${styles.mockBrowser} ${styles.delayLive}`}>
+      <div className={styles.mockBrowser}>
         <span className={styles.mockBrowserDots}>
           <i />
           <i />
           <i />
         </span>
-        <span className={`${styles.mockSiteBtn} ${styles.mockGlowIn}`}>
+        <span
+          className={`${styles.mockSiteBtn} ${styles.mockGlowIn}`}
+          data-talk-to-us
+        >
           <Mic size={13} /> Talk to us
         </span>
         <small>maple-street-dental.com</small>
@@ -121,7 +139,7 @@ export function BothScene() {
           <small>(555) 014-2200 calling…</small>
         </span>
       </div>
-      <SceneNote>Same agent answers both lines — at the same time</SceneNote>
+      <SceneNote>Same agent answers both lines at once</SceneNote>
     </div>
   );
 }

@@ -20,7 +20,7 @@ const setupSteps = [
   {
     n: "02",
     title: "We build it with you.",
-    body: "Test calls until it sounds like your front desk. Nothing reaches customers until you say so.",
+    body: "Test calls until your AI assistant follows your guidance. Nothing reaches customers until you approve it.",
   },
   {
     n: "03",
@@ -59,9 +59,11 @@ export function PlatformTourPage() {
                 From hello to booked, <span>on every call.</span>
               </h1>
               <p className={pt.lede} style={{ maxWidth: 640, margin: "0 auto" }}>
-                Create your agent in plain words, answer on your number and
-                website, connect the tools you already use, and review every
-                call — live in about 48 hours.
+                Your 24x7 AI phone assistant answers your business number and
+                website without press-1 menus or hold music. It follows your
+                instructions to answer questions, book appointments, take
+                orders and capture callback requests. You test and approve it
+                before it goes live.
               </p>
               <div className={pt.industryHeroActions}>
                 <Link className={pt.primary} href="/request-demo">

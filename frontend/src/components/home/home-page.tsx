@@ -93,10 +93,8 @@ const industries = [
   },
 ];
 
-/** Homepage: modern startup presentation of the unchanged business story —
- * every call answered, questions resolved, bookings made, leads captured.
- * Messaging matches the previous homepage; only presentation is new. The
- * previous experience remains available at /home-classic. */
+/** Homepage: a business-first introduction to 24x7 AI call answering,
+ * bookings, lead capture, and callback follow-up. */
 export function HomePage() {
   const { theme, toggleTheme } = usePublicTheme();
 
@@ -133,10 +131,11 @@ export function HomePage() {
                 <span>Never miss a customer.</span>
               </h1>
               <p className={styles.heroDescription}>
-                A call is a customer asking for a next step. Your 24x7 AI front
-                desk answers in seconds, handles routine questions, books the
-                work, and captures the rest, even nights, weekends, and
-                mid-rush.
+                Your 24x7 AI phone assistant answers right away on your business
+                number and through a voice button on your website. It follows
+                your instructions to answer questions, book appointments, take
+                orders and capture callback requests. No press-1 menus or
+                waiting on hold, even after you close.
               </p>
               <div className={styles.ctaRow}>
                 <Link className={styles.primary} href="/request-demo">
@@ -186,9 +185,10 @@ export function HomePage() {
               <span>Resolved on the call.</span>
             </h2>
             <p className={styles.sectionSub}>
-              Hours, prices, services, order updates, directions, answered
-              instantly from your business info. Routine callers get what they
-              need without pulling you or your staff off the job.
+              Your AI assistant answers common questions about hours, prices,
+              services, orders and directions using your business information.
+              Customers get help right away without pulling you or your staff
+              off the job.
             </p>
           </Reveal>
           <div className={styles.featureGrid}>
@@ -249,10 +249,11 @@ export function HomePage() {
                   Close up shop. <span>Keep winning work.</span>
                 </h3>
                 <p>
-                  Nights, weekends, holidays. Every caller is captured with name,
-                  number, and reason, and you&apos;re notified in seconds. Urgent
-                  calls get flagged; routine ones wait neatly for the morning with
-                  full context.
+                  Evenings, weekends and holidays, your AI assistant answers
+                  calls, captures the caller&apos;s name, number and reason, and
+                  flags urgent requests. When a caller needs your team, it
+                  records a callback request with the context needed to follow
+                  up. No voicemail to sort through.
                 </p>
                 <ul className={styles.outcomeList}>
                   <li>
@@ -357,7 +358,7 @@ export function HomePage() {
             <div className={styles.sectionTop}>
               <p className={styles.eyebrow}>LESS IMAGINING. MORE EXPERIENCING.</p>
               <span className={styles.smallDetail}>
-                REAL AGENTS. TRY A CONVERSATION.
+                REAL AI ASSISTANTS. TRY A CONVERSATION.
               </span>
             </div>
             <div className={styles.sectionHeading}>
@@ -367,9 +368,9 @@ export function HomePage() {
                 <span>Have a word.</span>
               </h2>
               <p>
-                Talk to a demo agent right now. Book a visit. Request a repair.
-                Place an order. Hear exactly how your after-hours caller would be
-                treated.
+                Talk with an AI assistant in a live demo. Book a visit, request
+                a repair, or place an order. Hear how it handles an after-hours
+                call.
               </p>
             </div>
           </Reveal>
@@ -490,8 +491,8 @@ export function HomePage() {
             </Reveal>
           </div>
           <p className={styles.demoNote}>
-            Interactive demos use example businesses. Your agent is configured
-            with your own services and instructions.
+            Interactive demos use example businesses. Your AI assistant is set
+            up with your services and instructions.
           </p>
         </section>
 
@@ -506,15 +507,14 @@ export function HomePage() {
               <div>
                 <p className={styles.eyebrow}>HOW IT WORKS · FIVE-MINUTE TOUR</p>
                 <h2 id="tour-heading">
-                  See the whole front desk
+                  See your AI front desk
                   <br />
                   <span>at work.</span>
                 </h2>
                 <p className={styles.tourCopy}>
-                  Tried a demo and wondering how it all fits together? Walk
-                  through the platform chapter by chapter — create, answer,
-                  connect, teach, review — with a live illustration at every
-                  step.
+                  See how your AI assistant answers your business number and
+                  website, connects to your tools, follows your instructions,
+                  and keeps every call easy to review.
                 </p>
                 <div className={styles.ctaRow}>
                   <Link className={styles.primary} href="/how-it-works">
@@ -525,9 +525,14 @@ export function HomePage() {
               <ol className={styles.tourChapters}>
                 {[
                   ["01", "Create", "Describe it in plain words", "tour-create"],
-                  ["02", "Answer everywhere", "Number + website, one agent", "tour-answer-everywhere"],
+                  [
+                    "02",
+                    "Answer everywhere",
+                    "Number + website, one assistant",
+                    "tour-answer-everywhere",
+                  ],
                   ["03", "Connect tools", "Bookings land themselves", "tour-connect-tools"],
-                  ["04", "Teach skills", "Rules, not code", "tour-teach-skills"],
+                  ["04", "Set instructions", "Rules, not code", "tour-teach-skills"],
                   ["05", "Review calls", "Every call, on record", "tour-review-calls"],
                 ].map(([number, name, detail, anchor]) => (
                   <li key={number}>

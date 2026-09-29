@@ -1,7 +1,4 @@
-"use client";
-
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pause, Play, RotateCcw } from "lucide-react";
 import styles from "./platform-tour.module.css";
 import {
   BookingFlowScene,
@@ -25,9 +22,11 @@ import {
   SkillWriteScene,
 } from "./scenes-skills";
 
-export interface TourStep {
+export interface TourHighlight {
   title: string;
   body: string;
+  animationDurationMs: number;
+  view: ReactNode;
 }
 
 export interface TourChapter {
@@ -36,11 +35,7 @@ export interface TourChapter {
   number: string;
   title: string;
   lede: string;
-  steps: TourStep[];
-  /** Dwell per step (ms): each scene's animation timeline plus a beat of
-   * hold, so a transition never cuts a scene off mid-story. */
-  durations: [number, number, number];
-  view: (step: number) => ReactNode;
+  highlights: TourHighlight[];
 }
 
 /**
@@ -54,48 +49,54 @@ export const chapters: TourChapter[] = [
     tab: "Create",
     number: "01",
     title: "Describe your business in plain words.",
-    lede: "No setup wizards, no code. Tell the agent your hours, services, and prices the way you'd tell a new hire — then hear it back on a test call.",
-    steps: [
+    lede: "Give your AI phone assistant your hours, services, prices and call-handling rules in plain words. Test how it answers before it goes live.",
+    highlights: [
       {
         title: "Write it like you'd say it",
-        body: "Business name, hours, services, prices. Plain sentences are the whole configuration.",
+        body: "Start with the details customers ask about most: your hours, services, prices, and what to do after hours. Write a short note in your own words; there are no menus to configure or scripts to learn.",
+        animationDurationMs: 5200,
+        view: <CreateWriteScene />,
       },
       {
         title: "Hear it back on a test call",
-        body: "Place a test call, adjust the wording until it sounds like your front desk.",
+        body: "Call a private test line and hear your AI assistant answer using your business details. Adjust its wording and try common questions until you are comfortable with the conversation.",
+        animationDurationMs: 6800,
+        view: <CreateTestScene />,
       },
       {
-        title: "Approve it — live in about 48 hours",
-        body: "You test and approve before it answers a single real customer.",
+        title: "Approve it, then go live in about 48 hours",
+        body: "Review the setup, then approve it when you are ready. It stays off customer calls until you approve, and we help get it live in about 48 hours.",
+        animationDurationMs: 5400,
+        view: <CreateApproveScene />,
       },
     ],
-    durations: [5200, 6800, 5400],
-    view: (step) =>
-      [<CreateWriteScene key={0} />, <CreateTestScene key={1} />, <CreateApproveScene key={2} />][step],
   },
   {
     id: "answer-everywhere",
     tab: "Answer everywhere",
     number: "02",
-    title: "One agent, every place customers call.",
-    lede: "Put the same front desk on the phone number customers already dial and on your website as a voice button. Both lines ring the same agent.",
-    steps: [
+    title: "One AI assistant, your number and website.",
+    lede: "It answers your business number and lets website visitors talk through a voice button. No press-1 menus or waiting on hold. The same assistant handles both.",
+    highlights: [
       {
         title: "Keep your business number",
-        body: "We answer on the number your customers already call. Nothing new to advertise.",
+        body: "Customers keep calling the number they already know. Your AI assistant answers directly, without press-1 menus or hold music, and follows the business details and instructions you set.",
+        animationDurationMs: 6800,
+        view: <NumberScene />,
       },
       {
         title: "Add the website voice button",
-        body: "Visitors talk to your front desk without leaving your site.",
+        body: "Visitors tap Talk to us and speak directly with the same AI assistant. It can answer a question or take an appointment request without making them search for your number or wait on hold.",
+        animationDurationMs: 10500,
+        view: <EmbedScene />,
       },
       {
-        title: "Every line, same agent",
-        body: "Website and phone calls land with the same instructions, at the same time.",
+        title: "Same AI assistant, every line",
+        body: "Your business number and website use the same AI assistant, instructions and availability. It answers questions and books work consistently, then captures a callback request when a customer needs your team.",
+        animationDurationMs: 6200,
+        view: <BothScene />,
       },
     ],
-    durations: [6200, 7600, 6200],
-    view: (step) =>
-      [<NumberScene key={0} />, <EmbedScene key={1} />, <BothScene key={2} />][step],
   },
   {
     id: "connect-tools",
@@ -103,229 +104,234 @@ export const chapters: TourChapter[] = [
     number: "03",
     title: "Works with the tools you already use.",
     lede: "Bookings land in your calendar, confirmations go out by email, and every outcome is logged where your team already works.",
-    steps: [
+    highlights: [
       {
         title: "Pick your tools during setup",
-        body: "Calendar, inbox, records or CRM — for example Google Calendar, Outlook, Sheets, or HubSpot.",
+        body: "Choose the calendar, inbox, or records tools your team already uses, such as Google Calendar, Outlook, Sheets, or HubSpot. We help connect the right accounts during setup.",
+        animationDurationMs: 5400,
+        view: <ToolsPickScene />,
       },
       {
         title: "Watch a booking land",
-        body: "The agent checks real availability and writes the appointment in — no double-booking.",
+        body: "When a caller asks for an appointment, your AI assistant checks your calendar before offering a time. After the customer chooses, it adds the booking to your calendar to prevent overlaps.",
+        animationDurationMs: 6000,
+        view: <BookingFlowScene />,
       },
       {
         title: "Confirmations handle the rest",
-        body: "Automatic confirmations and reminders cut no-shows without lifting a finger.",
+        body: "After a booking, your AI assistant can send a confirmation and reminder through your connected tools. Customers get the details they need, and your team spends less time repeating them.",
+        animationDurationMs: 6000,
+        view: <ConfirmScene />,
       },
     ],
-    durations: [5400, 6000, 6000],
-    view: (step) =>
-      [<ToolsPickScene key={0} />, <BookingFlowScene key={1} />, <ConfirmScene key={2} />][step],
   },
   {
     id: "teach-skills",
-    tab: "Teach skills",
+    tab: "Set instructions",
     number: "04",
     title: "Teach it your way of working.",
-    lede: "Skills are plain-language rules — how to handle after-hours calls, what to quote, when to flag urgent. Attach them to any agent in one click.",
-    steps: [
+    lede: "Set plain-language instructions for after-hours calls, prices, bookings and urgent requests. Your AI assistant follows the same guidance on every call.",
+    highlights: [
       {
         title: "Write rules, not code",
-        body: "“After 6 PM, capture name, number, reason.” If you can say it, the agent can follow it.",
+        body: "Add a repeatable instruction in everyday language, such as what to collect after hours or when to flag an urgent request. No code or technical setup is needed.",
+        animationDurationMs: 5400,
+        view: <SkillWriteScene />,
       },
       {
-        title: "Attach skills to agents",
-        body: "One click assigns a skill. Update the wording once, every attached agent follows.",
+        title: "Choose which assistant follows each rule",
+        body: "Give the right AI assistant your call-handling instructions. When your process changes, update the rule once instead of repeating it for each assistant.",
+        animationDurationMs: 5400,
+        view: <SkillAttachScene />,
       },
       {
         title: "Followed on every call",
-        body: "The agent applies its skills consistently — nights, weekends, mid-rush.",
+        body: "During each call, your AI assistant follows your instructions, asks the right questions, captures the details you need, and flags urgent work. Your process stays consistent on nights, weekends and busy days.",
+        animationDurationMs: 6000,
+        view: <SkillFollowedScene />,
       },
     ],
-    durations: [5400, 5400, 6000],
-    view: (step) =>
-      [<SkillWriteScene key={0} />, <SkillAttachScene key={1} />, <SkillFollowedScene key={2} />][step],
   },
   {
     id: "review-calls",
     tab: "Review calls",
     number: "05",
-    title: "Hear every call — without hearing all of them.",
-    lede: "Every call lands in one log with its source, outcome, and recording. Filter, spot-check, and stay in control.",
-    steps: [
+    title: "Review every call without listening to each one.",
+    lede: "Calls and callback requests land in one log with their source and outcome. Review what your AI assistant handled, then spot-check recordings when needed.",
+    highlights: [
       {
         title: "One log for every call",
-        body: "When it came in, through what source, how long it ran, what happened.",
+        body: "Find calls and callback requests in one place with their time, source and outcome. Filter by phone or website and see what your AI assistant handled before your team follows up.",
+        animationDurationMs: 5400,
+        view: <LogScene />,
       },
       {
         title: "Play the moments that matter",
-        body: "Recordings with instant playback for the calls you want to verify.",
+        body: "Open a call to play its recording and review the transcript. Spot-check a booking, answer, or callback request without listening through every call.",
+        animationDurationMs: 7200,
+        view: <PlaybackScene />,
       },
       {
         title: "Kept for 30 days",
-        body: "Recordings and full call details stay available for a month.",
+        body: "Review calls and share a weekly summary with your team. Recordings and call details stay available for 30 days, so you can revisit a conversation while it is still fresh.",
+        animationDurationMs: 5600,
+        view: <KeepScene />,
       },
     ],
-    durations: [5400, 7200, 5600],
-    view: (step) =>
-      [<LogScene key={0} />, <PlaybackScene key={1} />, <KeepScene key={2} />][step],
   },
 ];
 
-/**
- * One chapter block: copy on one side, live app-view preview on the other.
- * Steps auto-advance only while the block is meaningfully on screen, and can
- * be replayed, paused, hover-held, or stepped manually. Reduced-motion
- * visitors get a static first step with clickable dots instead.
- */
-function TourSection({
-  chapter,
-  flip,
-  reduced,
-}: {
-  chapter: TourChapter;
-  flip: boolean;
-  reduced: boolean;
-}) {
-  const [step, setStep] = useState(0);
-  const [manualHold, setManualHold] = useState(false);
-  const [hoverHold, setHoverHold] = useState(false);
-  const [inView, setInView] = useState(false);
-  const ref = useRef<HTMLElement>(null);
+const LOOP_PAUSE_MS = 3000;
 
-  const held = manualHold || hoverHold || reduced;
+interface LoopingPreviewProps {
+  animationDurationMs: number;
+  children: ReactNode;
+}
+
+/** Replays a preview while it is visible, with a short pause between runs. */
+function LoopingPreview({ animationDurationMs, children }: LoopingPreviewProps) {
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const hasBeenVisibleRef = useRef(false);
+  const [isInView, setIsInView] = useState(false);
+  const [isGap, setIsGap] = useState(false);
+  const [cycle, setCycle] = useState(0);
+  const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
-    const node = ref.current;
-    if (!node || typeof IntersectionObserver === "undefined") {
-      setInView(true);
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setReducedMotion(mediaQuery.matches);
+    updatePreference();
+    mediaQuery.addEventListener("change", updatePreference);
+    return () => mediaQuery.removeEventListener("change", updatePreference);
+  }, []);
+
+  useEffect(() => {
+    const preview = previewRef.current;
+    if (!preview) return;
+
+    if (!("IntersectionObserver" in window)) {
+      hasBeenVisibleRef.current = true;
+      setIsInView(true);
       return;
     }
+
     const observer = new IntersectionObserver(
-      ([entry]) => setInView(entry.isIntersecting),
-      { threshold: 0.25 },
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          hasBeenVisibleRef.current = true;
+          setIsInView(true);
+          return;
+        }
+
+        if (hasBeenVisibleRef.current) {
+          hasBeenVisibleRef.current = false;
+          setCycle((current) => current + 1);
+          setIsGap(false);
+        }
+        setIsInView(false);
+      },
+      { threshold: 0.1 },
     );
-    observer.observe(node);
+
+    observer.observe(preview);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    if (held || !inView) return;
-    const timer = window.setTimeout(() => {
-      setStep((current) => (current + 1) % chapter.steps.length);
-    }, chapter.durations[step] ?? 4200);
-    return () => window.clearTimeout(timer);
-  }, [held, inView, chapter, step]);
+    if (!isInView || reducedMotion) return;
 
-  const replay = () => {
-    setStep(0);
-    setManualHold(false);
-  };
+    const finishAnimation = window.setTimeout(
+      () => setIsGap(true),
+      animationDurationMs,
+    );
+    return () => window.clearTimeout(finishAnimation);
+  }, [animationDurationMs, cycle, isInView, reducedMotion]);
+
+  useEffect(() => {
+    if (!isInView || reducedMotion || !isGap) return;
+
+    const restartAnimation = window.setTimeout(() => {
+      setCycle((current) => current + 1);
+      setIsGap(false);
+    }, LOOP_PAUSE_MS);
+    return () => window.clearTimeout(restartAnimation);
+  }, [isGap, isInView, reducedMotion]);
+
+  const isPlaying = isInView && !reducedMotion && !isGap;
 
   return (
+    <div
+      ref={previewRef}
+      className={styles.viewBody}
+      data-looping-preview="true"
+      data-loop-cycle={cycle}
+      data-playing={isPlaying}
+      data-animation-duration-ms={animationDurationMs}
+    >
+      <div key={cycle}>{children}</div>
+    </div>
+  );
+}
+
+/** A chapter with all of its highlights and illustrative previews in view. */
+function TourSection({ chapter }: { chapter: TourChapter }) {
+  return (
     <section
-      ref={ref}
       id={`tour-${chapter.id}`}
       aria-labelledby={`tour-${chapter.id}-heading`}
       className={styles.chapter}
-      data-flip={flip}
     >
-      <div
-        className={styles.chapterCopy}
-        onMouseEnter={() => !manualHold && setHoverHold(true)}
-        onMouseLeave={() => setHoverHold(false)}
-        onFocus={() => !manualHold && setHoverHold(true)}
-        onBlur={() => setHoverHold(false)}
-      >
-        <p className={styles.stageKicker}>
-          {chapter.number} / {chapter.tab.toUpperCase()}
-        </p>
-        <h3 id={`tour-${chapter.id}-heading`}>{chapter.title}</h3>
-        <p className={styles.stageLede}>{chapter.lede}</p>
-        <ol className={styles.stepList} aria-live="polite">
-          {chapter.steps.map((entry, index) => (
-            <li
-              key={entry.title}
-              data-active={index === step}
-              data-done={index < step}
-            >
-              <button
-                type="button"
-                onClick={() => setStep(index)}
-                aria-label={`Step ${index + 1}: ${entry.title}`}
-                aria-current={index === step ? "step" : undefined}
-              >
-                <span className={styles.stepDot} aria-hidden="true" />
-                <span>
-                  <strong>{entry.title}</strong>
-                  {index === step && <em>{entry.body}</em>}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ol>
-        <div className={styles.stageControls}>
-          <button
-            type="button"
-            className={styles.stageToggle}
-            onClick={() => setManualHold((hold) => !hold)}
-            aria-label={held && !reduced ? "Play the run-through" : "Pause the run-through"}
-            aria-pressed={held}
-          >
-            {held && !reduced ? (
-              <Play size={12} fill="currentColor" aria-hidden="true" />
-            ) : (
-              <Pause size={12} aria-hidden="true" />
-            )}
-            <span>{held && !reduced ? "Play" : "Pause"}</span>
-          </button>
-          <button
-            type="button"
-            className={styles.stageToggle}
-            onClick={replay}
-            aria-label={`Replay ${chapter.tab} from the start`}
-          >
-            <RotateCcw size={12} aria-hidden="true" />
-            <span>Replay</span>
-          </button>
+      <header className={styles.chapterHeader}>
+        <div className={styles.chapterHeading}>
+          <p className={styles.stageKicker}>
+            {chapter.number} / {chapter.tab.toUpperCase()}
+          </p>
+          <h3 id={`tour-${chapter.id}-heading`}>{chapter.title}</h3>
         </div>
-      </div>
+        <p className={styles.chapterLede}>{chapter.lede}</p>
+      </header>
 
-      <div className={styles.stageView}>
-        <div className={styles.viewFrame}>
-          <div className={styles.viewChrome} aria-hidden="true">
-            <span>
-              <i />
-              <i />
-              <i />
-            </span>
-            <em>Illustrative preview</em>
-          </div>
-          <div key={step} className={styles.viewBody}>
-            {chapter.view(step)}
-          </div>
-        </div>
-      </div>
+      <ol className={styles.highlightList} aria-label={`${chapter.tab} highlights`}>
+        {chapter.highlights.map((highlight, index) => (
+          <li
+            key={highlight.title}
+            className={styles.highlightItem}
+            data-reverse={index % 2 === 1}
+          >
+            <div className={styles.highlightCopy}>
+              <p className={styles.highlightNumber}>
+                {String(index + 1).padStart(2, "0")}
+              </p>
+              <h4>{highlight.title}</h4>
+              <p>{highlight.body}</p>
+            </div>
+
+            <div className={styles.stageView}>
+              <div className={styles.viewFrame}>
+                <div className={styles.viewChrome} aria-hidden="true">
+                  <span>
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  <em>Illustrative preview</em>
+                </div>
+                <LoopingPreview
+                  animationDurationMs={highlight.animationDurationMs}
+                >
+                  {highlight.view}
+                </LoopingPreview>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
 
-/**
- * All five chapters as alternating full-width sections: copy left/view
- * right, then mirrored, so every feature is visible on scroll with no
- * tab interaction required.
- */
+/** All chapters as sections with static highlight descriptions and previews. */
 export function TourSections() {
-  const [reduced, setReduced] = useState(false);
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(query.matches);
-    const onChange = (event: MediaQueryListEvent) => setReduced(event.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
-
   return (
     <div className={styles.tour}>
       <nav aria-label="Platform chapters" className={styles.chapterNav}>
@@ -336,13 +342,8 @@ export function TourSections() {
           </a>
         ))}
       </nav>
-      {chapters.map((entry, index) => (
-        <TourSection
-          key={entry.id}
-          chapter={entry}
-          flip={index % 2 === 1}
-          reduced={reduced}
-        />
+      {chapters.map((entry) => (
+        <TourSection key={entry.id} chapter={entry} />
       ))}
     </div>
   );
