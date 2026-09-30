@@ -117,7 +117,7 @@ flow, rotation, and the staged organization-credential migration.
 | `DEBUG`                                              | `false`                                                                                                      | No                                    |
 | `MCP_ALLOW_LOCAL_URLS`                               | Keep `false` in production                                                                                   | No                                    |
 | `TOKEN_REFRESH_*`                                    | OAuth refresh tuning; the lease must be at least 180 seconds and defaults to 180 (`.env.prod.example`)       | No                                    |
-| `VOICE_RECORDING_ENABLED`                            | Platform safety gate for persisting mixed call audio; the agent-level recording setting must also be enabled | No                                    |
+| `VOICE_RECORDING_ENABLED`                            | Enabled in production; agent opt-in and caller notice/consent still apply                                  | No                                    |
 | `RECORDING_STORAGE_BACKEND`                          | `r2` for staging/production; `local` for local development                                                   | No                                    |
 | `RECORDING_R2_ENDPOINT`                              | Shared account S3 endpoint: `https://<account-id>.r2.cloudflarestorage.com`                                  | No                                    |
 | `RECORDING_R2_BUCKET`                                | Environment-specific private bucket name                                                                     | No                                    |
