@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ArrowRight, Check, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { billingService } from "@/services/billing-service";
+import { friendlyPlanName } from "@/components/billing/plan-card";
 import type { CustomerPlanVersion } from "@/types/billing";
 
 export interface StepPlanSelectionProps {
@@ -31,13 +33,8 @@ export interface StepPlanSelectionProps {
 
 type BillingIntervalTab = "monthly" | "annual";
 
-/**
- * Metered cost of one voice minute, in credits. Must match the backend
- * metering (`voice_call_minute` system pricing, currently 10 credits/min).
- */
-export const CREDITS_PER_VOICE_MINUTE = 10;
-/** Typical SMB call length used only for the "≈ calls" illustration. */
-export const AVG_CALL_MINUTES = 3.5;
+/** Metered cost of one connected call minute, matching backend billing. */
+export const CREDITS_PER_CALL_MINUTE = 10;
 
 function formatPrice(plan: CustomerPlanVersion): string {
   if (plan.billing_mode === "free" || plan.price_amount_cents === 0) {
@@ -54,13 +51,10 @@ function formatEntitlement(
   rawValue: Record<string, unknown>,
 ): string {
   const value = rawValue.value;
-  // Credit bundles sell better as minutes: "4000 credits" means nothing to
-  // an owner, "400 call minutes (≈115 calls)" does. The engine still
-  // settles in credits; this is presentation only.
+  // Show estimated call minutes while preserving credits as the billing unit.
   if (typeof value === "number" && key.startsWith("included_credits")) {
-    const minutes = Math.floor(value / CREDITS_PER_VOICE_MINUTE);
-    const calls = Math.max(1, Math.round(minutes / AVG_CALL_MINUTES));
-    return `${minutes.toLocaleString()} call minutes included (≈${calls} calls)`;
+    const minutes = Math.floor(value / CREDITS_PER_CALL_MINUTE);
+    return `Up to ${minutes.toLocaleString()} call minutes per billing period`;
   }
   const label = key
     .replace(/_/g, " ")
@@ -211,11 +205,8 @@ export function StepPlanSelection({
             <CardHeader className="space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                    {plan.product_name}
-                  </p>
                   <h3 className="mt-1 text-xl font-semibold text-gray-900">
-                    {plan.display_label || plan.product_name}
+                    {friendlyPlanName(plan)}
                   </h3>
                 </div>
                 {plan.billing_mode === "free" && (
@@ -293,6 +284,22 @@ export function StepPlanSelection({
           Activate your workspace before exploring agents, calls, and
           integrations.
         </p>
+      </div>
+
+      <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
+        Paid plans include one US local number on request and our standard voice
+        profile. Additional US local numbers use 80 credits/month ($2 equivalent)
+        from the same balance as calls; other number types show their rate before
+        purchase. There is no fixed number limit. Optional voice profiles may
+        need a provider account, which may bill you directly. You can connect a
+        Twilio number you own at no platform rental cost.
+        <br />
+        <Link
+          className="font-medium text-primary underline underline-offset-4"
+          href="/request-demo"
+        >
+          Need more volume or several locations? Talk with us.
+        </Link>
       </div>
 
       {paymentState === "cancelled" && (

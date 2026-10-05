@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Platform admin form for notification settings (Resend + Telegram).
+ * Platform admin form for email, Telegram, SMS, and WhatsApp settings.
  */
 
 import React, { useEffect, useState } from "react";
@@ -24,6 +24,7 @@ export function PlatformNotificationSettingsForm() {
   );
   const [platformAdminEmail, setPlatformAdminEmail] = useState("");
   const [platformAdminSmsPhone, setPlatformAdminSmsPhone] = useState("");
+  const [platformAdminWhatsappPhone, setPlatformAdminWhatsappPhone] = useState("");
   const [verificationFromEmail, setVerificationFromEmail] = useState("");
   const [verificationFromName, setVerificationFromName] = useState("");
   const [telegramChatId, setTelegramChatId] = useState("");
@@ -31,6 +32,7 @@ export function PlatformNotificationSettingsForm() {
   const [telegramBotEditing, setTelegramBotEditing] = useState(false);
   const [telegramEnabled, setTelegramEnabled] = useState(false);
   const [platformAdminSmsEnabled, setPlatformAdminSmsEnabled] = useState(false);
+  const [platformAdminWhatsappEnabled, setPlatformAdminWhatsappEnabled] = useState(false);
   const [resendConfigured, setResendConfigured] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -59,8 +61,14 @@ export function PlatformNotificationSettingsForm() {
       setPlatformAdminSmsPhone(
         settingsResult.data.platform_admin_sms_phone || "",
       );
+      setPlatformAdminWhatsappPhone(
+        settingsResult.data.platform_admin_whatsapp_phone || "",
+      );
       setPlatformAdminSmsEnabled(
         settingsResult.data.platform_admin_sms_notifications_enabled,
+      );
+      setPlatformAdminWhatsappEnabled(
+        settingsResult.data.platform_admin_whatsapp_notifications_enabled,
       );
       setVerificationFromEmail(settingsResult.data.verification_from_email || "");
       setVerificationFromName(settingsResult.data.verification_from_name || "");
@@ -82,6 +90,8 @@ export function PlatformNotificationSettingsForm() {
       platform_admin_email: platformAdminEmail || null,
       platform_admin_sms_phone: platformAdminSmsPhone || null,
       platform_admin_sms_notifications_enabled: platformAdminSmsEnabled,
+      platform_admin_whatsapp_phone: platformAdminWhatsappPhone || null,
+      platform_admin_whatsapp_notifications_enabled: platformAdminWhatsappEnabled,
       verification_from_email: verificationFromEmail || null,
       verification_from_name: verificationFromName || null,
       telegram_chat_id: telegramChatId || null,
@@ -228,6 +238,59 @@ export function PlatformNotificationSettingsForm() {
               onChange={(e) => setVerificationFromName(e.target.value)}
             />
           </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">WhatsApp lead alerts</h2>
+          <p className="text-sm text-muted-foreground">
+            Send the full contact-form submission to the platform admin. Twilio
+            must have an approved WhatsApp Content template configured on the
+            backend before delivery can be enabled.
+          </p>
+          <div className="mt-2">
+            {settings?.whatsapp_sender_configured ? (
+              <Badge className="bg-green-600 hover:bg-green-600/90">
+                Twilio WhatsApp template configured
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Twilio WhatsApp template not configured</Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <Label htmlFor="whatsapp_lead_enabled">Enable WhatsApp lead alerts</Label>
+            <p className="text-sm text-muted-foreground">
+              Delivery requires the setting below and a configured template.
+            </p>
+          </div>
+          <Switch
+            id="whatsapp_lead_enabled"
+            checked={platformAdminWhatsappEnabled}
+            onCheckedChange={setPlatformAdminWhatsappEnabled}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="platform_admin_whatsapp_phone">
+            Platform admin WhatsApp number
+          </Label>
+          <Input
+            id="platform_admin_whatsapp_phone"
+            type="tel"
+            autoComplete="tel"
+            placeholder="+15551234567"
+            value={platformAdminWhatsappPhone}
+            onChange={(event) => setPlatformAdminWhatsappPhone(event.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Use E.164 format. The approved template must include placeholders
+            1–10 for name, business, email, phone, business type, message,
+            source, demo, submission time, and lead link.
+          </p>
         </div>
       </section>
 

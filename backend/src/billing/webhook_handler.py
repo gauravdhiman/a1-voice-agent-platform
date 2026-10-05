@@ -6,6 +6,8 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
+import stripe
+
 from shared.config import settings
 
 from .credit_grant_service import credit_grant_service
@@ -17,12 +19,17 @@ from .models import (
     TransactionSource,
     TransactionType,
 )
+from .plan_version_models import BillingMode
 from .plan_version_service import plan_version_service
 from .service import billing_service
 from .stripe_service import stripe_service
 from .versioned_subscription_service import versioned_subscription_service
 
 logger = logging.getLogger(__name__)
+
+
+class InvalidStripeWebhook(Exception):
+    """Raised when a webhook payload or signature fails Stripe verification."""
 
 
 async def _resolve_plan_from_stripe_price(price_id: str):
@@ -63,18 +70,24 @@ async def handle_stripe_webhook(payload: bytes, signature: str):
         # Get webhook secret from settings
         webhook_secret = getattr(settings, "stripe_webhook_secret", None)
         if not webhook_secret:
-            logger.error("Stripe webhook secret not configured")
-            return
+            raise RuntimeError("Stripe webhook secret is not configured")
 
         # Construct and verify webhook event
-        event = stripe_service.construct_webhook_event(
-            payload, signature, webhook_secret
-        )
+        try:
+            event = stripe_service.construct_webhook_event(
+                payload, signature, webhook_secret
+            )
+        except (ValueError, stripe.error.SignatureVerificationError) as exc:
+            raise InvalidStripeWebhook(
+                "Invalid Stripe webhook signature or payload"
+            ) from exc
 
         logger.info(f"Processing Stripe webhook event: {event['type']}")
 
         # Route event to appropriate handler
         if event["type"] == "checkout.session.completed":
+            await handle_checkout_session_completed(event)
+        elif event["type"] == "checkout.session.async_payment_succeeded":
             await handle_checkout_session_completed(event)
         elif event["type"] == "customer.subscription.created":
             await handle_subscription_created(event)
@@ -106,36 +119,63 @@ async def handle_checkout_session_completed(event):
 
         organization_id = metadata.get("organization_id")
         if not organization_id:
-            logger.warning("No organization_id in checkout session metadata")
-            return
+            raise ValueError("Checkout session is missing organization_id metadata")
 
         logger.info(f"Checkout session completed for organization {organization_id}")
 
         # Handle subscription checkout
         if session["mode"] == "subscription":
-            plan_id = metadata.get("plan_id")
-            if plan_id and session.get("subscription"):
-                # Subscription will be handled by subscription.created webhook
-                logger.info(
-                    f"Subscription checkout completed, waiting for subscription.created webhook"
+            subscription_id = session.get("subscription")
+            if not subscription_id:
+                raise ValueError("Completed subscription checkout has no subscription")
+            if isinstance(subscription_id, dict):
+                subscription = subscription_id
+            else:
+                subscription = await stripe_service.get_subscription(
+                    str(subscription_id)
                 )
+            if hasattr(subscription, "to_dict_recursive"):
+                subscription = subscription.to_dict_recursive()
+            subscription["metadata"] = {
+                **(subscription.get("metadata") or {}),
+                **(metadata or {}),
+            }
+            # Do not rely on Stripe delivering a separate
+            # customer.subscription.created event. The checkout completion event
+            # is sufficient to persist the version-bound subscription; the
+            # created event remains safe to replay and update the same row.
+            await handle_subscription_created({"data": {"object": subscription}})
 
         # Handle one-time payment (credit purchase)
         elif session["mode"] == "payment":
             product_id = metadata.get("product_id")
             credit_amount = metadata.get("credit_amount")
+            payment_intent_id = session.get("payment_intent")
+            if isinstance(payment_intent_id, dict):
+                payment_intent_id = payment_intent_id.get("id")
 
-            if product_id and credit_amount and session.get("payment_intent"):
+            if (
+                session.get("payment_status") == "paid"
+                and product_id
+                and credit_amount
+                and payment_intent_id
+            ):
                 # Add purchased credits
                 await billing_service.add_purchased_credits(
                     organization_id=UUID(organization_id),
                     credits=int(credit_amount),
-                    stripe_payment_intent_id=session["payment_intent"],
+                    stripe_payment_intent_id=str(payment_intent_id),
                     description=f"Credit purchase - {credit_amount} credits",
                 )
 
                 logger.info(
                     f"Added {credit_amount} purchased credits to organization {organization_id}"
+                )
+            elif session.get("payment_status") != "paid":
+                logger.info(
+                    "Credit Checkout session %s is complete but payment is pending; "
+                    "credits will be granted after payment succeeds",
+                    session.get("id"),
                 )
 
     except Exception as e:
@@ -202,11 +242,24 @@ async def handle_subscription_created(event):
             )
             is_downgrade = plan.included_credits < current_plan_credits
 
+            subscription_metadata = _paid_subscription_metadata(
+                existing_subscription.metadata, subscription
+            )
+            scheduled_plan_change = (existing_subscription.metadata or {}).get(
+                "pending_plan_change"
+            ) or {}
+            if scheduled_plan_change.get("status") == "scheduled" and str(
+                scheduled_plan_change.get("target_plan_version_id")
+            ) == str(plan_version_id):
+                subscription_metadata.pop("pending_plan_change", None)
+
             update_data = OrganizationSubscriptionUpdate(
                 subscription_plan_id=plan.id,
                 plan_version_id=plan_version_id,
                 stripe_subscription_id=subscription["id"],
+                stripe_customer_id=customer_id,
                 status=_map_stripe_status(subscription["status"]),
+                metadata=subscription_metadata,
             )
 
             # Only set period dates if they exist
@@ -238,6 +291,12 @@ async def handle_subscription_created(event):
             await billing_service.update_organization_subscription(
                 UUID(organization_id), update_data
             )
+            if isinstance(
+                getattr(existing_subscription, "pending_plan_transition", None), dict
+            ):
+                await versioned_subscription_service.reconcile_pending_plan_transition(
+                    existing_subscription.model_dump(mode="json")
+                )
 
             if is_downgrade:
                 logger.info(
@@ -260,14 +319,16 @@ async def handle_subscription_created(event):
             )
 
             org_subscription = await billing_service.create_organization_subscription(
-                subscription_data
+                subscription_data, grant_initial_credits=False
             )
 
             # Update with Stripe subscription details
             update_data = OrganizationSubscriptionUpdate(
                 stripe_subscription_id=subscription["id"],
+                stripe_customer_id=customer_id,
                 status=_map_stripe_status(subscription["status"]),
                 plan_version_id=plan_version_id,
+                metadata=_paid_subscription_metadata(None, subscription),
             )
 
             # Only set period dates if they exist
@@ -320,7 +381,10 @@ async def handle_subscription_updated(event):
             UUID(organization_id)
         )
 
-        # Check if plan changed (downgrade detection)
+        # Check whether Stripe has moved this subscription to a different
+        # immutable plan version. A versioned plan may not have a legacy
+        # subscription_plans row, so comparing legacy plan IDs alone can miss
+        # the change and leave invoice validation bound to the previous plan.
         plan_changed = False
         is_downgrade = False
         price_id = subscription["items"]["data"][0]["price"]["id"]
@@ -334,36 +398,101 @@ async def handle_subscription_updated(event):
                 logger.warning(f"No plan found for price ID {price_id}")
                 new_plan = None
 
-            compare_plan_id = (
-                new_plan.id
-                if new_plan
-                else (resolved.subscription_plan_id if resolved else None)
-            )
-            current_plan_id = (
-                current_subscription.plan.id if current_subscription.plan else None
-            )
+            current_plan = getattr(current_subscription, "plan", None)
+            if resolved:
+                current_version_id = getattr(
+                    current_subscription, "plan_version_id", None
+                )
+                plan_changed = str(current_version_id) != str(resolved.plan_version_id)
+                target_plan_label = (
+                    new_plan.name if new_plan else str(resolved.plan_version_id)
+                )
+            else:
+                # Compatibility for subscriptions and prices that still use
+                # the legacy subscription_plans catalog.
+                compare_plan_id = getattr(new_plan, "id", None)
+                current_plan_id = getattr(current_plan, "id", None) or getattr(
+                    current_subscription, "subscription_plan_id", None
+                )
+                plan_changed = bool(
+                    compare_plan_id
+                    and current_plan_id
+                    and str(compare_plan_id) != str(current_plan_id)
+                )
+                target_plan_label = (
+                    new_plan.name if new_plan else str(compare_plan_id or "unknown")
+                )
 
-            if (
-                compare_plan_id
-                and current_plan_id
-                and compare_plan_id != current_plan_id
-            ):
-                plan_changed = True
-                if new_plan and current_subscription.plan:
+            if plan_changed:
+                if new_plan and current_plan:
                     is_downgrade = (
-                        new_plan.included_credits
-                        < current_subscription.plan.included_credits
+                        new_plan.included_credits < current_plan.included_credits
                     )
                 logger.info(
-                    f"Plan change detected for organization {organization_id}: "
-                    f"{current_subscription.plan.name if current_subscription.plan else 'unknown'} "
-                    f"-> {new_plan.name if new_plan else compare_plan_id}"
+                    "Plan change detected for organization %s: %s -> %s",
+                    organization_id,
+                    getattr(current_plan, "name", "unknown"),
+                    target_plan_label,
                 )
 
         # Update subscription details
+        subscription_metadata = _paid_subscription_metadata(
+            current_subscription.metadata if current_subscription else None,
+            subscription,
+        )
+        scheduled_plan_change = subscription_metadata.get("pending_plan_change") or {}
+        if scheduled_plan_change.get("status") == "scheduled":
+            scheduled_target_is_active = bool(
+                resolved
+                and str(scheduled_plan_change.get("target_plan_version_id"))
+                == str(resolved.plan_version_id)
+            )
+            previous_attributes = (event.get("data") or {}).get(
+                "previous_attributes"
+            ) or {}
+            target_billing_mode = scheduled_plan_change.get("target_billing_mode")
+            subscription_has_schedule = bool(subscription.get("schedule"))
+            cancellation_was_reactivated = bool(
+                previous_attributes.get("cancel_at_period_end") is True
+                and not subscription.get("cancel_at_period_end", False)
+                and target_billing_mode != BillingMode.PAID.value
+                and not subscription_has_schedule
+            )
+            if (
+                not subscription.get("cancel_at_period_end", False)
+                and not cancellation_was_reactivated
+            ):
+                target_version_id = scheduled_plan_change.get("target_plan_version_id")
+                if (
+                    target_billing_mode is None
+                    and target_version_id
+                    and not subscription_has_schedule
+                ):
+                    try:
+                        scheduled_target = await versioned_subscription_service._get_customer_plan_version(
+                            UUID(str(target_version_id)),
+                            require_current_for_signup=False,
+                        )
+                        target_billing_mode = scheduled_target.billing_mode.value
+                    except Exception:
+                        logger.exception(
+                            "Could not resolve scheduled plan mode for subscription %s",
+                            subscription["id"],
+                        )
+                cancellation_was_reactivated = (
+                    target_billing_mode == BillingMode.FREE.value
+                    and not subscription_has_schedule
+                )
+
+            if scheduled_target_is_active or cancellation_was_reactivated:
+                subscription_metadata.pop("pending_plan_change", None)
+
         update_data = OrganizationSubscriptionUpdate(
             status=_map_stripe_status(subscription["status"]),
             cancel_at_period_end=subscription.get("cancel_at_period_end", False),
+            stripe_subscription_id=subscription["id"],
+            stripe_customer_id=customer_id,
+            metadata=subscription_metadata,
         )
 
         if plan_changed and resolved:
@@ -391,6 +520,13 @@ async def handle_subscription_updated(event):
         await billing_service.update_organization_subscription(
             UUID(organization_id), update_data
         )
+        pending_transition = getattr(
+            current_subscription, "pending_plan_transition", None
+        )
+        if isinstance(pending_transition, dict):
+            await versioned_subscription_service.reconcile_pending_plan_transition(
+                current_subscription.model_dump(mode="json")
+            )
 
         if plan_changed:
             if is_downgrade:
@@ -422,17 +558,32 @@ async def handle_subscription_deleted(event):
             )
             return
 
-        # Update subscription status to cancelled
+        local_subscription = await billing_service.get_organization_subscription(
+            UUID(organization_id)
+        )
+        local_metadata = getattr(local_subscription, "metadata", None)
+        metadata = dict(local_metadata) if isinstance(local_metadata, dict) else {}
+        metadata.pop("pending_plan_change", None)
+
+        # Update subscription status to cancelled and discard any schedule that
+        # Stripe has now finalized by deleting the subscription.
         update_data = OrganizationSubscriptionUpdate(
             status=SubscriptionStatus.CANCELLED,
             cancelled_at=datetime.fromtimestamp(
                 subscription.get("canceled_at", event["created"])
             ),
+            metadata=metadata,
         )
 
         await billing_service.update_organization_subscription(
             UUID(organization_id), update_data
         )
+
+        if local_subscription and local_subscription.pending_plan_transition:
+            pending_transition = local_subscription.pending_plan_transition
+            versioned_subscription_service.clear_plan_transition(
+                local_subscription.id, pending_transition.get("transition_id", "")
+            )
 
         logger.info(f"Cancelled subscription for organization {organization_id}")
 
@@ -449,6 +600,7 @@ async def handle_invoice_payment_succeeded(event):
 
         # Get organization_id from subscription metadata if it's a subscription invoice
         organization_id = None
+        subscription = None
         if invoice.get("subscription"):
             subscription = await stripe_service.get_subscription(
                 invoice["subscription"]
@@ -485,45 +637,152 @@ async def handle_invoice_payment_succeeded(event):
 
         # If this is a subscription invoice, allocate credits through the
         # shared policy-aware grant service. Stripe may retry this event, so
-        # the invoice id is the stable grant key.
+        # each grant uses a stable key.
         if invoice.get("subscription"):
-            subscription = await stripe_service.get_subscription(
-                invoice["subscription"]
-            )
             price_id = subscription["items"]["data"][0]["price"]["id"]
-
-            # Legacy plan fallback for credit amount
-            plans = await billing_service.get_subscription_plans(active_only=False)
-            plan = next((p for p in plans if p.stripe_price_id == price_id), None)
-
             org_subscription = await billing_service.get_organization_subscription(
                 UUID(organization_id)
             )
-            if org_subscription:
-                grant_subscription = (
-                    org_subscription.model_dump(mode="json")
-                    if hasattr(org_subscription, "model_dump")
-                    else dict(org_subscription)
+            if not org_subscription:
+                # Stripe may deliver invoice.paid before checkout completion or
+                # subscription.created. Keep this event retryable until the
+                # local version-bound subscription exists; history upsert is
+                # safe to repeat on that retry.
+                raise RuntimeError(
+                    f"Subscription {invoice['subscription']} is not persisted for invoice {invoice['id']} yet"
                 )
-                period_start = datetime.fromtimestamp(
-                    subscription.get("current_period_start", event["created"]),
-                    tz=timezone.utc,
+
+            grant_subscription = (
+                org_subscription.model_dump(mode="json")
+                if hasattr(org_subscription, "model_dump")
+                else dict(org_subscription)
+            )
+            if (
+                grant_subscription.get("stripe_subscription_id")
+                != invoice["subscription"]
+            ):
+                raise RuntimeError(
+                    f"Subscription {invoice['subscription']} is not synchronized "
+                    f"for invoice {invoice['id']} yet"
                 )
-                period_end = (
-                    datetime.fromtimestamp(
-                        subscription["current_period_end"], tz=timezone.utc
+
+            resolved_plan, legacy_plan = await _resolve_plan_from_stripe_price(price_id)
+            pending_transition = grant_subscription.get("pending_plan_transition") or {}
+            interval_reset_invoice = (
+                invoice.get("billing_reason") == "subscription_update"
+                and pending_transition.get("billing_interval_changed") is True
+                and str(pending_transition.get("target_plan_version_id"))
+                == str(resolved_plan.plan_version_id if resolved_plan else None)
+            )
+            local_plan_version_id = grant_subscription.get("plan_version_id")
+            if local_plan_version_id:
+                if resolved_plan is None or str(local_plan_version_id) != str(
+                    resolved_plan.plan_version_id
+                ):
+                    if interval_reset_invoice and resolved_plan is not None:
+                        # This invoice is the durable signal that the claimed
+                        # interval change reached Stripe. Repair local binding
+                        # before granting the target period's allowance.
+                        await billing_service.update_organization_subscription(
+                            UUID(organization_id),
+                            OrganizationSubscriptionUpdate(
+                                plan_version_id=resolved_plan.plan_version_id
+                            ),
+                        )
+                        grant_subscription["plan_version_id"] = str(
+                            resolved_plan.plan_version_id
+                        )
+                    else:
+                        raise RuntimeError(
+                            f"Subscription {invoice['subscription']} is not bound to "
+                            f"the invoice plan for invoice {invoice['id']} yet"
+                        )
+            elif resolved_plan is not None:
+                expected_legacy_plan_id = resolved_plan.subscription_plan_id
+                local_legacy_plan_id = grant_subscription.get("subscription_plan_id")
+                if (
+                    expected_legacy_plan_id is None
+                    or str(local_legacy_plan_id) != str(expected_legacy_plan_id)
+                    or legacy_plan is None
+                ):
+                    raise RuntimeError(
+                        f"Subscription {invoice['subscription']} is not bound to "
+                        f"the invoice plan for invoice {invoice['id']} yet"
                     )
-                    if subscription.get("current_period_end")
-                    else None
+            elif legacy_plan is None or str(
+                grant_subscription.get("subscription_plan_id")
+            ) != str(legacy_plan.id):
+                raise RuntimeError(
+                    f"Subscription {invoice['subscription']} is not bound to "
+                    f"the invoice plan for invoice {invoice['id']} yet"
+                )
+
+            period_start = datetime.fromtimestamp(
+                subscription.get("current_period_start", event["created"]),
+                tz=timezone.utc,
+            )
+            period_end = (
+                datetime.fromtimestamp(
+                    subscription["current_period_end"], tz=timezone.utc
+                )
+                if subscription.get("current_period_end")
+                else None
+            )
+            if (
+                invoice.get("billing_reason") == "subscription_update"
+                and not interval_reset_invoice
+            ):
+                # An immediate plan upgrade may create a proration invoice.
+                # It does not start a new credit period: the new plan's full
+                # allowance is granted on the next subscription-cycle invoice.
+                logger.info(
+                    "Recorded plan-change invoice %s without renewing included credits",
+                    invoice["id"],
+                )
+                if (
+                    pending_transition.get("transition_id")
+                    and pending_transition.get("billing_interval_changed") is not True
+                    and str(pending_transition.get("target_plan_version_id"))
+                    == str(resolved_plan.plan_version_id if resolved_plan else None)
+                ):
+                    # A paid same-period proration confirms its in-flight plan
+                    # update, but does not renew the included credit balance.
+                    versioned_subscription_service.clear_plan_transition(
+                        org_subscription["id"], pending_transition["transition_id"]
+                    )
+            else:
+                period_start_timestamp = int(
+                    subscription.get("current_period_start", event["created"])
+                )
+                grant_key = (
+                    f"stripe-subscription-period:{invoice['subscription']}:{period_start_timestamp}"
+                    if interval_reset_invoice
+                    else f"stripe-invoice:{invoice['id']}"
                 )
                 await credit_grant_service.grant_for_subscription(
                     grant_subscription,
                     grant_reason="invoice_paid",
                     period_start=period_start,
                     period_end=period_end,
-                    grant_key=f"stripe-invoice:{invoice['id']}",
-                    fallback_credits=plan.included_credits if plan else 0,
+                    grant_key=grant_key,
+                    fallback_credits=(
+                        legacy_plan.included_credits if legacy_plan else 0
+                    ),
                 )
+                if interval_reset_invoice:
+                    # Retain retry safety: if this metadata update fails, the
+                    # stable subscription-period grant key makes the retry a
+                    # no-op before the transition-ID compare-and-set succeeds.
+                    cleared = versioned_subscription_service.clear_plan_transition(
+                        org_subscription["id"], pending_transition["transition_id"]
+                    )
+                    if not cleared:
+                        logger.warning(
+                            "Interval-change transition %s was already cleared or "
+                            "replaced after invoice %s credit grant",
+                            pending_transition.get("transition_id"),
+                            invoice["id"],
+                        )
 
         logger.info(
             f"Processed successful invoice payment for organization {organization_id}"
@@ -630,6 +889,20 @@ async def handle_payment_intent_succeeded(event):
 
         await billing_service.create_billing_history(billing_data)
 
+        # Credit purchase metadata is attached to both the Checkout Session
+        # and its PaymentIntent. The PaymentIntent event is the settled-payment
+        # signal for delayed methods; the grant RPC is idempotent when Stripe
+        # also delivers a paid Checkout Session event.
+        metadata = payment_intent.get("metadata") or {}
+        credit_amount = metadata.get("credit_amount")
+        if metadata.get("type") == "credits" and credit_amount:
+            await billing_service.add_purchased_credits(
+                organization_id=UUID(organization_id),
+                credits=int(credit_amount),
+                stripe_payment_intent_id=payment_intent["id"],
+                description=f"Credit purchase - {credit_amount} credits",
+            )
+
         logger.info(
             f"Processed successful payment intent for organization {organization_id}"
         )
@@ -698,3 +971,33 @@ def _map_stripe_status(stripe_status: str) -> SubscriptionStatus:
     }
 
     return status_mapping.get(stripe_status, SubscriptionStatus.ACTIVE)
+
+
+def _paid_subscription_metadata(
+    existing_metadata: dict | None, subscription: dict
+) -> dict:
+    """Build canonical local billing metadata from a Stripe subscription."""
+    metadata = {
+        **(existing_metadata or {}),
+        **(subscription.get("metadata") or {}),
+    }
+    items = (subscription.get("items") or {}).get("data") or []
+    price = (items[0].get("price") or {}) if items else {}
+    stripe_interval = (price.get("recurring") or {}).get("interval")
+    billing_interval = {"month": "monthly", "year": "annual"}.get(stripe_interval)
+    if billing_interval is None:
+        current_interval = metadata.get("billing_interval")
+        billing_interval = (
+            current_interval if current_interval in {"monthly", "annual"} else "monthly"
+        )
+
+    # Stripe's existence is authoritative: never retain stale Free metadata
+    # when a paid Checkout replaces a free subscription record.
+    metadata.update(
+        {
+            "billing_mode": "paid",
+            "credit_grant_policy": "recurring",
+            "billing_interval": billing_interval,
+        }
+    )
+    return metadata

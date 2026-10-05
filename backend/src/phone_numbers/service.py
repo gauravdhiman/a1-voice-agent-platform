@@ -14,6 +14,14 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException
+from src.billing.entitlement_models import EntitlementDenied
+from src.billing.entitlement_service import EntitlementService
+from src.billing.models import CreditConsumptionRequest
+from src.billing.service import BillingService
+from src.billing.system_pricing import (
+    get_phone_number_pricing_event_name,
+    get_system_pricing_definition,
+)
 
 from shared.common.security import decrypt_data, encrypt_data
 from shared.config import supabase_config
@@ -40,14 +48,6 @@ from shared.organization.phone_number_models import (
     PhoneNumberWebhookDetailsResponse,
     PhoneNumberWithAgent,
 )
-from src.billing.entitlement_models import EntitlementDenied
-from src.billing.entitlement_service import EntitlementService
-from src.billing.models import CreditConsumptionRequest
-from src.billing.service import BillingService
-from src.billing.system_pricing import (
-    get_phone_number_pricing_event_name,
-    get_system_pricing_definition,
-)
 
 from .platform_settings_service import platform_phone_number_settings_service
 from .twilio_service import twilio_service
@@ -60,6 +60,14 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 
+PHONE_NUMBER_SEARCH_UNAVAILABLE = (
+    "Phone number search is temporarily unavailable. Please try again later."
+)
+PHONE_NUMBER_PURCHASE_UNAVAILABLE = (
+    "Phone number purchase could not be confirmed. Check your phone numbers and "
+    "credit balance before retrying."
+)
+
 PHONE_NUMBER_BILLING_GRACE_DAYS = 7
 
 ACTIVE_PHONE_NUMBER_STATUSES = (
@@ -71,7 +79,7 @@ ACTIVE_PHONE_NUMBER_STATUSES = (
 
 PHONE_NUMBER_LIST_COLUMNS = (
     "id, organization_id, phone_number, provider, provider_sid, phone_number_type, "
-    "country_code, area_code, monthly_cost_credits, status, assigned_agent_id, "
+    "country_code, area_code, monthly_cost_credits, is_included_in_plan, status, assigned_agent_id, "
     "is_incoming_enabled, is_outgoing_enabled, billing_status, next_billing_at, "
     "billing_grace_ends_at, provisioning_source, management_mode, "
     "configuration_status, billing_mode, configuration_error, last_verified_at, "
@@ -109,7 +117,9 @@ class PhoneNumberService:
         self.twilio_service = twilio_service
 
     async def search_available(
-        self, search_request: PhoneNumberSearchRequest
+        self,
+        search_request: PhoneNumberSearchRequest,
+        organization_id: Optional[UUID] = None,
     ) -> tuple[PhoneNumberSearchResponse, Optional[str]]:
         """Search for available phone numbers from Twilio.
 
@@ -120,6 +130,29 @@ class PhoneNumberService:
             Tuple of (search results, error message)
         """
         try:
+            if search_request.country_code.strip().upper() != "US":
+                return (
+                    PhoneNumberSearchResponse(
+                        items=[],
+                        total_count=0,
+                        page=search_request.page,
+                        page_size=search_request.page_size,
+                        total_pages=0,
+                    ),
+                    "Only US platform-provided phone numbers are available in v1.",
+                )
+            if search_request.phone_number_type == PhoneNumberType.MOBILE:
+                return (
+                    PhoneNumberSearchResponse(
+                        items=[],
+                        total_count=0,
+                        page=search_request.page,
+                        page_size=search_request.page_size,
+                        total_pages=0,
+                    ),
+                    "Mobile phone numbers are not available for new platform purchases in v1.",
+                )
+
             if not self.twilio_service.is_configured():
                 return (
                     PhoneNumberSearchResponse(
@@ -129,7 +162,7 @@ class PhoneNumberService:
                         page_size=search_request.page_size,
                         total_pages=0,
                     ),
-                    None,
+                    PHONE_NUMBER_SEARCH_UNAVAILABLE,
                 )
 
             twilio_type = search_request.phone_number_type.value
@@ -146,12 +179,25 @@ class PhoneNumberService:
                 limit=search_request.page_size,
             )
 
+            qualifies_for_included_local = (
+                await self._qualifies_for_included_us_local_number(
+                    organization_id,
+                    search_request.phone_number_type,
+                    search_request.country_code,
+                )
+                if organization_id
+                else False
+            )
+            cost = (
+                0
+                if qualifies_for_included_local
+                else await self._get_credits_for_type(
+                    search_request.phone_number_type, search_request.country_code
+                )
+            )
+
             available_numbers = []
             for num in results:
-                cost = await self._get_credits_for_type(
-                    search_request.phone_number_type
-                )
-
                 capabilities = {}
                 if hasattr(num, "capabilities"):
                     capabilities = {
@@ -172,6 +218,7 @@ class PhoneNumberService:
                         country_code=search_request.country_code.upper(),
                         area_code=area_code,
                         monthly_cost_credits=cost,
+                        is_included_in_plan=qualifies_for_included_local,
                         capabilities=capabilities,
                         locality=locality,
                         postal_code=postal_code,
@@ -190,7 +237,13 @@ class PhoneNumberService:
             )
 
         except Exception as e:
-            logger.error(f"Error searching available numbers: {e}")
+            # Provider exceptions can contain account identifiers and raw
+            # upstream response bodies. Keep those out of both logs and the
+            # customer-facing error contract.
+            logger.error(
+                "Phone number availability lookup failed (error_type=%s)",
+                type(e).__name__,
+            )
             return (
                 PhoneNumberSearchResponse(
                     items=[],
@@ -199,7 +252,7 @@ class PhoneNumberService:
                     page_size=search_request.page_size,
                     total_pages=0,
                 ),
-                f"Failed to search available numbers: {str(e)}",
+                PHONE_NUMBER_SEARCH_UNAVAILABLE,
             )
 
     async def purchase_number(
@@ -221,19 +274,21 @@ class PhoneNumberService:
             purchase_request.phone_number, purchase_request.country_code
         )
         caller_idempotency_key = idempotency_key
+        request_idempotency_key = caller_idempotency_key
+        credit_idempotency_key: Optional[str] = None
         attempt_id: Optional[str] = None
         charged = False
+        charged_cost = 0
         provider_sid: Optional[str] = None
+        is_included = False
+        balance_after = 0
 
         try:
-            if not self.twilio_service.is_configured():
-                return None, "Phone number provider not configured"
-
             # Always route purchases through the atomic phone-credit debit
             # path, even for callers that do not provide an HTTP retry key.
             # The generated key identifies this provisioning attempt; callers
             # that need retry-safe replay should still send Idempotency-Key.
-            idempotency_key = idempotency_key or (
+            request_idempotency_key = request_idempotency_key or (
                 f"phone-number:{organization_id}:{secrets.token_urlsafe(24)}"
             )
 
@@ -242,7 +297,7 @@ class PhoneNumberService:
                     self.supabase.table("phone_numbers")
                     .select("*")
                     .eq("organization_id", str(organization_id))
-                    .eq("provisioning_idempotency_key", idempotency_key)
+                    .eq("provisioning_idempotency_key", request_idempotency_key)
                     .limit(1)
                     .execute()
                 )
@@ -287,34 +342,82 @@ class PhoneNumberService:
                             ),
                             None,
                         )
-                    # Cancelled/disconnected attempts are terminal and can be
-                    # retried with the same idempotency key. The partial unique
-                    # index permits the new active attempt.
+                    if existing.status in {
+                        PhoneNumberStatus.CANCELLED,
+                        PhoneNumberStatus.DISCONNECTED,
+                    }:
+                        return (
+                            None,
+                            "This purchase attempt has ended. Start a new purchase with a fresh idempotency key.",
+                        )
+
+            if purchase_request.country_code.strip().upper() != "US":
+                return (
+                    None,
+                    "Only US platform-provided phone numbers are available in v1.",
+                )
+            if purchase_request.phone_number_type == PhoneNumberType.MOBILE:
+                return (
+                    None,
+                    "Mobile phone numbers are not available for new platform purchases in v1.",
+                )
+
+            if not self.twilio_service.is_configured():
+                return None, PHONE_NUMBER_PURCHASE_UNAVAILABLE
+
+            # Keep the public retry key on the provisioning row, but use a
+            # unique key for this ledger attempt. Reusing a refunded ledger key
+            # would otherwise look like a successful debit without charging.
+            credit_idempotency_key = (
+                f"phone-number-debit:{organization_id}:{secrets.token_urlsafe(24)}"
+            )
 
             limit_error = await self._phone_number_limit_error(organization_id)
             if limit_error:
                 return None, limit_error
 
-            cost = await self._get_credits_for_type(purchase_request.phone_number_type)
-            event_name = get_phone_number_pricing_event_name(
-                purchase_request.phone_number_type
+            is_included = await self._qualifies_for_included_us_local_number(
+                organization_id,
+                purchase_request.phone_number_type,
+                purchase_request.country_code,
             )
-            consumption = await self.billing_service.consume_credits(
-                CreditConsumptionRequest(
-                    organization_id=organization_id,
-                    event_name=event_name,
-                    quantity=1,
-                    metadata={
-                        "phone_number": normalized_number,
-                        "purpose": "phone_number_purchase",
-                        "cost": cost,
-                    },
-                    idempotency_key=idempotency_key,
+            if purchase_request.expected_included_in_plan and not is_included:
+                return (
+                    None,
+                    "The included US local number was just claimed. Search again to review current pricing.",
+                )
+            cost = (
+                0
+                if is_included
+                else await self._get_credits_for_type(
+                    purchase_request.phone_number_type, purchase_request.country_code
                 )
             )
-            if not consumption.success:
-                return None, "Insufficient credits to purchase the phone number"
-            charged = True
+            if cost:
+                event_name = get_phone_number_pricing_event_name(
+                    purchase_request.phone_number_type, purchase_request.country_code
+                )
+                consumption = await self.billing_service.consume_credits(
+                    CreditConsumptionRequest(
+                        organization_id=organization_id,
+                        event_name=event_name,
+                        quantity=1,
+                        metadata={
+                            "phone_number": normalized_number,
+                            "purpose": "phone_number_purchase",
+                            "cost": cost,
+                        },
+                        idempotency_key=credit_idempotency_key,
+                    )
+                )
+                if not consumption.success:
+                    return None, "Insufficient credits to purchase the phone number"
+                charged = True
+                charged_cost = cost
+                balance_after = int(consumption.balance_after)
+            else:
+                balance = await self.billing_service.get_credit_balance(organization_id)
+                balance_after = int(balance.total_credits)
 
             purchased_at = datetime.now(timezone.utc)
             next_billing_at = _add_month(purchased_at)
@@ -326,6 +429,7 @@ class PhoneNumberService:
                 phone_number_type=purchase_request.phone_number_type,
                 country_code=purchase_request.country_code.upper(),
                 monthly_cost_credits=cost,
+                is_included_in_plan=is_included,
                 status=PhoneNumberStatus.PROVISIONING,
                 billing_status=PhoneNumberBillingStatus.ACTIVE,
                 billing_mode=PhoneNumberBillingMode.PLATFORM_RENTAL,
@@ -333,7 +437,7 @@ class PhoneNumberService:
                 management_mode=PhoneNumberManagementMode.PLATFORM,
                 configuration_status=PhoneNumberConfigurationStatus.PENDING,
                 next_billing_at=next_billing_at,
-                provisioning_idempotency_key=idempotency_key,
+                provisioning_idempotency_key=request_idempotency_key,
             )
             pending_result = (
                 self.supabase.table("phone_numbers")
@@ -342,7 +446,10 @@ class PhoneNumberService:
             )
             if not pending_result.data:
                 await self._refund_failed_purchase(
-                    organization_id, cost, normalized_number, idempotency_key
+                    organization_id,
+                    cost,
+                    normalized_number,
+                    credit_idempotency_key,
                 )
                 return None, "Failed to save phone number provisioning record"
             attempt_id = pending_result.data[0]["id"]
@@ -378,35 +485,58 @@ class PhoneNumberService:
                     success=True,
                     phone_number=phone_number,
                     message=f"Successfully purchased {normalized_number}",
-                    credit_balance_after=consumption.balance_after,
+                    credit_balance_after=balance_after,
                 ),
                 None,
             )
 
         except Exception as e:
-            logger.error("Error purchasing phone number %s: %s", normalized_number, e)
-            if provider_sid and self.twilio_service.is_configured():
+            # Provider and persistence errors can contain phone numbers,
+            # account identifiers, or upstream response bodies. Keep them out
+            # of logs and the customer-facing error contract.
+            logger.error(
+                "Phone number purchase failed (error_type=%s)", type(e).__name__
+            )
+            if provider_sid:
                 try:
-                    self.twilio_service.release_phone_number(provider_sid)
-                    if attempt_id:
-                        self._mark_cancelled(attempt_id)
-                except Exception:
-                    logger.exception(
-                        "Twilio release failed while compensating purchase %s",
-                        provider_sid,
+                    if self.twilio_service.is_configured():
+                        self.twilio_service.release_phone_number(provider_sid)
+                        if attempt_id:
+                            self._mark_cancelled(attempt_id)
+                    elif attempt_id:
+                        self._set_release_pending(attempt_id, provider_sid)
+                except Exception as compensation_error:
+                    logger.error(
+                        "Provider compensation failed for phone-number purchase "
+                        "(error_type=%s)",
+                        type(compensation_error).__name__,
                     )
                     if attempt_id:
-                        self._set_release_pending(attempt_id, provider_sid)
+                        try:
+                            self._set_release_pending(attempt_id, provider_sid)
+                        except Exception as state_error:
+                            logger.error(
+                                "Could not persist phone-number release retry "
+                                "(error_type=%s)",
+                                type(state_error).__name__,
+                            )
             elif attempt_id:
-                self._mark_cancelled(attempt_id)
+                try:
+                    self._mark_cancelled(attempt_id)
+                except Exception as state_error:
+                    logger.error(
+                        "Could not persist cancelled phone-number purchase "
+                        "(error_type=%s)",
+                        type(state_error).__name__,
+                    )
             if charged:
-                cost = await self._get_credits_for_type(
-                    purchase_request.phone_number_type
-                )
                 await self._refund_failed_purchase(
-                    organization_id, cost, normalized_number, idempotency_key
+                    organization_id,
+                    charged_cost,
+                    normalized_number,
+                    credit_idempotency_key,
                 )
-            return None, f"Failed to purchase phone number: {str(e)}"
+            return None, PHONE_NUMBER_PURCHASE_UNAVAILABLE
 
     async def import_number(
         self,
@@ -655,6 +785,147 @@ class PhoneNumberService:
             return str(exc)
         return None
 
+    async def _has_active_included_us_local_number(self, organization_id: UUID) -> bool:
+        """Check whether the organization already holds its included US line."""
+        result = (
+            self.supabase.table("phone_numbers")
+            .select("id")
+            .eq("organization_id", str(organization_id))
+            .eq("is_included_in_plan", True)
+            .eq("management_mode", PhoneNumberManagementMode.PLATFORM.value)
+            .eq("billing_mode", PhoneNumberBillingMode.PLATFORM_RENTAL.value)
+            .eq("phone_number_type", PhoneNumberType.LOCAL.value)
+            .eq("country_code", "US")
+            # Count an included line while provider provisioning is pending so
+            # a stale search is rejected before another provider purchase.
+            .in_(
+                "status",
+                [
+                    PhoneNumberStatus.PROVISIONING.value,
+                    *ACTIVE_PHONE_NUMBER_STATUSES,
+                ],
+            )
+            .limit(1)
+            .execute()
+        )
+        return bool(result.data)
+
+    async def _qualifies_for_included_us_local_number(
+        self,
+        organization_id: UUID,
+        phone_number_type: PhoneNumberType,
+        country_code: str,
+    ) -> bool:
+        """Check the active paid-plan benefit and whether its US line is unused."""
+        if phone_number_type != PhoneNumberType.LOCAL or country_code.upper() != "US":
+            return False
+        if await self._has_active_included_us_local_number(organization_id):
+            return False
+        return await self._has_active_paid_plan_allowance(
+            organization_id, datetime.now(timezone.utc)
+        )
+
+    async def _promote_included_us_local_number(
+        self,
+        organization_id: UUID,
+        *,
+        paid_plan_active: Optional[bool] = None,
+    ) -> Optional[UUID]:
+        """Apply the included allowance to the oldest remaining platform line."""
+        try:
+            if paid_plan_active is None:
+                paid_plan_active = await self._has_active_paid_plan_allowance(
+                    organization_id, datetime.now(timezone.utc)
+                )
+            if not paid_plan_active:
+                return None
+
+            existing = (
+                self.supabase.table("phone_numbers")
+                .select("id")
+                .eq("organization_id", str(organization_id))
+                .eq("is_included_in_plan", True)
+                .eq("management_mode", PhoneNumberManagementMode.PLATFORM.value)
+                .eq("billing_mode", PhoneNumberBillingMode.PLATFORM_RENTAL.value)
+                .eq("phone_number_type", PhoneNumberType.LOCAL.value)
+                .eq("country_code", "US")
+                .in_("status", list(ACTIVE_PHONE_NUMBER_STATUSES))
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                return None
+
+            candidates = (
+                self.supabase.table("phone_numbers")
+                .select("id, assigned_agent_id, configuration_status")
+                .eq("organization_id", str(organization_id))
+                .eq("is_included_in_plan", False)
+                .eq("management_mode", PhoneNumberManagementMode.PLATFORM.value)
+                .eq("billing_mode", PhoneNumberBillingMode.PLATFORM_RENTAL.value)
+                .eq("phone_number_type", PhoneNumberType.LOCAL.value)
+                .eq("country_code", "US")
+                .in_(
+                    "status",
+                    [
+                        PhoneNumberStatus.PURCHASED.value,
+                        PhoneNumberStatus.ACTIVE.value,
+                    ],
+                )
+                .order("purchased_at")
+                .limit(1)
+                .execute()
+            )
+            if not candidates.data:
+                return None
+
+            candidate = candidates.data[0]
+            can_route = bool(
+                candidate.get("assigned_agent_id")
+                and candidate.get("configuration_status")
+                == PhoneNumberConfigurationStatus.CONFIGURED.value
+            )
+            promoted = (
+                self.supabase.table("phone_numbers")
+                .update(
+                    {
+                        "is_included_in_plan": True,
+                        "monthly_cost_credits": 0,
+                        "billing_status": PhoneNumberBillingStatus.ACTIVE.value,
+                        "billing_grace_ends_at": None,
+                        "is_incoming_enabled": can_route,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+                .eq("id", candidate["id"])
+                .eq("organization_id", str(organization_id))
+                .eq("is_included_in_plan", False)
+                .eq("management_mode", PhoneNumberManagementMode.PLATFORM.value)
+                .eq("billing_mode", PhoneNumberBillingMode.PLATFORM_RENTAL.value)
+                .eq("phone_number_type", PhoneNumberType.LOCAL.value)
+                .eq("country_code", "US")
+                .in_(
+                    "status",
+                    [
+                        PhoneNumberStatus.PURCHASED.value,
+                        PhoneNumberStatus.ACTIVE.value,
+                    ],
+                )
+                .select("id")
+                .execute()
+            )
+            if promoted.data:
+                return UUID(str(candidate["id"]))
+            return None
+        except Exception:
+            # Cancellation and provider release must still complete if allowance
+            # reassignment encounters a transient database or uniqueness race.
+            logger.exception(
+                "Failed to promote an included US local number for %s",
+                organization_id,
+            )
+            return None
+
     async def _refund_failed_purchase(
         self,
         organization_id: UUID,
@@ -675,9 +946,10 @@ class PhoneNumberService:
                     else None
                 ),
             )
-        except Exception:
-            logger.exception(
-                "Failed to refund phone-number purchase for %s", organization_id
+        except Exception as e:
+            logger.error(
+                "Failed to refund phone-number purchase (error_type=%s)",
+                type(e).__name__,
             )
 
     def _mark_cancelled(self, phone_number_id: str) -> None:
@@ -1033,6 +1305,11 @@ class PhoneNumberService:
             if not update_result.data:
                 return False, "Failed to update phone number status"
 
+            if phone_number.is_included_in_plan:
+                await self._promote_included_us_local_number(
+                    phone_number.organization_id
+                )
+
             return True, None
 
         except Exception as e:
@@ -1067,16 +1344,19 @@ class PhoneNumberService:
             logger.error(f"Error fetching phone number: {e}")
             return None, f"Failed to fetch phone number: {str(e)}"
 
-    async def _get_credits_for_type(self, phone_type: PhoneNumberType) -> int:
-        """Get the current system credit cost for a phone number type.
+    async def _get_credits_for_type(
+        self, phone_type: PhoneNumberType, country_code: str = "US"
+    ) -> int:
+        """Get the current system credit cost for a phone type and country.
 
         Args:
-            phone_type: Type of phone number
+            phone_type: Type of phone number.
+            country_code: ISO country code; local rates vary by country.
 
         Returns:
             Monthly cost in credits
         """
-        event_name = get_phone_number_pricing_event_name(phone_type)
+        event_name = get_phone_number_pricing_event_name(phone_type, country_code)
         result = (
             self.supabase.table("credit_events")
             .select("credit_cost")
@@ -1088,6 +1368,38 @@ class PhoneNumberService:
         if result.data and isinstance(result.data, list):
             return max(0, int(result.data[0].get("credit_cost") or 0))
         return get_system_pricing_definition(event_name).default_credit_cost
+
+    async def _has_active_paid_plan_allowance(
+        self, organization_id: UUID, now: datetime
+    ) -> bool:
+        """Return whether the organization's included-number benefit is active."""
+        entitlements = await self.entitlement_service.get_org_entitlements(
+            organization_id
+        )
+        if (
+            not entitlements.is_entitled
+            or entitlements.plan_product_slug.lower() == "free"
+        ):
+            return False
+
+        if entitlements.cancel_at_period_end:
+            if not entitlements.access_until:
+                logger.error(
+                    "Scheduled-cancel subscription for organization %s is missing "
+                    "access_until; included phone allowance is disabled until the "
+                    "subscription end date is repaired",
+                    organization_id,
+                )
+                return False
+
+            access_until = datetime.fromisoformat(
+                entitlements.access_until.replace("Z", "+00:00")
+            )
+            if access_until.tzinfo is None:
+                access_until = access_until.replace(tzinfo=timezone.utc)
+            return access_until > now
+
+        return True
 
     async def process_due_rentals(
         self, now: Optional[datetime] = None
@@ -1114,8 +1426,49 @@ class PhoneNumberService:
         )
         summary = PhoneNumberRentalRunResult()
         lifecycle_settings = await platform_phone_number_settings_service.get_settings()
+        rental_rows = result.data or []
+        included_organizations = {
+            str(row.get("organization_id"))
+            for row in rental_rows
+            if row.get("is_included_in_plan")
+            and row.get("management_mode") == PhoneNumberManagementMode.PLATFORM.value
+            and row.get("billing_mode") == PhoneNumberBillingMode.PLATFORM_RENTAL.value
+            and row.get("phone_number_type") == PhoneNumberType.LOCAL.value
+            and str(row.get("country_code", "")).upper() == "US"
+        }
+        reconciled_organizations: set[str] = set()
+        promoted_number_ids: set[UUID] = set()
+        for row in rental_rows:
+            organization_key = str(row.get("organization_id"))
+            if (
+                row.get("management_mode") != PhoneNumberManagementMode.PLATFORM.value
+                or row.get("billing_mode")
+                != PhoneNumberBillingMode.PLATFORM_RENTAL.value
+                or row.get("phone_number_type") != PhoneNumberType.LOCAL.value
+                or str(row.get("country_code", "")).upper() != "US"
+                or organization_key in included_organizations
+                or organization_key in reconciled_organizations
+            ):
+                continue
 
-        for row in result.data or []:
+            reconciled_organizations.add(organization_key)
+            try:
+                organization_id = UUID(organization_key)
+                if await self._has_active_paid_plan_allowance(organization_id, now):
+                    promoted_id = await self._promote_included_us_local_number(
+                        organization_id, paid_plan_active=True
+                    )
+                    if promoted_id:
+                        promoted_number_ids.add(promoted_id)
+                        included_organizations.add(organization_key)
+            except Exception:
+                summary.errors += 1
+                logger.exception(
+                    "Failed to reconcile included phone allowance for %s",
+                    organization_key,
+                )
+
+        for row in rental_rows:
             try:
                 phone_number = PhoneNumber(**row)
                 if phone_number.billing_mode != PhoneNumberBillingMode.PLATFORM_RENTAL:
@@ -1135,10 +1488,43 @@ class PhoneNumberService:
                         )
                     continue
 
+                if phone_number.id in promoted_number_ids:
+                    summary.processed += 1
+                    continue
+
                 due_at = phone_number.next_billing_at or _add_month(
                     phone_number.purchased_at
                 )
                 if due_at > now:
+                    continue
+
+                if (
+                    phone_number.is_included_in_plan
+                    and await self._has_active_paid_plan_allowance(
+                        phone_number.organization_id, now
+                    )
+                ):
+                    can_route = bool(
+                        phone_number.assigned_agent_id
+                        and phone_number.configuration_status
+                        == PhoneNumberConfigurationStatus.CONFIGURED
+                        and phone_number.status
+                        in {
+                            PhoneNumberStatus.PURCHASED,
+                            PhoneNumberStatus.ACTIVE,
+                        }
+                    )
+                    self.supabase.table("phone_numbers").update(
+                        {
+                            "monthly_cost_credits": 0,
+                            "billing_status": PhoneNumberBillingStatus.ACTIVE.value,
+                            "billing_grace_ends_at": None,
+                            "is_incoming_enabled": can_route,
+                            "next_billing_at": _add_month(due_at).isoformat(),
+                            "updated_at": now.isoformat(),
+                        }
+                    ).eq("id", str(phone_number.id)).execute()
+                    summary.processed += 1
                     continue
 
                 grace_ends_at = phone_number.billing_grace_ends_at
@@ -1167,9 +1553,11 @@ class PhoneNumberService:
                         )
                     continue
 
-                cost = await self._get_credits_for_type(phone_number.phone_number_type)
+                cost = await self._get_credits_for_type(
+                    phone_number.phone_number_type, phone_number.country_code
+                )
                 event_name = get_phone_number_pricing_event_name(
-                    phone_number.phone_number_type
+                    phone_number.phone_number_type, phone_number.country_code
                 )
                 consumption = await self.billing_service.consume_credits(
                     CreditConsumptionRequest(
@@ -1191,6 +1579,7 @@ class PhoneNumberService:
                 if consumption.success:
                     self.supabase.table("phone_numbers").update(
                         {
+                            "is_included_in_plan": False,
                             "monthly_cost_credits": cost,
                             "billing_status": PhoneNumberBillingStatus.ACTIVE.value,
                             "is_incoming_enabled": True,
@@ -1208,6 +1597,8 @@ class PhoneNumberService:
                     )
                     self.supabase.table("phone_numbers").update(
                         {
+                            "is_included_in_plan": False,
+                            "monthly_cost_credits": cost,
                             "billing_status": PhoneNumberBillingStatus.PAST_DUE.value,
                             "billing_grace_ends_at": grace_end.isoformat(),
                             "is_incoming_enabled": False,
@@ -1230,10 +1621,18 @@ class PhoneNumberService:
         """Retry releasing a provider-owned orphan left by a failed operation."""
         if not phone_number.provider_sid:
             self._mark_cancelled(str(phone_number.id))
+            if phone_number.is_included_in_plan:
+                await self._promote_included_us_local_number(
+                    phone_number.organization_id
+                )
             return True, None
         try:
             self.twilio_service.release_phone_number(phone_number.provider_sid)
             self._mark_cancelled(str(phone_number.id))
+            if phone_number.is_included_in_plan:
+                await self._promote_included_us_local_number(
+                    phone_number.organization_id
+                )
             return True, None
         except Exception as exc:
             return False, str(exc)

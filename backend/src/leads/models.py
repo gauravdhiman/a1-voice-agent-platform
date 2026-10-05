@@ -22,9 +22,9 @@ class InterestLeadCreate(BaseModel):
     message: Optional[str] = Field(
         None, max_length=2000, description="What the business needs"
     )
-    source: Literal["request-demo", "outcome-form", "demo-call", "manual"] = Field(
-        default="request-demo", description="Capture channel"
-    )
+    source: Literal[
+        "request-demo", "contact-us", "outcome-form", "demo-call", "manual"
+    ] = Field(default="request-demo", description="Capture channel")
     demo_slug: Optional[str] = Field(
         None, max_length=100, description="Demo agent slug when captured post-demo"
     )

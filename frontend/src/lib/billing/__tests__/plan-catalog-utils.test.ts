@@ -100,7 +100,7 @@ describe("plan-catalog-utils", () => {
 
   it("sorts products from the smallest catalog tier to the largest", () => {
     const products = [
-      { ...product("enterprise", []), sort_order: 10 },
+      { ...product("scale", []), sort_order: 10 },
       { ...product("starter", []), sort_order: 10 },
       { ...product("free", []), sort_order: 10 },
       { ...product("pro", []), sort_order: 10 },
@@ -110,7 +110,7 @@ describe("plan-catalog-utils", () => {
       "free",
       "starter",
       "pro",
-      "enterprise",
+      "scale",
     ]);
   });
 

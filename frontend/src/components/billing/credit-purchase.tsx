@@ -136,10 +136,11 @@ export function CreditPurchase({
     }
   };
 
-  const formatPrice = (amount: number, currency: string) => {
-    const price = (amount / 100).toFixed(2);
-    return `${currency}${price}`;
-  };
+  const formatPrice = (amount: number, currency: string) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency.toUpperCase(),
+    }).format(amount / 100);
 
   const calculateValuePerCredit = (
     creditAmount: number,
@@ -151,16 +152,19 @@ export function CreditPurchase({
   const getBestValueProduct = () => {
     if (!products || products.length === 0) return null;
 
-    // Find product with lowest cost per credit
-    return products.reduce((best, current) => {
-      const bestValue = parseFloat(
-        calculateValuePerCredit(best.credit_amount, best.price_amount),
-      );
-      const currentValue = parseFloat(
-        calculateValuePerCredit(current.credit_amount, current.price_amount),
-      );
-      return currentValue < bestValue ? current : best;
-    });
+    const sortedByValue = [...products].sort(
+      (left, right) =>
+        left.price_amount / left.credit_amount -
+        right.price_amount / right.credit_amount,
+    );
+    const lowest = sortedByValue[0];
+    const highestUnitPrice = Math.max(
+      ...products.map((product) => product.price_amount / product.credit_amount),
+    );
+    // Do not label equal-priced packs as a special value.
+    return lowest.price_amount / lowest.credit_amount < highestUnitPrice
+      ? lowest
+      : null;
   };
 
   if (loading || !entitlements) {
@@ -250,6 +254,9 @@ export function CreditPurchase({
                   {product.credit_amount.toLocaleString()}
                 </div>
                 <div className="text-sm text-muted-foreground">credits</div>
+                <div className="text-xs text-muted-foreground">
+                  Up to {Math.floor(product.credit_amount / 10).toLocaleString()} call minutes
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -266,16 +273,6 @@ export function CreditPurchase({
                 </div>
               </div>
 
-              {/* Show savings for larger packages */}
-              {product.credit_amount >= 5000 && (
-                <Badge variant="secondary" className="text-xs">
-                  {product.credit_amount >= 25000
-                    ? "Save 20%"
-                    : product.credit_amount >= 10000
-                      ? "Save 15%"
-                      : "Save 10%"}
-                </Badge>
-              )}
             </CardContent>
 
             <CardFooter>
@@ -304,7 +301,7 @@ export function CreditPurchase({
           <h4 className="font-semibold">💡 Credit Usage Tips</h4>
           <div className="text-sm text-muted-foreground space-y-1">
             <p>• Credits never expire once purchased</p>
-            <p>• Larger packages offer better value per credit</p>
+            <p>• All packs cost $0.025 per credit</p>
             <p>• Credits are consumed based on your usage patterns</p>
             <p>• You can track usage in your billing dashboard</p>
           </div>

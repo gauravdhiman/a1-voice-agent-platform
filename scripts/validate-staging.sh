@@ -93,11 +93,13 @@ if [[ "$DO_VERIFY" == "true" ]]; then
   echo ""
 fi
 
-# 4. Materialize the code-owned native tools and public demo fixture from this
-#    release. The demo sync is explicit and idempotent; it does not create
-#    local test accounts or grant staging credits.
+# 4. Materialize the code-owned system-pricing meters, native tools, and public
+#    demo fixture from this release. Existing usage rates are preserved; the
+#    sync adds missing meters without resetting admin-managed rates. The demo
+#    sync is explicit and idempotent; it does not create local test accounts or
+#    grant staging credits.
 if [[ "$DO_START" == "true" ]]; then
-  echo "==> [4/5] Synchronizing native tools and public demos in staging..."
+  echo "==> [4/5] Synchronizing system pricing, native tools, and public demos in staging..."
   COMPOSE_PROJECT_NAME=247ai-staging \
     ENV_FILE="$ENV_FILE" \
     "${ROOT}/scripts/deploy/sync-release-fixtures.sh" \
@@ -143,8 +145,9 @@ if [[ "$DO_START" == "true" ]]; then
     echo "    docs/05_operations/deployment/runbook.md#mandatory-release-gate-ai-agent-calling)."
   fi
 else
-  echo "==> [5/5] Skipped Docker start (--migrate-only). To start later:"
-  echo "    ./start.sh start dev --env staging"
+  echo "==> [5/5] Skipped release sync and Docker start (--migrate-only)."
+  echo "    Before staging app startup, rerun ./scripts/validate-staging.sh"
+  echo "    to synchronize this release's system pricing, tools, and demos."
 fi
 
 echo ""

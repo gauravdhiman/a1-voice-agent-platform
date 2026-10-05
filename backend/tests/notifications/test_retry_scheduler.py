@@ -8,8 +8,8 @@ from src.notifications.retry_scheduler import NotificationRetryScheduler
 
 
 @pytest.mark.asyncio
-async def test_retry_scheduler_processes_email_logs_and_credit_outbox():
-    """One scheduler tick services both durable notification queues."""
+async def test_retry_scheduler_processes_all_durable_notification_queues():
+    """One scheduler tick services durable email, billing, OAuth, and lead queues."""
     scheduler = NotificationRetryScheduler(check_interval_hours=1)
     scheduler.running = True
 
@@ -23,6 +23,10 @@ async def test_retry_scheduler_processes_email_logs_and_credit_outbox():
             new=AsyncMock(),
         ) as process_outbox,
         patch(
+            "src.notifications.lead_notification_outbox.interest_lead_notification_outbox.process_pending",
+            new=AsyncMock(),
+        ) as process_leads,
+        patch(
             "src.notifications.retry_scheduler.asyncio.sleep",
             new=AsyncMock(side_effect=asyncio.CancelledError),
         ),
@@ -31,3 +35,4 @@ async def test_retry_scheduler_processes_email_logs_and_credit_outbox():
 
     retry_failed.assert_awaited_once()
     process_outbox.assert_awaited_once()
+    process_leads.assert_awaited_once()

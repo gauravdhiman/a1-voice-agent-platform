@@ -17,6 +17,7 @@ from src.notifications.platform_settings_service import (
 )
 from src.notifications.service import notification_service
 from src.notifications.telegram_service import telegram_service
+from src.notifications.whatsapp_service import whatsapp_service
 
 from shared.config import settings
 
@@ -59,13 +60,30 @@ def build_interest_lead_template_variables(lead: InterestLead) -> dict[str, str]
     }
 
 
-class InterestLeadNotifier:
-    """Deliver lead alerts to the configured platform-admin channels.
+def build_interest_lead_whatsapp_variables(lead: InterestLead) -> dict[str, str]:
+    """Map all submitted fields to the approved Twilio template placeholders."""
+    values = build_interest_lead_template_variables(lead)
+    return {
+        "1": values["lead_name"],
+        "2": values["business_name"],
+        "3": values["lead_email"],
+        "4": values["lead_phone"],
+        "5": values["vertical"],
+        "6": values["message"],
+        "7": values["source"],
+        "8": values["demo_slug"],
+        "9": values["submitted_at"],
+        "10": values["interests_url"],
+    }
 
-    Delivery is best effort: a provider outage is recorded in logs and never
-    changes the successful response returned by the public lead endpoint.
-    Email uses the durable notification service and a lead-id-based idempotency
-    key. Telegram uses the existing encrypted bot configuration.
+
+class InterestLeadNotifier:
+    """Render and send one lead alert to configured platform-admin channels.
+
+    Public submissions are dispatched through the durable
+    ``interest_lead_notification_outbox``. Email also uses the notification
+    service's lead-id-based idempotency key; Telegram and WhatsApp use the
+    encrypted platform bot settings and approved Twilio Content template.
     """
 
     @tracer.start_as_current_span("notifications.notify_interest_lead")
@@ -96,6 +114,11 @@ class InterestLeadNotifier:
             tasks.append(self._send_telegram(lead))
         else:
             current_span.set_attribute("notification.telegram_configured", False)
+
+        if self._whatsapp_is_configured(platform_settings):
+            tasks.append(self._send_whatsapp(lead, platform_settings))
+        else:
+            current_span.set_attribute("notification.whatsapp_configured", False)
 
         if not tasks:
             current_span.set_attribute("notification.channels", 0)
@@ -138,7 +161,20 @@ class InterestLeadNotifier:
             channels.append("email")
         if platform_settings.telegram_notifications_enabled:
             channels.append("telegram")
+        if InterestLeadNotifier._whatsapp_is_configured(platform_settings):
+            channels.append("whatsapp")
         return channels
+
+    @staticmethod
+    def _whatsapp_is_configured(
+        platform_settings: PlatformNotificationSettings,
+    ) -> bool:
+        """Check the admin opt-in, destination, and backend Twilio setup."""
+        return bool(
+            platform_settings.platform_admin_whatsapp_notifications_enabled
+            and platform_settings.platform_admin_whatsapp_phone
+            and whatsapp_service.is_configured()
+        )
 
     async def _send_email(
         self, lead: InterestLead, platform_settings: PlatformNotificationSettings
@@ -180,9 +216,11 @@ class InterestLeadNotifier:
         bot_token, chat_id, enabled = (
             await platform_notification_settings_service.get_telegram_credentials()
         )
-        if not enabled or not bot_token or not chat_id:
+        if not enabled:
             logger.debug("Telegram lead notifications are incomplete")
             return
+        if not bot_token or not chat_id:
+            raise RuntimeError("Telegram lead notification settings are incomplete")
 
         lines = [
             "📩 New interest request",
@@ -201,6 +239,19 @@ class InterestLeadNotifier:
         if not sent:
             raise RuntimeError("Telegram provider rejected the lead notification")
 
+    async def _send_whatsapp(
+        self, lead: InterestLead, platform_settings: PlatformNotificationSettings
+    ) -> None:
+        """Send every submitted lead field through an approved WhatsApp template."""
+        recipient = platform_settings.platform_admin_whatsapp_phone
+        if not recipient:
+            return
+        sent = await whatsapp_service.send_template_message(
+            recipient, build_interest_lead_whatsapp_variables(lead)
+        )
+        if not sent:
+            raise RuntimeError("Twilio rejected the WhatsApp lead notification")
+
 
 interest_lead_notifier = InterestLeadNotifier()
 
@@ -208,5 +259,6 @@ __all__ = [
     "INTEREST_LEAD_EVENT_KEY",
     "InterestLeadNotifier",
     "build_interest_lead_template_variables",
+    "build_interest_lead_whatsapp_variables",
     "interest_lead_notifier",
 ]

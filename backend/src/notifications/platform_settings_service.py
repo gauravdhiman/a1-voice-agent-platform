@@ -54,6 +54,16 @@ class PlatformNotificationSettingsService:
             platform_admin_sms_notifications_enabled=bool(
                 row.get("platform_admin_sms_notifications_enabled")
             ),
+            platform_admin_whatsapp_phone=row.get("platform_admin_whatsapp_phone"),
+            platform_admin_whatsapp_notifications_enabled=bool(
+                row.get("platform_admin_whatsapp_notifications_enabled")
+            ),
+            whatsapp_sender_configured=bool(
+                settings.twilio_account_sid
+                and settings.twilio_auth_token
+                and settings.twilio_whatsapp_from_number
+                and settings.twilio_whatsapp_content_sid
+            ),
             sms_sender_configured=bool(
                 settings.twilio_account_sid
                 and settings.twilio_auth_token
@@ -98,6 +108,14 @@ class PlatformNotificationSettingsService:
         if "platform_admin_sms_notifications_enabled" in fields_set:
             update_data["platform_admin_sms_notifications_enabled"] = (
                 payload.platform_admin_sms_notifications_enabled
+            )
+        if "platform_admin_whatsapp_phone" in fields_set:
+            update_data["platform_admin_whatsapp_phone"] = (
+                payload.platform_admin_whatsapp_phone
+            )
+        if "platform_admin_whatsapp_notifications_enabled" in fields_set:
+            update_data["platform_admin_whatsapp_notifications_enabled"] = (
+                payload.platform_admin_whatsapp_notifications_enabled
             )
         if "verification_from_email" in fields_set:
             update_data["verification_from_email"] = payload.verification_from_email

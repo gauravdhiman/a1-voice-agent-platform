@@ -171,8 +171,8 @@ the database is the shared cloud staging Supabase:
 
 ```bash
 # after merging to main (or checking out any release candidate):
-./scripts/validate-staging.sh              # migrate + sync tools/demos + restart local staging stack
-./scripts/validate-staging.sh --migrate-only  # migrate without starting Docker
+./scripts/validate-staging.sh              # migrate + sync meters/tools/demos + restart local staging stack
+./scripts/validate-staging.sh --migrate-only  # migrate without catalog sync or app startup
 
 # manual equivalent:
 python3 scripts/deploy/check_alembic_compatibility.py --env-file .env.staging
@@ -182,13 +182,16 @@ python3 scripts/deploy/verify_phone_number_backfill.py --env-file .env.staging
 ./start.sh start dev --env staging
 ```
 
+After `--migrate-only`, run the full validator before app startup so its
+system-pricing meter, native-tool, and demo synchronization runs. A direct
 `./start.sh start dev --env staging` starts the same `docker-compose.dev.yml`
 services as local dev, but with `ENV_FILE=.env.staging` pointing at the cloud
 staging Supabase (`gdzwiwukcwbqohfwxxrx`). Compose project `247ai-staging` and
 port offsets keep it isolated from `247ai-local` worktree stacks. Use
 `./scripts/validate-staging.sh` for release validation; it also materializes
-the checked-out native tool catalog and the public demo fixture before the app
-starts.
+the checked-out system-pricing meters and native tool catalog, plus the public
+demo fixture, before the app starts. Pricing synchronization creates missing
+meters while preserving existing admin-managed rates.
 
 The release fixture bootstrap is deliberately separate from application
 startup. It creates or refreshes the neutral `24x7 AI Demo Studio` organization,

@@ -655,7 +655,10 @@ Keep deprecated view `subscription_plans_v1_compat` for one release if needed.
 Dynamic form generated from `entitlement_definitions`:
 
 - "Add entitlement" dropdown → only keys not yet on this version
-- Field widget based on `value_type` (number input, toggle, enum select, "unlimited" checkbox)
+- Field widget based on `value_type` (number input, toggle, enum select, or
+  "unlimited" checkbox); count limits may be unlimited or use a finite number
+- The unlimited option serializes as `{ "type": "unlimited" }` and bypasses
+  the corresponding count cap while still reporting the current usage
 - Remove entitlement from version (draft only)
 - Price + billing interval + trial days
 - **Publish** button disabled until validation passes

@@ -103,8 +103,9 @@ I want to see available phone numbers for a specific country,
 So that I can choose a number that fits my business needs
 
 Acceptance Criteria:
-- Frontend exposes United States only in v1; backend accepts country-aware
-  provider search requests for future geography expansion
+- Platform-provided number search and purchase are restricted to the United
+  States in v1 at both the API and UI; future geography requires an explicit
+  country-specific rate before it can be enabled
 - System shows available numbers with pricing
 - Search accepts digits or formatted input with `Contains`, `Begins with`, and
   `Ends with` match modes. Pressing Enter submits the search without requiring
@@ -227,20 +228,20 @@ Acceptance Criteria:
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │ Available Numbers (max 50 per page)                   │   │
 │  │ ┌─────────────────────────────────────────────────┐ │   │
-│  │ │ +1 (555) 123-4567    200 credits/mo  [Select] │ │   │
-│  │ │ +1 (555) 987-6543    200 credits/mo  [Select] │ │   │
-│  │ │ +1 (212) 555-0199    500 credits/mo  [Select]│ │   │
+│  │ │ +1 (555) 123-4567    Included         [Select] │ │   │
+│  │ │ +1 (555) 987-6543    80 credits/mo    [Select] │ │   │
+│  │ │ +1 (212) 555-0199    120 credits/mo  [Select]│ │   │
 │  │ └─────────────────────────────────────────────────┘ │   │
 │  │                                                      │   │
 │  │ [< Previous]  Page 1 of 10  [Next >]                 │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                              │
 │  Your Balance: 1,500 credits                                │
-│  Selected: +1 (555) 123-4567 (200 credits/month)           │
+│  Selected: +1 (555) 123-4567 (included with paid plan)    │
 │                                                              │
-│  ⚠️ By purchasing, you agree to being charged monthly.     │
+│  ⚠️ Additional numbers use credits each rental month.      │
 │    If you cancel, the number will be released immediately  │
-│    and you will not be refunded for the current period.   │
+│    and the current period is not refunded.               │
 │                                                              │
 │  [ Purchase Number ]  [Connect Existing]  [Close]           │
 │                                                              │
@@ -258,14 +259,14 @@ Acceptance Criteria:
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ +1 (555) 123-4567        Status: Active (used)      │  │
 │  │ Assigned to: Sales Agent                             │  │
-│  │ Monthly: 200 credits                                 │  │
+│  │ Included with paid plan                              │  │
 │  │ [Assign] [Release]                                  │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ +1 (555) 987-6543        Status: Unused             │  │
 │  │ Not assigned to any agent                           │  │
-│  │ Monthly: 200 credits                                 │  │
+│  │ Monthly: 80 credits (additional US local number)     │  │
 │  │ [Assign to Agent] [Release]                         │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                              │
@@ -279,7 +280,7 @@ Acceptance Criteria:
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  Number: +1 (555) 123-4567                                  │
-│  Monthly Cost: 200 credits                                  │
+│  Monthly Cost: included, or 80 credits if additional       │
 │                                                              │
 │  ⚠️ WARNING: This number is assigned to "Sales Agent"       │
 │  Release is irreversible and the same number may not be      │
@@ -321,9 +322,12 @@ Acceptance Criteria:
 - Platform-purchased ownership remains subject to the organization's
   `max_phone_numbers` entitlement; customer-managed imports are excluded and
   the search result limit is separate from the platform ownership limit.
-- The frontend is US-only for now. The backend forwards country-aware searches
-  to Twilio and maps `contains`, `begins_with`, and `ends_with` to Twilio's
-  `%pattern%`, `+pattern`, and `pattern$` search expressions.
+- Platform-provided number search is US-only in v1 and rejects non-US API
+  requests. The Twilio adapter remains country-aware for provider-level
+  operations, but the customer-facing service does not expose international
+  inventory until its rate and purchase policy are approved. Search maps
+  `contains`, `begins_with`, and `ends_with` to Twilio's `%pattern%`,
+  `+pattern`, and `pattern$` search expressions.
 
 ### D4: No Local Pool ✓
 - Direct integration with Twilio APIs; voice media via `voice-ws` Media Streams
@@ -341,7 +345,7 @@ Acceptance Criteria:
 
 - Number porting (transferring existing numbers)
 - SMS functionality
-- International number purchasing in the frontend (backend search is country-aware)
+- International platform-provided number search and purchase (customer-owned Twilio imports remain separate)
 - Bulk purchases
 - Custom search filters beyond API capabilities
 
@@ -363,9 +367,10 @@ Acceptance Criteria:
 ### Pricing Tiers (in credits)
 | Number Type | Monthly Cost |
 |-------------|--------------|
-| Local | 200 credits by default |
-| Mobile | 200 credits by default |
-| Toll-Free | 500 credits by default |
+| US local | First platform-provided line included with a paid plan; each additional line is 80 credits per rental month |
+| Legacy non-US local | 200 credits per rental month for existing platform rentals; new platform purchases are not available in v1 |
+| Mobile | Legacy existing rentals only: 200 credits per rental month; new platform purchases are disabled in v1 |
+| Toll-Free | 120 credits by default |
 
 ### Credit Purchase Flow
 - Users buy credits via Stripe (existing)
@@ -424,7 +429,7 @@ Search for phone numbers available for purchase from the provider.
 **Request Example:**
 
 ```bash
-curl -X GET "http://localhost:8000/api/v1/phone-numbers/available?country_code=US&phone_number_type=local&area_code=555&contains=480&search_mode=begins_with" \
+curl -X GET "http://localhost:8000/api/v1/phone-numbers/available?organization_id=<org-id>&country_code=US&phone_number_type=local&area_code=555&contains=480&search_mode=begins_with" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -438,7 +443,8 @@ curl -X GET "http://localhost:8000/api/v1/phone-numbers/available?country_code=U
       "phone_number_type": "local",
       "country_code": "US",
       "area_code": "555",
-      "monthly_cost_credits": 200,
+      "monthly_cost_credits": 0,
+      "is_included_in_plan": true,
       "capabilities": {
         "voice": true,
         "sms": false,
@@ -520,7 +526,8 @@ curl -X POST "http://localhost:8000/api/v1/phone-numbers/purchase?organization_i
     "phone_number_type": "local",
     "country_code": "US",
     "area_code": "555",
-    "monthly_cost_credits": 200,
+    "monthly_cost_credits": 80,
+    "is_included_in_plan": false,
     "status": "purchased",
     "assigned_agent_id": null,
     "is_incoming_enabled": true,
@@ -646,7 +653,8 @@ curl -X GET "http://localhost:8000/api/v1/phone-numbers?organization_id=<org_uui
       "phone_number_type": "local",
       "country_code": "US",
       "area_code": "555",
-      "monthly_cost_credits": 200,
+      "monthly_cost_credits": 80,
+      "is_included_in_plan": false,
       "status": "active",
       "assigned_agent_id": "abc12345-6789-0abc-def0-123456789abc",
       "is_incoming_enabled": true,
@@ -763,7 +771,8 @@ curl -X POST "http://localhost:8000/api/v1/phone-numbers/123e4567-e89b-12d3-a456
     "phone_number_type": "local",
     "country_code": "US",
     "area_code": "555",
-    "monthly_cost_credits": 200,
+      "monthly_cost_credits": 80,
+      "is_included_in_plan": false,
     "status": "active",
     "assigned_agent_id": "abc12345-6789-0abc-def0-123456789abc",
     "is_incoming_enabled": true,
@@ -852,11 +861,23 @@ call Twilio's release API.
 
 ### Credit Pricing
 
-The initial seeded defaults are 200 credits/month for local and mobile numbers
-and 500 credits/month for toll-free numbers. Platform administrators can
-change the enabled system-pricing values; search and purchase responses return
-the authoritative current value. International number purchasing is not
-exposed in the v1 frontend.
+The launch packages include one US local platform number on request. The
+included number is not provisioned automatically and uses zero credits for its
+monthly rental. Each additional platform-provided US local number uses 80
+credits per rental month ($2 equivalent at 40 credits per dollar); those
+credits come from the same balance as call usage. All paid launch plans allow
+additional numbers without a fixed count cap, subject to available credits.
+Customer-owned Twilio numbers are not charged platform rental credits and do
+not count toward the platform-purchased number entitlement. A carrier number
+from T-Mobile, Verizon, or another PSTN provider cannot be connected directly;
+forward its calls to an attached platform number, or connect a number already
+owned in Twilio.
+
+Other number types retain their system-pricing defaults (mobile: 200
+credits/month; toll-free: 120 credits/month). Platform administrators can
+change enabled system-pricing values; search and purchase responses return the
+authoritative current value. International number purchasing is not exposed in
+the v1 frontend.
 
 ---
 

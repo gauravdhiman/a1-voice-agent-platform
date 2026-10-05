@@ -1,5 +1,9 @@
 # Epic B Status — Messaging, SEO & Analytics (`codex/messaging-seo`)
 
+> This is a historical delivery record. Its $79 public price anchor has been
+> replaced with the approved $49/month starting price; the current copy is in
+> the website and launch billing runbook.
+
 **Base:** `origin/codex/controlled-saas-launch` @ `8291a06` → target same.
 **State:** implemented + verified. Not committed (awaiting the standing
 launch-line authorization: commit → PR → squash-merge).

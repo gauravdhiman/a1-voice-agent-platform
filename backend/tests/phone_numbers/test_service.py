@@ -24,6 +24,17 @@ def phone_number_service(mock_supabase_client):
         service.billing_service = MagicMock()
         service.entitlement_service = MagicMock()
         service.entitlement_service.assert_limit = AsyncMock()
+        service.entitlement_service.get_org_entitlements = AsyncMock(
+            return_value=MagicMock(
+                is_entitled=True,
+                plan_product_slug="starter",
+                cancel_at_period_end=False,
+                access_until=None,
+            )
+        )
+        # Existing tests exercise paid rentals unless they explicitly model
+        # an organization with its first included US local line available.
+        service._has_active_included_us_local_number = AsyncMock(return_value=True)
 
         yield service
 
@@ -159,12 +170,125 @@ class TestPhoneNumberServiceSearch:
             assert error is None
             assert len(result.items) == 1
             assert result.items[0].phone_number == "+15551234567"
-            assert result.items[0].monthly_cost_credits == 200
+            assert result.items[0].monthly_cost_credits == 80
 
     @pytest.mark.asyncio
-    async def test_search_returns_empty_when_not_configured(self, phone_number_service):
-        """Returns empty list when Twilio is not configured."""
+    async def test_search_prices_first_us_local_line_as_included(
+        self,
+        phone_number_service,
+        sample_org_id,
+        sample_available_number,
+    ):
+        """The first US local platform number is returned at zero credits."""
         from shared.organization.phone_number_models import PhoneNumberSearchRequest
+
+        phone_number_service._has_active_included_us_local_number = AsyncMock(
+            return_value=False
+        )
+        phone_number_service._has_active_paid_plan_allowance = AsyncMock(
+            return_value=True
+        )
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=80)
+        with patch.object(phone_number_service, "twilio_service") as mock_twilio:
+            mock_twilio.is_configured.return_value = True
+            mock_twilio.search_available_numbers.return_value = [
+                sample_available_number
+            ]
+
+            response, error = await phone_number_service.search_available(
+                PhoneNumberSearchRequest(country_code="US"), sample_org_id
+            )
+
+        assert error is None
+        assert response.items[0].is_included_in_plan is True
+        assert response.items[0].monthly_cost_credits == 0
+
+    @pytest.mark.asyncio
+    async def test_free_plan_never_qualifies_for_the_included_us_local_line(
+        self, phone_number_service, sample_org_id
+    ):
+        phone_number_service._has_active_included_us_local_number = AsyncMock(
+            return_value=False
+        )
+        phone_number_service._has_active_paid_plan_allowance = AsyncMock(
+            return_value=False
+        )
+
+        qualifies = await phone_number_service._qualifies_for_included_us_local_number(
+            sample_org_id, PhoneNumberType.LOCAL, "US"
+        )
+
+        assert qualifies is False
+        phone_number_service._has_active_paid_plan_allowance.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_free_plan_can_search_but_does_not_get_included_number(
+        self,
+        phone_number_service,
+        sample_org_id,
+        sample_available_number,
+    ):
+        """Catalog search is read-only; the free plan cannot claim a paid benefit."""
+        from shared.organization.phone_number_models import PhoneNumberSearchRequest
+
+        phone_number_service._has_active_included_us_local_number = AsyncMock(
+            return_value=False
+        )
+        phone_number_service._has_active_paid_plan_allowance = AsyncMock(
+            return_value=False
+        )
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=80)
+        with patch.object(phone_number_service, "twilio_service") as mock_twilio:
+            mock_twilio.is_configured.return_value = True
+            mock_twilio.search_available_numbers.return_value = [
+                sample_available_number
+            ]
+
+            response, error = await phone_number_service.search_available(
+                PhoneNumberSearchRequest(country_code="US"), sample_org_id
+            )
+
+        assert error is None
+        assert len(response.items) == 1
+        assert response.items[0].is_included_in_plan is False
+        assert response.items[0].monthly_cost_credits == 80
+        phone_number_service.entitlement_service.assert_limit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_search_prices_additional_us_local_line_at_system_rate(
+        self,
+        phone_number_service,
+        sample_org_id,
+        sample_available_number,
+    ):
+        """An active included line makes later US local lines paid rentals."""
+        from shared.organization.phone_number_models import PhoneNumberSearchRequest
+
+        phone_number_service._has_active_included_us_local_number = AsyncMock(
+            return_value=True
+        )
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=80)
+        with patch.object(phone_number_service, "twilio_service") as mock_twilio:
+            mock_twilio.is_configured.return_value = True
+            mock_twilio.search_available_numbers.return_value = [
+                sample_available_number
+            ]
+
+            response, error = await phone_number_service.search_available(
+                PhoneNumberSearchRequest(country_code="US"), sample_org_id
+            )
+
+        assert error is None
+        assert response.items[0].is_included_in_plan is False
+        assert response.items[0].monthly_cost_credits == 80
+
+    @pytest.mark.asyncio
+    async def test_search_reports_unavailable_when_not_configured(
+        self, phone_number_service
+    ):
+        """An unavailable provider is not misreported as empty inventory."""
+        from shared.organization.phone_number_models import PhoneNumberSearchRequest
+        from src.phone_numbers.service import PHONE_NUMBER_SEARCH_UNAVAILABLE
 
         with patch.object(phone_number_service, "twilio_service") as mock_twilio:
             mock_twilio.is_configured.return_value = False
@@ -173,29 +297,35 @@ class TestPhoneNumberServiceSearch:
 
             result, error = await phone_number_service.search_available(request)
 
-            assert error is None
+            assert error == PHONE_NUMBER_SEARCH_UNAVAILABLE
             assert result.items == []
             assert result.total_count == 0
 
     @pytest.mark.asyncio
     async def test_search_handles_exception(
-        self, phone_number_service, mock_supabase_client
+        self, phone_number_service, mock_supabase_client, caplog
     ):
-        """Returns error message when search fails."""
+        """Provider diagnostics stay out of public errors and logs."""
         from shared.organization.phone_number_models import PhoneNumberSearchRequest
+        from src.phone_numbers.service import PHONE_NUMBER_SEARCH_UNAVAILABLE
+
+        provider_diagnostic = (
+            "HTTP 401 account AC1234567890 authentication failed; credentials inactive"
+        )
 
         with patch.object(phone_number_service, "twilio_service") as mock_twilio:
             mock_twilio.is_configured.return_value = True
             mock_twilio.search_available_numbers.side_effect = Exception(
-                "Twilio API error"
+                provider_diagnostic
             )
 
             request = PhoneNumberSearchRequest()
 
             result, error = await phone_number_service.search_available(request)
 
-            assert error is not None
-            assert "Failed to search available numbers" in error
+            assert error == PHONE_NUMBER_SEARCH_UNAVAILABLE
+            assert provider_diagnostic not in error
+            assert "AC1234567890" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_search_with_toll_free_type(self, phone_number_service):
@@ -222,6 +352,137 @@ class TestPhoneNumberServicePurchase:
     """Test cases for phone number purchase."""
 
     @pytest.mark.asyncio
+    async def test_free_plan_cannot_claim_an_included_us_line(
+        self, phone_number_service, sample_org_id
+    ):
+        """A positive number limit does not create a Free-plan line benefit."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        phone_number_service._has_active_included_us_local_number = AsyncMock(
+            return_value=False
+        )
+        phone_number_service._has_active_paid_plan_allowance = AsyncMock(
+            return_value=False
+        )
+        phone_number_service._phone_number_limit_error = AsyncMock(return_value=None)
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(
+                    phone_number="+15551234567",
+                    expected_included_in_plan=True,
+                ),
+            )
+
+        assert result is None
+        assert error and "Search again" in error
+        phone_number_service.billing_service.consume_credits.assert_not_called()
+        twilio.purchase_phone_number.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_first_us_local_purchase_uses_plan_allowance(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+    ):
+        """The first US local line is provisioned without a credit debit."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        now = datetime.now(timezone.utc)
+        phone_number_service._has_active_included_us_local_number = AsyncMock(
+            return_value=False
+        )
+        phone_number_service.billing_service.get_credit_balance = AsyncMock(
+            return_value=MagicMock(total_credits=2500)
+        )
+        table = MagicMock()
+        mock_supabase_client.table.return_value = table
+        table.insert.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(sample_phone_number_id)}]
+        )
+        purchased_row = {
+            "id": str(sample_phone_number_id),
+            "organization_id": str(sample_org_id),
+            "phone_number": "+15551234567",
+            "provider": "twilio",
+            "provider_sid": "PN1234567890",
+            "phone_number_type": "local",
+            "country_code": "US",
+            "area_code": "555",
+            "monthly_cost_credits": 0,
+            "is_included_in_plan": True,
+            "status": "purchased",
+            "assigned_agent_id": None,
+            "is_incoming_enabled": True,
+            "is_outgoing_enabled": False,
+            "billing_status": "active",
+            "billing_mode": "platform_rental",
+            "provisioning_source": "platform",
+            "management_mode": "platform_managed",
+            "configuration_status": "configured",
+            "next_billing_at": (now + timedelta(days=30)).isoformat(),
+            "purchased_at": now.isoformat(),
+            "last_verified_at": now.isoformat(),
+            "cancelled_at": None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+        table.update.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[purchased_row]
+        )
+
+        with patch.object(phone_number_service, "twilio_service") as mock_twilio:
+            mock_twilio.is_configured.return_value = True
+            mock_twilio.purchase_phone_number.return_value = MagicMock(
+                sid="PN1234567890", phone_number="+15551234567"
+            )
+
+            response, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(
+                    phone_number="+15551234567",
+                    expected_included_in_plan=True,
+                ),
+            )
+
+        assert error is None
+        assert response is not None
+        assert response.credit_balance_after == 2500
+        assert response.phone_number.is_included_in_plan is True
+        assert response.phone_number.monthly_cost_credits == 0
+        phone_number_service.billing_service.consume_credits.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_stale_included_selection_does_not_charge(
+        self, phone_number_service, sample_org_id
+    ):
+        """A concurrent included-line claim asks the user to refresh pricing."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        phone_number_service._has_active_included_us_local_number = AsyncMock(
+            return_value=True
+        )
+        with patch.object(phone_number_service, "twilio_service") as mock_twilio:
+            mock_twilio.is_configured.return_value = True
+
+            response, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(
+                    phone_number="+15551234567",
+                    expected_included_in_plan=True,
+                ),
+            )
+
+        assert response is None
+        assert error is not None and "Search again" in error
+        phone_number_service.billing_service.consume_credits.assert_not_called()
+        mock_twilio.purchase_phone_number.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_purchase_number_success(
         self,
         phone_number_service,
@@ -243,6 +504,10 @@ class TestPhoneNumberServicePurchase:
         phone_number_service.billing_service.consume_credits = AsyncMock(
             return_value=MagicMock(success=True, balance_after=800)
         )
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=80)
+        phone_number_service._has_active_included_us_local_number = AsyncMock(
+            return_value=True
+        )
 
         with patch.object(phone_number_service, "twilio_service") as mock_twilio:
             mock_twilio.is_configured.return_value = True
@@ -261,7 +526,7 @@ class TestPhoneNumberServicePurchase:
                     "phone_number_type": "local",
                     "country_code": "US",
                     "area_code": "555",
-                    "monthly_cost_credits": 200,
+                    "monthly_cost_credits": 80,
                     "status": "purchased",
                     "assigned_agent_id": None,
                     "is_incoming_enabled": True,
@@ -272,9 +537,12 @@ class TestPhoneNumberServicePurchase:
                     "updated_at": now.isoformat(),
                 }
             ]
-            mock_supabase_client.table.return_value.insert.return_value.execute.return_value = (
-                mock_response
-            )
+            table = mock_supabase_client.table.return_value
+            table.execute.side_effect = [
+                MagicMock(data=[]),
+                mock_response,
+                MagicMock(data=mock_response.data),
+            ]
 
             request = PhoneNumberPurchaseRequest(
                 phone_number="+15551234567",
@@ -282,8 +550,9 @@ class TestPhoneNumberServicePurchase:
                 phone_number_type=PhoneNumberType.LOCAL,
             )
 
+            request_key = "client-purchase-key"
             result, error = await phone_number_service.purchase_number(
-                sample_org_id, request
+                sample_org_id, request, idempotency_key=request_key
             )
 
             assert error is None
@@ -294,8 +563,11 @@ class TestPhoneNumberServicePurchase:
             consume_request = (
                 phone_number_service.billing_service.consume_credits.call_args.args[0]
             )
-            assert consume_request.event_name == "phone_number_local_month"
+            assert consume_request.event_name == "phone_number_us_local_month"
             assert consume_request.idempotency_key
+            assert consume_request.idempotency_key != request_key
+            inserted_row = table.insert.call_args.args[0]
+            assert inserted_row["provisioning_idempotency_key"] == request_key
 
     @pytest.mark.asyncio
     async def test_purchase_uses_current_system_rate_and_balance(
@@ -358,7 +630,7 @@ class TestPhoneNumberServicePurchase:
         consume_request = (
             phone_number_service.billing_service.consume_credits.call_args.args[0]
         )
-        assert consume_request.event_name == "phone_number_local_month"
+        assert consume_request.event_name == "phone_number_us_local_month"
         assert consume_request.metadata["cost"] == 123
 
     @pytest.mark.asyncio
@@ -411,7 +683,9 @@ class TestPhoneNumberServicePurchase:
             )
 
             assert result is None
-            assert error == "Phone number provider not configured"
+            from src.phone_numbers.service import PHONE_NUMBER_PURCHASE_UNAVAILABLE
+
+            assert error == PHONE_NUMBER_PURCHASE_UNAVAILABLE
 
 
 class TestPhoneNumberServiceGetOrganizationNumbers:
@@ -1270,7 +1544,89 @@ class TestPhoneNumberServiceGetCreditsForType:
     async def test_credits_for_local_number(self, phone_number_service):
         """Returns correct credits for local number."""
         result = await phone_number_service._get_credits_for_type(PhoneNumberType.LOCAL)
+        assert result == 80
+
+    @pytest.mark.asyncio
+    async def test_legacy_non_us_local_rate_is_preserved(self, phone_number_service):
+        """Existing non-US local rentals retain their 200-credit rate."""
+        result = await phone_number_service._get_credits_for_type(
+            PhoneNumberType.LOCAL, "CA"
+        )
         assert result == 200
+
+    @pytest.mark.asyncio
+    async def test_platform_number_search_rejects_non_us_country(
+        self, phone_number_service
+    ):
+        """The v1 platform inventory exposes US numbers only."""
+        from shared.organization.phone_number_models import PhoneNumberSearchRequest
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            response, error = await phone_number_service.search_available(
+                PhoneNumberSearchRequest(country_code="CA")
+            )
+
+        assert response.items == []
+        assert "Only US platform-provided" in error
+        twilio.search_available_numbers.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_platform_number_search_rejects_mobile_in_v1(
+        self, phone_number_service
+    ):
+        """Search does not expose an unpriced mobile rental type in v1."""
+        from shared.organization.phone_number_models import PhoneNumberSearchRequest
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            response, error = await phone_number_service.search_available(
+                PhoneNumberSearchRequest(phone_number_type=PhoneNumberType.MOBILE)
+            )
+
+        assert response.items == []
+        assert "Mobile phone numbers are not available" in error
+        twilio.search_available_numbers.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_platform_number_purchase_rejects_non_us_country(
+        self, phone_number_service, sample_org_id
+    ):
+        """The API cannot bypass the US-only number market with a direct call."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        phone_number_service.billing_service.consume_credits = AsyncMock()
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(
+                    phone_number="+14155551234", country_code="CA"
+                ),
+            )
+
+        assert result is None
+        assert "Only US platform-provided" in error
+        twilio.is_configured.assert_not_called()
+        phone_number_service.billing_service.consume_credits.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_platform_number_purchase_rejects_mobile_in_v1(
+        self, phone_number_service, sample_org_id
+    ):
+        """A direct request cannot bypass the mobile-number launch restriction."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(
+                    phone_number="+15551234567",
+                    phone_number_type=PhoneNumberType.MOBILE,
+                ),
+            )
+
+        assert result is None
+        assert "Mobile phone numbers are not available" in error
+        twilio.is_configured.assert_not_called()
+        phone_number_service.billing_service.consume_credits.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_credits_for_toll_free_number(self, phone_number_service):
@@ -1278,7 +1634,7 @@ class TestPhoneNumberServiceGetCreditsForType:
         result = await phone_number_service._get_credits_for_type(
             PhoneNumberType.TOLL_FREE
         )
-        assert result == 500
+        assert result == 120
 
     @pytest.mark.asyncio
     async def test_credits_for_mobile_number(self, phone_number_service):
@@ -1299,16 +1655,186 @@ class TestPhoneNumberRentalBilling:
     """Tests for recurring monthly phone-number rental enforcement."""
 
     @pytest.mark.asyncio
-    async def test_process_due_rentals_charges_current_system_rate(
+    async def test_included_us_local_line_never_debits_and_recovers_past_due_state(
         self,
         phone_number_service,
         mock_supabase_client,
         sample_purchased_phone_number,
     ):
+        """Included rentals stay active without credits, even after old arrears."""
+        now = datetime.now(timezone.utc)
+        row = {
+            **sample_purchased_phone_number,
+            "is_included_in_plan": True,
+            "monthly_cost_credits": 0,
+            "next_billing_at": (now - timedelta(days=1)).isoformat(),
+            "billing_status": "past_due",
+            "billing_grace_ends_at": (now - timedelta(days=1)).isoformat(),
+        }
+        table = MagicMock()
+        mock_supabase_client.table.return_value = table
+        table.select.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+        phone_number_service.billing_service.consume_credits = AsyncMock()
+
+        result = await phone_number_service.process_due_rentals(now=now)
+
+        assert result.processed == 1
+        assert result.charged == 0
+        assert result.released == 0
+        phone_number_service.billing_service.consume_credits.assert_not_called()
+        update = table.update.call_args.args[0]
+        assert update["monthly_cost_credits"] == 0
+        assert update["billing_status"] == "active"
+        assert update["billing_grace_ends_at"] is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("entitled", "plan_slug", "cancel_at_period_end", "access_days", "charged"),
+        [
+            (True, "starter", False, None, False),
+            (True, "growth", True, 1, False),
+            (True, "growth", True, -1, True),
+            (True, "growth", True, None, True),
+            (False, "free", False, None, True),
+            (True, "free", False, None, True),
+        ],
+    )
+    async def test_included_number_converts_to_paid_rental_after_plan_access_ends(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_purchased_phone_number,
+        entitled,
+        plan_slug,
+        cancel_at_period_end,
+        access_days,
+        charged,
+        caplog,
+    ):
+        """The included line stays free only while its paid-plan access applies."""
+        now = datetime.now(timezone.utc)
+        access_until = (
+            (now + timedelta(days=access_days)).isoformat()
+            if access_days is not None
+            else None
+        )
+        phone_number_service.entitlement_service.get_org_entitlements = AsyncMock(
+            return_value=MagicMock(
+                is_entitled=entitled,
+                plan_product_slug=plan_slug,
+                cancel_at_period_end=cancel_at_period_end,
+                access_until=access_until,
+            )
+        )
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=80)
+        phone_number_service.billing_service.consume_credits = AsyncMock(
+            return_value=MagicMock(success=True, balance_after=920)
+        )
+        row = {
+            **sample_purchased_phone_number,
+            "is_included_in_plan": True,
+            "monthly_cost_credits": 0,
+            "billing_status": "active",
+            "next_billing_at": (now - timedelta(days=1)).isoformat(),
+        }
+        table = mock_supabase_client.table.return_value
+        table.select.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+
+        result = await phone_number_service.process_due_rentals(now=now)
+
+        assert result.charged == int(charged)
+        if charged:
+            phone_number_service.billing_service.consume_credits.assert_awaited_once()
+            update = table.update.call_args.args[0]
+            assert update["is_included_in_plan"] is False
+            assert update["monthly_cost_credits"] == 80
+        else:
+            phone_number_service.billing_service.consume_credits.assert_not_awaited()
+            update = table.update.call_args.args[0]
+            assert update["monthly_cost_credits"] == 0
+        if cancel_at_period_end and access_until is None:
+            assert "missing access_until" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_paid_plan_reactivation_restores_allowance_to_oldest_local_line(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_purchased_phone_number,
+        sample_phone_number_id,
+        sample_org_id,
+    ):
+        """A returning paid plan gets its included line without a rental debit."""
+        now = datetime.now(timezone.utc)
+        row = {
+            **sample_purchased_phone_number,
+            "id": str(sample_phone_number_id),
+            "organization_id": str(sample_org_id),
+            "phone_number_type": "local",
+            "country_code": "US",
+            "management_mode": "platform_managed",
+            "billing_mode": "platform_rental",
+            "is_included_in_plan": False,
+            "status": "purchased",
+            "next_billing_at": (now - timedelta(days=1)).isoformat(),
+        }
+        candidate = {
+            "id": str(sample_phone_number_id),
+            "assigned_agent_id": None,
+            "configuration_status": "configured",
+        }
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [
+            MagicMock(data=[row]),
+            MagicMock(data=[]),
+            MagicMock(data=[candidate]),
+            MagicMock(data=[candidate]),
+        ]
+        phone_number_service._has_active_paid_plan_allowance = AsyncMock(
+            return_value=True
+        )
+        phone_number_service.billing_service.consume_credits = AsyncMock()
+
+        with patch(
+            "src.phone_numbers.service.platform_phone_number_settings_service"
+        ) as settings_service:
+            settings_service.get_settings = AsyncMock(
+                return_value=MagicMock(billing_grace_period_days=7)
+            )
+            result = await phone_number_service.process_due_rentals(now=now)
+
+        assert result.charged == 0
+        assert result.processed == 1
+        phone_number_service.billing_service.consume_credits.assert_not_awaited()
+        update = table.update.call_args.args[0]
+        assert update["is_included_in_plan"] is True
+        assert update["monthly_cost_credits"] == 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("country_code", "expected_event"),
+        [
+            ("US", "phone_number_us_local_month"),
+            ("CA", "phone_number_local_month"),
+        ],
+    )
+    async def test_process_due_rentals_charges_current_system_rate(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_purchased_phone_number,
+        country_code,
+        expected_event,
+    ):
         """A due number is charged using the current configured monthly rate."""
         due_at = datetime.now(timezone.utc) - timedelta(days=1)
         row = {
             **sample_purchased_phone_number,
+            "country_code": country_code,
             "next_billing_at": due_at.isoformat(),
             "billing_status": "active",
         }
@@ -1328,7 +1854,7 @@ class TestPhoneNumberRentalBilling:
         consume_request = (
             phone_number_service.billing_service.consume_credits.call_args.args[0]
         )
-        assert consume_request.event_name == "phone_number_local_month"
+        assert consume_request.event_name == expected_event
         assert consume_request.metadata["cost"] == 321
         assert consume_request.idempotency_key.startswith("phone-rental:")
         update_data = table.update.call_args.args[0]
@@ -1623,6 +2149,113 @@ class TestPhoneNumberServiceLifecycleBranches:
         phone_number_service.billing_service.consume_credits.assert_not_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", ["cancelled", "disconnected"])
+    async def test_purchase_idempotency_rejects_terminal_attempts(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_purchased_phone_number,
+        status,
+    ):
+        """Terminal attempts require a new key so refunded debits cannot replay."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        row = {
+            **sample_purchased_phone_number,
+            "status": status,
+            "provisioning_idempotency_key": "terminal-attempt",
+        }
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[row]
+        )
+
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            result, error = await phone_number_service.purchase_number(
+                sample_org_id,
+                PhoneNumberPurchaseRequest(phone_number="+15551234567"),
+                idempotency_key="terminal-attempt",
+            )
+
+        assert result is None
+        assert error == (
+            "This purchase attempt has ended. Start a new purchase with a fresh idempotency key."
+        )
+        phone_number_service.billing_service.consume_credits.assert_not_called()
+        twilio.purchase_phone_number.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_retry_after_failed_row_save_uses_a_fresh_ledger_key(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+        sample_purchased_phone_number,
+    ):
+        """A refunded debit key is not replayed as a free number on retry."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+
+        phone_number_service._phone_number_limit_error = AsyncMock(return_value=None)
+        phone_number_service._has_active_included_us_local_number = AsyncMock(
+            return_value=True
+        )
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=80)
+        phone_number_service.billing_service.consume_credits = AsyncMock(
+            side_effect=[
+                MagicMock(success=True, balance_after=920),
+                MagicMock(success=True, balance_after=840),
+            ]
+        )
+        phone_number_service.billing_service.refund_credits = AsyncMock()
+
+        table = mock_supabase_client.table.return_value
+        purchased_row = {
+            **sample_purchased_phone_number,
+            "id": str(sample_phone_number_id),
+            "organization_id": str(sample_org_id),
+            "status": "purchased",
+            "phone_number": "+15551234567",
+            "monthly_cost_credits": 80,
+            "provisioning_idempotency_key": "client-key",
+        }
+        table.execute.side_effect = [
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[{"id": str(sample_phone_number_id)}]),
+            MagicMock(data=[purchased_row]),
+        ]
+
+        request = PhoneNumberPurchaseRequest(phone_number="+15551234567")
+        with patch.object(phone_number_service, "twilio_service") as twilio:
+            twilio.is_configured.return_value = True
+            twilio.purchase_phone_number.return_value = MagicMock(sid="PN1234567890")
+
+            failed_result, failed_error = await phone_number_service.purchase_number(
+                sample_org_id, request, idempotency_key="client-key"
+            )
+            retry_result, retry_error = await phone_number_service.purchase_number(
+                sample_org_id, request, idempotency_key="client-key"
+            )
+
+        assert failed_result is None
+        assert failed_error == "Failed to save phone number provisioning record"
+        assert retry_error is None
+        assert retry_result is not None
+        debit_keys = [
+            call.args[0].idempotency_key
+            for call in phone_number_service.billing_service.consume_credits.call_args_list
+        ]
+        assert len(set(debit_keys)) == 2
+        assert all(key != "client-key" for key in debit_keys)
+        assert phone_number_service.billing_service.refund_credits.await_args.kwargs[
+            "idempotency_key"
+        ].endswith(debit_keys[0])
+        twilio.purchase_phone_number.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_purchase_idempotency_replays_completed_attempt_with_balance(
         self,
         phone_number_service,
@@ -1693,8 +2326,9 @@ class TestPhoneNumberServiceLifecycleBranches:
         self, phone_number_service, sample_org_id
     ):
         """Plan limits are enforced before the credit debit or provider call."""
-        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
         from src.billing.entitlement_models import EntitlementDenied
+
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
 
         phone_number_service.entitlement_service.assert_limit.side_effect = (
             EntitlementDenied("max_phone_numbers", "No phone number capacity")
@@ -1896,7 +2530,9 @@ class TestPhoneNumberServiceFailureCompensation:
             )
 
         assert result is None
-        assert "Failed to finalize phone number record" in error
+        from src.phone_numbers.service import PHONE_NUMBER_PURCHASE_UNAVAILABLE
+
+        assert error == PHONE_NUMBER_PURCHASE_UNAVAILABLE
         twilio.release_phone_number.assert_called_once_with("PN-compensate")
         phone_number_service.billing_service.refund_credits.assert_awaited_once()
 
@@ -1935,9 +2571,60 @@ class TestPhoneNumberServiceFailureCompensation:
             )
 
         assert result is None
-        assert "Failed to finalize phone number record" in error
+        from src.phone_numbers.service import PHONE_NUMBER_PURCHASE_UNAVAILABLE
+
+        assert error == PHONE_NUMBER_PURCHASE_UNAVAILABLE
         assert table.update.call_args.args[0]["status"] == "release_pending"
         phone_number_service.billing_service.refund_credits.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_compensation_state_failure_does_not_skip_credit_refund(
+        self,
+        phone_number_service,
+        mock_supabase_client,
+        sample_org_id,
+        sample_phone_number_id,
+        caplog,
+    ):
+        """A failed release-state write cannot bypass purchase credit refund."""
+        from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
+        from src.phone_numbers.service import PHONE_NUMBER_PURCHASE_UNAVAILABLE
+
+        phone_number_service._get_credits_for_type = AsyncMock(return_value=200)
+        phone_number_service.billing_service.consume_credits = AsyncMock(
+            return_value=MagicMock(success=True, balance_after=0)
+        )
+        phone_number_service.billing_service.refund_credits = AsyncMock()
+        table = mock_supabase_client.table.return_value
+        table.execute.side_effect = [
+            MagicMock(data=[{"id": str(sample_phone_number_id)}]),
+            MagicMock(data=[]),
+        ]
+
+        with patch.object(
+            phone_number_service,
+            "_set_release_pending",
+            side_effect=RuntimeError("database details"),
+        ) as persist_release_state:
+            with patch.object(phone_number_service, "twilio_service") as twilio:
+                twilio.is_configured.return_value = True
+                twilio.purchase_phone_number.return_value = MagicMock(
+                    sid="PN-sensitive", phone_number="+15551234567"
+                )
+                twilio.release_phone_number.side_effect = RuntimeError("provider down")
+                result, error = await phone_number_service.purchase_number(
+                    sample_org_id,
+                    PhoneNumberPurchaseRequest(phone_number="+15551234567"),
+                )
+
+        assert result is None
+        assert error == PHONE_NUMBER_PURCHASE_UNAVAILABLE
+        persist_release_state.assert_called_once()
+        phone_number_service.billing_service.refund_credits.assert_awaited_once()
+        assert "database details" not in caplog.text
+        assert "provider down" not in caplog.text
+        assert "PN-sensitive" not in caplog.text
+        assert "+15551234567" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_import_returns_database_error_for_unexpected_insert_failure(
@@ -1985,6 +2672,7 @@ class TestPhoneNumberServiceFailureCompensation:
         mock_supabase_client,
         sample_org_id,
         sample_phone_number_id,
+        caplog,
     ):
         """A provider failure before a SID exists still closes the local attempt."""
         from shared.organization.phone_number_models import PhoneNumberPurchaseRequest
@@ -2009,7 +2697,12 @@ class TestPhoneNumberServiceFailureCompensation:
             )
 
         assert result is None
-        assert "provider down" in error
+        from src.phone_numbers.service import PHONE_NUMBER_PURCHASE_UNAVAILABLE
+
+        assert error == PHONE_NUMBER_PURCHASE_UNAVAILABLE
+        assert "provider down" not in error
+        assert "provider down" not in caplog.text
+        assert "+15551234567" not in caplog.text
         assert table.update.call_args.args[0]["status"] == "cancelled"
         phone_number_service.billing_service.refund_credits.assert_awaited_once()
 

@@ -31,8 +31,8 @@ Production infrastructure for **247ai.live**:
 | `.env.prod.example` | Production env template (copy → `.env.prod`, gitignored) |
 | `.env.staging.example` | Staging env template — local app + cloud DB (copy → `.env.staging`, gitignored) |
 | `scripts/validate-staging.sh` | Local staging validator (migrate + release-data sync + `start.sh --env staging` + health checks) |
-| `scripts/deploy/sync-release-fixtures.sh` | Explicit release bootstrap for native tools and the three public demo agents |
-| `scripts/bootstrap-staging-db.sh` | Legacy/repair staging migrate + Stripe seed |
+| `scripts/deploy/sync-release-fixtures.sh` | Explicit release bootstrap for system-pricing meters, native tools, and the three public demo agents; preserves existing usage rates |
+| `scripts/bootstrap-staging-db.sh` | Legacy/repair staging migrations + approved credit-pack sync |
 | `scripts/deploy/` | Lower-level GCP, OCI, Alembic scripts |
 | `deploy/` | Docker compose, Caddyfile, Cloud Build stubs |
 | `scripts/worktree-stack.sh` | Full isolated local Supabase + application stack per worktree |

@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   formatPlanPrice,
+  friendlyPlanName,
   PlanCard,
   toPlanCardData,
 } from "@/components/billing/plan-card";
@@ -27,6 +29,15 @@ import type {
 import { toast } from "sonner";
 
 type BillingIntervalTab = "monthly" | "annual";
+
+function planFamilySlug(slug: string): string {
+  return slug
+    .toLowerCase()
+    .replace(/(?:[-_:]?(?:version|v)\d+)$/, "")
+    .replace(/(?:[-_:]?(?:monthly|month|annual|annually|year|yearly))$/, "")
+    .replace(/(?:[-_:]?plan)$/, "")
+    .replace(/[^a-z0-9]/g, "");
+}
 
 /**
  * Props for the customer-facing internal plan catalog.
@@ -66,6 +77,11 @@ export function PlanSelection({
   const [confirming, setConfirming] = useState(false);
   const [activeInterval, setActiveInterval] =
     useState<BillingIntervalTab>("monthly");
+  const targetCreditValue =
+    preview?.target_plan.entitlements.included_credits_per_billing_period
+      ?.value;
+  const targetIncludedCredits =
+    typeof targetCreditValue === "number" ? targetCreditValue : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -109,13 +125,37 @@ export function PlanSelection({
     [plans],
   );
 
-  const plansByInterval = useMemo(
-    () => ({
+  const plansByInterval = useMemo(() => {
+    const monthly = sortedPlans.filter(
+      (plan) => plan.billing_mode === "paid" && plan.billing_interval !== "annual",
+    );
+    const annual = sortedPlans.filter((plan) => {
+      if (plan.billing_mode !== "paid" || plan.billing_interval !== "annual") {
+        return false;
+      }
+      const annualFamily = planFamilySlug(plan.product_slug);
+      return monthly.some((monthlyPlan) => {
+        const monthlyFamily = planFamilySlug(monthlyPlan.product_slug);
+        const monthlyCredits = monthlyPlan.entitlements
+          .included_credits_per_billing_period?.value;
+        const annualCredits = plan.entitlements
+          .included_credits_per_billing_period?.value;
+        return (
+          monthlyFamily === annualFamily &&
+          monthlyPlan.currency.toUpperCase() === plan.currency.toUpperCase() &&
+          plan.price_amount_cents === monthlyPlan.price_amount_cents * 10 &&
+          typeof monthlyCredits === "number" &&
+          monthlyCredits > 0 &&
+          typeof annualCredits === "number" &&
+          annualCredits === monthlyCredits * 12
+        );
+      });
+    });
+    return {
       monthly: sortedPlans.filter((plan) => plan.billing_interval !== "annual"),
-      annual: sortedPlans.filter((plan) => plan.billing_interval === "annual"),
-    }),
-    [sortedPlans],
-  );
+      annual,
+    };
+  }, [sortedPlans]);
 
   useEffect(() => {
     if (
@@ -133,8 +173,7 @@ export function PlanSelection({
   const isCurrentPlan = (plan: CustomerPlanVersion): boolean =>
     currentSubscription?.plan_version_id === plan.id;
 
-  const planLabel = (plan: CustomerPlanVersion): string =>
-    plan.display_label || plan.product_name;
+  const planLabel = (plan: CustomerPlanVersion): string => friendlyPlanName(plan);
 
   const handlePlanSelection = async (plan: CustomerPlanVersion) => {
     if (isCurrentPlan(plan)) return;
@@ -163,7 +202,7 @@ export function PlanSelection({
       const result = await billingService.createVersionedSubscriptionCheckout({
         organization_id: organizationId,
         plan_version_id: plan.id,
-        success_url: `${origin}/organization/billing?org_id=${encodeURIComponent(organizationId)}&tab=manage&payment=success&session_id={CHECKOUT_SESSION_ID}`,
+        success_url: `${origin}/organization/billing?org_id=${encodeURIComponent(organizationId)}&tab=manage&payment=success&session_id={CHECKOUT_SESSION_ID}&plan_version_id=${encodeURIComponent(plan.id)}`,
         cancel_url: `${origin}/organization/billing?org_id=${encodeURIComponent(organizationId)}&tab=plans&payment=cancelled`,
       });
 
@@ -196,7 +235,7 @@ export function PlanSelection({
         organization_id: organizationId,
         transition_id: preview.transition_id,
         target_plan_version_id: preview.target_plan.id,
-        success_url: `${origin}/organization/billing?org_id=${encodeURIComponent(organizationId)}&tab=overview&payment=success`,
+        success_url: `${origin}/organization/billing?org_id=${encodeURIComponent(organizationId)}&tab=overview&payment=success&session_id={CHECKOUT_SESSION_ID}&plan_version_id=${encodeURIComponent(preview.target_plan.id)}`,
         cancel_url: `${origin}/organization/billing?org_id=${encodeURIComponent(organizationId)}&tab=plans&payment=cancelled`,
       });
 
@@ -270,6 +309,34 @@ export function PlanSelection({
         </p>
       </div>
 
+      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+        <p>
+          Every paid plan includes one US local business number when you request
+          it. Additional platform-provided US local numbers use 80 credits per
+          month ($2 equivalent each) from the same balance used for calls, so
+          they can reduce available call time. Paid plans do not set a fixed
+          count limit for numbers. Connecting a Twilio number you already own
+          has no platform rental charge.
+        </p>
+        <p className="mt-2">
+          All plans include our standard voice profile. Optional provider voices
+          use BYOK (bring your own keys): you connect your provider account, the
+          provider bills you directly, and 24x7 AI does not charge for that
+          provider&apos;s voice usage. Plan call minutes and platform phone-number
+          rentals still use your 24x7 AI credit balance.
+        </p>
+        <p className="mt-2">
+          Need more volume or several locations?{" "}
+          <Link
+            className="font-medium text-primary underline underline-offset-4"
+            href={`/contact?org_id=${encodeURIComponent(organizationId)}`}
+          >
+            Talk with us about a tailored plan
+          </Link>
+          .
+        </p>
+      </div>
+
       {plansByInterval.monthly.length > 0 &&
         plansByInterval.annual.length > 0 && (
           <div className="flex justify-center gap-2">
@@ -283,12 +350,12 @@ export function PlanSelection({
               variant={activeInterval === "annual" ? "default" : "outline"}
               onClick={() => setActiveInterval("annual")}
             >
-              Annual
+              Annual · 2 months free
             </Button>
           </div>
         )}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         {plansForInterval.map((plan) => {
           const isLoading = loadingPlanId === plan.id;
           const current = isCurrentPlan(plan);
@@ -298,7 +365,11 @@ export function PlanSelection({
               key={plan.id}
               plan={toPlanCardData(plan)}
               badge={
-                current ? <Badge variant="default">Current plan</Badge> : null
+                current ? (
+                  <Badge variant="default">Current plan</Badge>
+                ) : plan.billing_interval === "annual" ? (
+                  <Badge variant="secondary">2 months free</Badge>
+                ) : null
               }
               className={current ? "border-primary shadow-lg" : undefined}
               testId={`billing-plan-card-${plan.id}`}
@@ -387,14 +458,22 @@ export function PlanSelection({
                 </AlertDescription>
               </Alert>
 
-              {preview.credit_delta !== null ? (
+              {targetIncludedCredits !== null ? (
                 <p>
-                  Included credits will{" "}
-                  {preview.credit_delta >= 0 ? "increase" : "decrease"} by{" "}
                   <strong>
-                    {Math.abs(preview.credit_delta).toLocaleString()}
+                    {targetIncludedCredits.toLocaleString()}
                   </strong>{" "}
-                  at the effective time. Purchased credits remain available.
+                  included credits per billing period (up to{" "}
+                  {`${Math.floor(targetIncludedCredits / 10).toLocaleString()} call minutes`}
+                  {preview.effective_mode === "immediate"
+                    ? preview.current_plan.billing_interval !==
+                      preview.target_plan.billing_interval
+                      ? "). This plan-credit balance refreshes after payment for this plan change succeeds."
+                      : "). This plan-credit balance refreshes after your next renewal payment succeeds. Your current plan credits remain available until then."
+                    : preview.effective_mode === "checkout"
+                      ? "). These credits are added after checkout payment succeeds."
+                      : "). This plan-credit balance refreshes after the first payment for the scheduled plan succeeds."}{" "}
+                  Purchased credits remain available.
                 </p>
               ) : (
                 <p>

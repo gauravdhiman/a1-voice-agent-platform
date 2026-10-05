@@ -146,7 +146,7 @@ export interface PlanVersionDraftCreate {
 }
 
 export interface PlanVersionDraftUpdate {
-  display_label?: string;
+  display_label?: string | null;
   billing_mode?: BillingMode;
   credit_grant_policy?: CreditGrantPolicy;
   price_amount_cents?: number;

@@ -189,6 +189,35 @@ class TestPurchasePhoneNumberPermission:
             mock_svc.purchase_number.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_rejects_non_us_platform_number_purchase(self):
+        from src.phone_numbers.routes import purchase_phone_number
+
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+        purchase_request = PhoneNumberPurchaseRequest(
+            phone_number="+14155551234", country_code="CA"
+        )
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.purchase_number = AsyncMock(
+                return_value=(
+                    None,
+                    "Only US platform-provided phone numbers are available in v1.",
+                )
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await purchase_phone_number(
+                    request=_make_request(),
+                    purchase_request=purchase_request,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(TEST_USER_ID, profile),
+                )
+
+        assert exc_info.value.status_code == 400
+        assert "Only US platform-provided" in exc_info.value.detail
+        mock_svc.purchase_number.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_platform_admin_passes(self):
         from src.phone_numbers.routes import purchase_phone_number
 
@@ -290,16 +319,32 @@ class TestSearchAvailableNumbers:
     """Search route tests pin the public provider-search contract."""
 
     @pytest.mark.asyncio
+    async def test_search_requires_permission_for_pricing_organization(self):
+        from src.phone_numbers.routes import search_available_numbers
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.search_available = AsyncMock()
+            with pytest.raises(HTTPException) as exc_info:
+                await search_available_numbers(
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(TEST_USER_ID, _make_profile()),
+                )
+
+        assert exc_info.value.status_code == 403
+        mock_svc.search_available.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_forwards_match_mode_and_filters(self):
         from src.phone_numbers.routes import search_available_numbers
 
         response = Mock()
-        profile = _make_profile()
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
 
         with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
             mock_svc.search_available = AsyncMock(return_value=(response, None))
 
             result = await search_available_numbers(
+                organization_id=TEST_ORG_ID,
                 country_code="US",
                 phone_number_type="local",
                 area_code="480",
@@ -316,24 +361,51 @@ class TestSearchAvailableNumbers:
         assert request.area_code == "480"
         assert request.contains == "2168"
         assert request.search_mode.value == "ends_with"
+        assert mock_svc.search_available.await_args.args[1] == TEST_ORG_ID
 
     @pytest.mark.asyncio
-    async def test_provider_error_maps_to_server_error(self):
+    async def test_rejects_non_us_platform_number_search(self):
         from src.phone_numbers.routes import search_available_numbers
+
+        profile = _make_profile(is_org_admin_on=str(TEST_ORG_ID))
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
+            mock_svc.search_available = AsyncMock()
+
+            with pytest.raises(HTTPException) as exc_info:
+                await search_available_numbers(
+                    organization_id=TEST_ORG_ID,
+                    country_code="CA",
+                    user_auth=(TEST_USER_ID, profile),
+                )
+
+        assert exc_info.value.status_code == 400
+        assert "Only US platform-provided" in exc_info.value.detail
+        mock_svc.search_available.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_provider_error_maps_to_safe_bad_gateway_response(self):
+        from src.phone_numbers.routes import search_available_numbers
+        from src.phone_numbers.service import PHONE_NUMBER_SEARCH_UNAVAILABLE
 
         with patch("src.phone_numbers.routes.phone_number_service") as mock_svc:
             mock_svc.search_available = AsyncMock(
-                return_value=(None, "provider unavailable")
+                return_value=(None, "provider rate limit exceeded; account AC123456")
             )
 
             with pytest.raises(HTTPException) as exc_info:
                 await search_available_numbers(
-                    user_auth=(TEST_USER_ID, _make_profile())
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
                 )
 
-        assert exc_info.value.status_code == 500
-        assert exc_info.value.detail == "provider unavailable"
+        assert exc_info.value.status_code == 502
+        assert exc_info.value.detail == PHONE_NUMBER_SEARCH_UNAVAILABLE
+        assert "AC123456" not in exc_info.value.detail
 
+    @pytest.mark.asyncio
     @pytest.mark.asyncio
     async def test_unexpected_error_is_sanitized(self):
         from src.phone_numbers.routes import search_available_numbers
@@ -345,11 +417,18 @@ class TestSearchAvailableNumbers:
 
             with pytest.raises(HTTPException) as exc_info:
                 await search_available_numbers(
-                    user_auth=(TEST_USER_ID, _make_profile())
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
                 )
 
         assert exc_info.value.status_code == 500
-        assert exc_info.value.detail == "Failed to search available numbers"
+        assert (
+            exc_info.value.detail
+            == "Phone number search is temporarily unavailable. Please try again later."
+        )
 
 
 class TestGetAgentPhoneNumber:
@@ -534,6 +613,30 @@ class TestPurchaseAndImportErrorMapping:
         assert exc_info.value.status_code == 402
 
     @pytest.mark.asyncio
+    async def test_purchase_plan_limit_maps_to_payment_required(self):
+        from src.phone_numbers.routes import purchase_phone_number
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.purchase_number = AsyncMock(
+                return_value=(
+                    None,
+                    "Your plan allows 0 phone numbers. You currently have 0.",
+                )
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await purchase_phone_number(
+                    request=_make_request(),
+                    purchase_request=_purchase_request(),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 402
+
+    @pytest.mark.asyncio
     async def test_purchase_other_service_error_maps_to_bad_request(self):
         from src.phone_numbers.routes import purchase_phone_number
 
@@ -553,6 +656,49 @@ class TestPurchaseAndImportErrorMapping:
                 )
 
         assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_purchase_provider_failure_is_safe_and_maps_to_502(self):
+        from src.phone_numbers.routes import purchase_phone_number
+        from src.phone_numbers.service import PHONE_NUMBER_PURCHASE_UNAVAILABLE
+
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.purchase_number = AsyncMock(
+                return_value=(None, PHONE_NUMBER_PURCHASE_UNAVAILABLE)
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await purchase_phone_number(
+                    request=_make_request(),
+                    purchase_request=_purchase_request(),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 502
+        assert exc_info.value.detail == PHONE_NUMBER_PURCHASE_UNAVAILABLE
+
+    @pytest.mark.asyncio
+    async def test_purchase_terminal_idempotency_reuse_maps_to_conflict(self):
+        from src.phone_numbers.routes import purchase_phone_number
+
+        message = "This purchase attempt has ended. Start a new purchase with a fresh idempotency key."
+        with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
+            mock_service.purchase_number = AsyncMock(return_value=(None, message))
+            with pytest.raises(HTTPException) as exc_info:
+                await purchase_phone_number(
+                    request=_make_request(),
+                    purchase_request=_purchase_request(),
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+
+        assert exc_info.value.status_code == 409
 
     @pytest.mark.asyncio
     async def test_purchase_unexpected_error_is_sanitized(self):
@@ -577,7 +723,11 @@ class TestPurchaseAndImportErrorMapping:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("error", "expected_status"),
-        [("plan allows 0 phone numbers", 403), ("invalid phone number", 400)],
+        [
+            ("plan allows 0 phone numbers", 403),
+            ("invalid phone number", 400),
+            ("provider rate limit exceeded", 400),
+        ],
     )
     async def test_import_error_mapping(self, error, expected_status):
         from src.phone_numbers.routes import import_phone_number

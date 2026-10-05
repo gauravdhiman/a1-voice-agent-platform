@@ -1,5 +1,10 @@
 # Decision Addendum — Number Positioning, Voice Pipeline, Lead Capture, Pricing Flexibility
 
+> **Historical decision record (2026-09-03).** The plan prices and phone-number
+> rates below were superseded on 2026-09-30. Current pilot terms are in
+> [05-pilot-billing-runbook.md](05-pilot-billing-runbook.md) and
+> [06-plan-publish-spec.md](06-plan-publish-spec.md).
+
 **Parent:** `00-execution-plan.md` | **Date:** 2026-09-03
 Each section: your question → fact check → recommendation → what changes in the plan.
 

@@ -174,6 +174,24 @@ describe("PlatformPlansManager", () => {
     );
   });
 
+  it("clears a draft display label when the field is left blank", async () => {
+    const user = userEvent.setup();
+    const { adminPlanService } = await import("@/services/admin-plan-service");
+
+    render(<PlatformPlansManager />);
+    await user.click(
+      await screen.findByRole("button", { name: "Select version" }),
+    );
+
+    await user.clear(screen.getByLabelText("Display label"));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    expect(adminPlanService.updateDraftVersion).toHaveBeenCalledWith(
+      version.id,
+      expect.objectContaining({ display_label: null }),
+    );
+  });
+
   it("hides Stripe controls for free drafts", async () => {
     const user = userEvent.setup();
 

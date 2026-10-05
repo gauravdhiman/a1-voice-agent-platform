@@ -374,13 +374,18 @@ class AdminPlanCatalogService:
                 f"Plan version {version_id} is not draft (status={current.status})"
             )
 
+        submitted_fields = data.model_dump(
+            exclude_unset=True, exclude={"entitlements"}
+        )
         fields: dict[str, Any] = {
             k: v
-            for k, v in data.model_dump(
-                exclude_unset=True, exclude={"entitlements"}
-            ).items()
+            for k, v in submitted_fields.items()
             if v is not None
         }
+        # An explicit null clears the optional customer-facing label. Other
+        # nullable update fields use null to mean "leave unchanged".
+        if "display_label" in submitted_fields:
+            fields["display_label"] = submitted_fields["display_label"]
         if (
             fields.get("billing_mode", current.billing_mode.value)
             == BillingMode.FREE.value

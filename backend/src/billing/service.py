@@ -140,9 +140,17 @@ class BillingService:
 
     # Organization Subscription Management
     async def create_organization_subscription(
-        self, subscription_data: OrganizationSubscriptionCreate
+        self,
+        subscription_data: OrganizationSubscriptionCreate,
+        *,
+        grant_initial_credits: bool = True,
     ) -> OrganizationSubscription:
-        """Create an organization subscription."""
+        """Create an organization subscription.
+
+        Paid Stripe subscriptions set ``grant_initial_credits=False`` so their
+        included credits are granted by the idempotent invoice webhook instead
+        of being granted once here and again when Stripe confirms payment.
+        """
         try:
             # Get the subscription plan
             plan = await self.get_subscription_plan(
@@ -212,7 +220,7 @@ class BillingService:
                 subscription = OrganizationSubscription(**result.data[0])
 
                 # Allocate initial credits if any
-                if plan.included_credits > 0:
+                if grant_initial_credits and plan.included_credits > 0:
                     await self.add_subscription_credits(
                         subscription.organization_id,
                         plan.included_credits,
@@ -288,23 +296,6 @@ class BillingService:
 
             if result.data:
                 updated_subscription = OrganizationSubscription(**result.data[0])
-
-                # Handle credit reset for plan changes
-                if subscription_data.subscription_plan_id:
-                    new_plan = await self.get_subscription_plan(
-                        subscription_data.subscription_plan_id
-                    )
-                    if new_plan:
-                        # Reset credits to the new plan amount (not add to existing)
-                        await self.reset_subscription_credits(
-                            organization_id=organization_id,
-                            credits=new_plan.included_credits,
-                            subscription_id=updated_subscription.id,
-                            expires_at=updated_subscription.current_period_end,
-                        )
-                        logger.info(
-                            f"Reset credits to {new_plan.included_credits} for plan change to {new_plan.id}"
-                        )
 
                 return updated_subscription
 
@@ -676,7 +667,11 @@ class BillingService:
         stripe_payment_intent_id: str,
         description: Optional[str] = None,
     ) -> CreditTransaction:
-        """Add purchased credits to an organization."""
+        """Add purchased credits once for a verified Stripe payment intent."""
+        if not stripe_payment_intent_id:
+            raise ValueError("Stripe payment intent is required for purchased credits")
+        if credits <= 0:
+            raise ValueError("Purchased credits must be positive")
         return await self._add_credits(
             organization_id=organization_id,
             credits=credits,
@@ -737,6 +732,18 @@ class BillingService:
         Any grant/purchase re-arms low-balance notifications for the cycle.
         """
         try:
+            if source == TransactionSource.PURCHASE:
+                if not stripe_payment_intent_id:
+                    raise ValueError(
+                        "Stripe payment intent is required for purchased credits"
+                    )
+                return await self._grant_purchased_credits_locked(
+                    organization_id=organization_id,
+                    credits=credits,
+                    stripe_payment_intent_id=stripe_payment_intent_id,
+                    description=description or "Credit purchase",
+                )
+
             if idempotency_key:
                 existing_result = (
                     self.supabase.table("credit_transactions")
@@ -870,6 +877,51 @@ class BillingService:
         except Exception as e:
             logger.error(f"Error adding credits to {organization_id}: {e}")
             raise
+
+    async def _grant_purchased_credits_locked(
+        self,
+        organization_id: UUID,
+        credits: int,
+        stripe_payment_intent_id: str,
+        description: str,
+    ) -> CreditTransaction:
+        """Grant a Stripe top-up in the database's atomic idempotency boundary.
+
+        The RPC locks the organization, writes the balance and ledger row in
+        one transaction, and uses the payment intent as a globally unique key.
+        A webhook retry returns the original ledger transaction without
+        increasing the purchased balance again.
+        """
+        result = self.supabase.rpc(
+            "grant_purchased_credits",
+            {
+                "p_organization_id": str(organization_id),
+                "p_credits": credits,
+                "p_payment_intent_id": stripe_payment_intent_id,
+                "p_description": description,
+            },
+        ).execute()
+        payload = result.data
+        if isinstance(payload, list):
+            payload = payload[0] if payload else {}
+        if not payload:
+            raise RuntimeError("Purchased credit grant returned no result")
+        if payload.get("error"):
+            error = payload["error"]
+            if error == "organization_not_found":
+                raise ValueError(f"Organization {organization_id} not found")
+            if error == "payment_intent_already_used":
+                raise ValueError(
+                    "Stripe payment intent is already linked to another organization"
+                )
+            raise ValueError(f"Purchased credit grant failed: {error}")
+
+        transaction = payload.get("transaction")
+        if not transaction:
+            raise RuntimeError("Purchased credit grant returned no transaction")
+
+        await self._reset_low_credit_notification(organization_id)
+        return CreditTransaction(**transaction)
 
     async def _grant_subscription_credits_locked(
         self,
@@ -1694,9 +1746,16 @@ class BillingService:
                 if isinstance(billing_dict["paid_at"], datetime):
                     billing_dict["paid_at"] = billing_dict["paid_at"].isoformat()
 
-            result = (
-                self.supabase.table("billing_history").insert(billing_dict).execute()
-            )
+            query = self.supabase.table("billing_history")
+            if billing_dict.get("stripe_invoice_id"):
+                # Invoice webhooks are at-least-once. The invoice id is already
+                # unique in the database, so upsert lets a failed later grant
+                # be retried without the history row blocking it.
+                result = query.upsert(
+                    billing_dict, on_conflict="stripe_invoice_id"
+                ).execute()
+            else:
+                result = query.insert(billing_dict).execute()
 
             if result.data:
                 return BillingHistory(**result.data[0])

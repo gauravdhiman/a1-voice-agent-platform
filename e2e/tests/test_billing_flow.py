@@ -21,7 +21,7 @@ def test_billing_page_functionality(page: Page, base_url: str, step):
         7. Navigate to billing page with organization ID
         8. Verify Overview tab displays current balance (1,250) and usage (150)
         9. Switch to Plans tab and verify "Professional Plan" ($49) is displayed
-        10. Switch to Credits tab and verify credit packages are shown (100, 1000 credits)
+        10. Switch to Credits tab and verify the current 200, 400, and 1000 credit packs
 
     Mocks Required:
         - /api/v1/organizations (list of organizations)
@@ -98,7 +98,7 @@ def test_billing_page_functionality(page: Page, base_url: str, step):
     ))
 
     setup_billing_plans_context(page)
-    setup_credit_products_context(page)
+    setup_credit_products_context(page, organization_id=test_org_id)
     page.route(re.compile(r".*/api/v1/billing/history.*"), lambda route: route.fulfill(status=200, content_type="application/json", body="[]"))
     page.route(re.compile(r".*/api/v1/billing/.*history.*"), lambda route: route.fulfill(status=200, content_type="application/json", body="[]"))
 
@@ -134,10 +134,15 @@ def test_billing_page_functionality(page: Page, base_url: str, step):
     step("Switch to Credits tab and verify credit balance details")
     page.get_by_role("tab", name="Credits").click()
     page.wait_for_timeout(2000)
-    # Credit products may render as "100 Credits" / "100 Credits Pack" depending on variant
-    try:
-        expect(page.get_by_text("100 Credits Pack")).to_be_visible(timeout=3000)
-        expect(page.get_by_text("1000 Credits Pack")).to_be_visible()
-    except AssertionError:
-        # Fallback: at least the credits purchase section rendered
-        expect(page.get_by_text(re.compile(r"Credits|Purchase|100|Balance", re.I)).first).to_be_visible(timeout=3000)
+    expected_packs = (
+        (200, "$5.00", 20),
+        (400, "$10.00", 40),
+        (1000, "$25.00", 100),
+    )
+    for amount, price, minutes in expected_packs:
+        expect(page.get_by_text(f"{amount} Credits Pack")).to_be_visible(timeout=5000)
+        expect(page.get_by_text(price, exact=True)).to_be_visible()
+        expect(page.get_by_text(f"Up to {minutes} call minutes", exact=True)).to_be_visible()
+    expect(
+        page.get_by_text(re.compile(r"All packs cost \$0\.025 per credit"))
+    ).to_be_visible()

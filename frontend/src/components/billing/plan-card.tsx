@@ -32,6 +32,7 @@ export interface PlanCardEntitlement {
 
 export interface PlanCardData {
   id: string;
+  product_slug?: string;
   display_label: string | null;
   product_name: string;
   product_description: string | null;
@@ -78,6 +79,7 @@ export function formatPlanPrice(plan: PlanPriceInput): string {
 export function toPlanCardData(plan: CustomerPlanVersion): PlanCardData {
   return {
     id: plan.id,
+    product_slug: plan.product_slug,
     display_label: plan.display_label,
     product_name: plan.product_name,
     product_description: plan.product_description,
@@ -96,6 +98,119 @@ export function toPlanCardData(plan: CustomerPlanVersion): PlanCardData {
   };
 }
 
+const FRIENDLY_PLAN_NAMES: Record<string, string> = {
+  free: "Free",
+  starter: "Starter",
+  pro: "Pro",
+  scale: "Scale",
+};
+
+const CUSTOMER_PLAN_DESCRIPTIONS: Record<string, string> = {
+  starter: "For solo owners and small shops handling a steady flow of calls.",
+  pro: "For busy teams with higher call volumes and custom branding needs.",
+  scale: "For larger, multi-location teams handling high call volumes.",
+};
+
+/** Reduce a versioned catalog slug to its stable plan family. */
+function normalizedPlanSlug(productSlug?: string): string {
+  return (productSlug ?? "")
+    .toLowerCase()
+    .replace(/(?:[-_:]?(?:version|v)\d+)$/, "")
+    .replace(/(?:[-_:]?(?:monthly|month|annual|annually|year|yearly))$/, "")
+    .replace(/(?:[-_:]?plan)$/, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/** Return a customer-safe plan name without versioning or billing suffixes. */
+export function friendlyPlanName(plan: {
+  product_slug?: string;
+  product_name: string;
+  display_label: string | null;
+}): string {
+  const slug = normalizedPlanSlug(plan.product_slug);
+  if (FRIENDLY_PLAN_NAMES[slug]) return FRIENDLY_PLAN_NAMES[slug];
+
+  const rawName = plan.display_label || plan.product_name || "Plan";
+  const cleaned = rawName
+    .replace(/\s*[:—-]\s*(?:month|monthly|annual|annually|year|yearly)\b.*$/i, "")
+    .replace(/\s+(?:month|monthly|annual|annually|year|yearly)(?:\s+v(?:ersion)?\s*\d+)?\s*$/i, "")
+    .replace(/\s+v(?:ersion)?\s*\d+\b.*$/i, "")
+    .replace(/\s+plan\s*$/i, "")
+    .trim();
+  const cleanedSlug = cleaned.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return FRIENDLY_PLAN_NAMES[cleanedSlug] ?? (cleaned || "Plan");
+}
+
+/** Use launch copy when a standard plan still has the generic catalog text. */
+function customerPlanDescription(plan: PlanCardData): string {
+  const description = plan.product_description?.trim() ?? "";
+  const standardDescription = CUSTOMER_PLAN_DESCRIPTIONS[
+    normalizedPlanSlug(plan.product_slug)
+  ];
+  const isGenericDescription =
+    !description || /^a plan for your organization\.?$/i.test(description);
+
+  if (standardDescription && isGenericDescription) return standardDescription;
+  return description || "A plan for your organization.";
+}
+
+/** Remove internal interval/version labels from an entitlement label. */
+export function friendlyPlanLabel(
+  label: string | null | undefined,
+  productSlug?: string | null,
+): string {
+  if (!label?.trim()) return "Plan";
+  return friendlyPlanName({
+    product_slug: productSlug ?? undefined,
+    product_name: label,
+    display_label: label,
+  });
+}
+
+function entitlementFeatureText(
+  entitlement: PlanCardEntitlement,
+  billingInterval: string,
+): string | null {
+  const { key, label, value } = entitlement;
+  if (value.type === "unlimited") {
+    if (key === "max_phone_numbers") return "Unlimited phone numbers";
+    return `${label}: Unlimited`;
+  }
+  if (typeof value.value === "boolean") {
+    if (!value.value) return null;
+    const knownFeatureLabels: Record<string, string> = {
+      credit_topup_enabled: "Additional call credits available",
+      embed_widget: "Website call widget",
+      custom_branding: "Custom branding",
+      payg_enabled: "Continue usage with pay-as-you-go credits",
+    };
+    return knownFeatureLabels[key] ?? label;
+  }
+  if (typeof value.value === "number") {
+    if (value.value <= 0) return null;
+    if (key === "included_credits_per_billing_period") {
+      const minutes = Math.floor(value.value / 10);
+      if (billingInterval === "annual") {
+        const monthlyAverage = Math.floor(minutes / 12);
+        return `Up to ${minutes.toLocaleString()} call minutes per year (${monthlyAverage.toLocaleString()}/month average; ${value.value.toLocaleString()} annual credits)`;
+      }
+      return `Up to ${minutes.toLocaleString()} call minutes per month (${value.value.toLocaleString()} credits)`;
+    }
+    if (key === "max_agents") {
+      return `Up to ${value.value} voice agent${value.value === 1 ? "" : "s"}`;
+    }
+    if (key === "max_org_members") {
+      return `Up to ${value.value} team member${value.value === 1 ? "" : "s"}`;
+    }
+    if (key === "max_phone_numbers") return `Up to ${value.value} phone numbers`;
+    return `${value.value.toLocaleString()} ${label}`;
+  }
+  if (typeof value.value === "string" && value.value.trim()) {
+    return `${value.value} ${label}`;
+  }
+  return label;
+}
+
 /** Render the customer-facing plan card used by billing and admin preview. */
 export function PlanCard({
   plan,
@@ -104,50 +219,39 @@ export function PlanCard({
   className,
   testId,
 }: PlanCardProps) {
-  const features = plan.entitlements
+  const entitledFeatures = plan.entitlements
     .map((entitlement): PlanCardFeature | null => {
-      const { label, value } = entitlement;
-      if (value.type === "unlimited") {
-        return { ...entitlement, text: `${label}: Unlimited` };
-      }
-      if (typeof value.value === "boolean") {
-        return value.value ? { ...entitlement, text: label } : null;
-      }
-      if (typeof value.value === "number") {
-        return {
-          ...entitlement,
-          text: `${value.value.toLocaleString()} ${label}`,
-        };
-      }
-      if (typeof value.value === "string" && value.value.trim()) {
-        return { ...entitlement, text: `${value.value} ${label}` };
-      }
-      return { ...entitlement, text: label };
+      const text = entitlementFeatureText(entitlement, plan.billing_interval);
+      return text ? { ...entitlement, text } : null;
     })
-    .filter((feature): feature is PlanCardFeature => feature !== null)
-    .slice(0, 6);
+    .filter((feature): feature is PlanCardFeature => feature !== null);
+  // Only advertise capabilities the published plan version explicitly grants.
+  const features = entitledFeatures.slice(0, 6);
 
   return (
-    <Card className={cn("relative", className)} data-testid={testId}>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between gap-2">
-          <span>{plan.display_label || plan.product_name}</span>
+    <Card
+      className={cn("relative h-full flex-col", className)}
+      data-testid={testId}
+    >
+      <CardHeader className="flex min-h-[13rem] flex-col">
+        <CardTitle className="flex min-h-6 items-center justify-between gap-2">
+          <span>{friendlyPlanName(plan)}</span>
           {badge}
         </CardTitle>
-        <CardDescription>
-          {plan.product_description || "A plan for your organization."}
+        <CardDescription className="line-clamp-3 min-h-[3.75rem]">
+          {customerPlanDescription(plan)}
         </CardDescription>
-        <div className="text-3xl font-bold">
+        <div className="mt-auto whitespace-nowrap text-3xl font-bold leading-none">
           {formatPlanPrice(plan)}
           {plan.billing_mode === "paid" && (
             <span className="ml-1 text-sm font-normal text-muted-foreground">
-              / {plan.billing_interval}
+              / {plan.billing_interval === "annual" ? "year" : "month"}
             </span>
           )}
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="flex-1">
         <TooltipProvider delayDuration={300}>
           <ul className="space-y-2 text-sm text-muted-foreground">
             {features.length > 0 ? (
@@ -183,7 +287,13 @@ export function PlanCard({
         </TooltipProvider>
       </CardContent>
 
-      {footer ? <CardFooter className="flex-col gap-2">{footer}</CardFooter> : null}
+      {footer ? (
+        <CardFooter
+          className="mt-auto min-h-[5rem] flex-col items-stretch justify-start gap-2 pt-0"
+        >
+          {footer}
+        </CardFooter>
+      ) : null}
     </Card>
   );
 }

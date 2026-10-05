@@ -61,8 +61,11 @@ from src.billing.versioned_subscription_models import (
     VersionedSubscriptionCheckoutRequest,
     VersionedSubscriptionCheckoutResponse,
 )
-from src.billing.versioned_subscription_service import versioned_subscription_service
-from src.billing.webhook_handler import handle_stripe_webhook
+from src.billing.versioned_subscription_service import (
+    PlanChangeInProgressError,
+    versioned_subscription_service,
+)
+from src.billing.webhook_handler import InvalidStripeWebhook, handle_stripe_webhook
 from src.organization.service import organization_service
 from src.rbac.user_roles.service import user_role_service
 
@@ -217,6 +220,8 @@ async def create_versioned_subscription_checkout(
         )
     except HTTPException:
         raise
+    except PlanChangeInProgressError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
@@ -277,6 +282,8 @@ async def confirm_plan_change(
         )
     except HTTPException:
         raise
+    except PlanChangeInProgressError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
@@ -378,6 +385,8 @@ async def migrate_subscription_plan(
 
         result = await plan_migration_service.migrate_organization(org_id)
         return {"success": True, **result}
+    except PlanChangeInProgressError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except HTTPException:
@@ -776,7 +785,19 @@ async def get_billing_summary(
 ):
     """Get comprehensive billing summary for an organization."""
     try:
-        return await billing_service.get_organization_billing_summary(organization_id)
+        summary = await billing_service.get_organization_billing_summary(
+            organization_id
+        )
+        subscription = summary.subscription
+        if subscription and subscription.plan_version_id:
+            plan_version = (
+                await versioned_subscription_service.get_plan_version_for_display(
+                    subscription.plan_version_id
+                )
+            )
+            subscription.plan_version = plan_version.model_dump(mode="json")
+            summary.amount_due = plan_version.price_amount_cents
+        return summary
     except Exception as e:
         logger.error(f"Error fetching billing summary for {organization_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch billing summary")
@@ -784,7 +805,7 @@ async def get_billing_summary(
 
 # Webhooks
 @router.post("/webhook/stripe")
-async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
+async def stripe_webhook(request: Request):
     """Handle Stripe webhook events."""
     try:
         logger.info("Stripe webhook endpoint hit")
@@ -800,15 +821,20 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
             logger.error("Missing Stripe signature")
             raise HTTPException(status_code=400, detail="Missing Stripe signature")
 
-        # Add webhook processing to background tasks
-        background_tasks.add_task(handle_stripe_webhook, payload, signature)
-
-        logger.info("Webhook processing added to background tasks")
+        # Complete processing before returning 2xx. Acknowledging the event
+        # before subscription state is persisted prevents Stripe from retrying
+        # transient database/provider failures.
+        await handle_stripe_webhook(payload, signature)
         return JSONResponse(content={"status": "success"})
 
+    except InvalidStripeWebhook as e:
+        logger.warning("Rejected invalid Stripe webhook: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid Stripe webhook") from e
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error processing Stripe webhook: {e}")
-        raise HTTPException(status_code=400, detail="Webhook processing failed")
+        logger.exception("Stripe webhook processing failed")
+        raise HTTPException(status_code=500, detail="Webhook processing failed") from e
 
 
 # Checkout and Payment Management
@@ -971,6 +997,7 @@ async def create_credits_checkout(
             customer_id=customer_id,
             organization_id=organization_id,
             product_id=product_id,
+            credit_amount=product.credit_amount,
         )
 
         return {"session_url": checkout_session.url, "session_id": checkout_session.id}
@@ -1119,14 +1146,32 @@ async def reactivate_subscription(
             raise HTTPException(status_code=404, detail="No subscription found")
 
         # Reactivate subscription in Stripe
-        await stripe_service.reactivate_subscription(
+        stripe_subscription = await stripe_service.reactivate_subscription(
             subscription.stripe_subscription_id
         )
 
-        # Update local subscription record
+        # Reactivating a scheduled cancellation to Free invalidates that
+        # pending-plan marker; keeping it would block later plan selections.
+        update_fields: dict[str, Any] = {"cancel_at_period_end": False}
+        raw_metadata = getattr(subscription, "metadata", None)
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+        pending_plan_change = metadata.get("pending_plan_change") or {}
+        if isinstance(stripe_subscription, dict):
+            stripe_schedule = stripe_subscription.get("schedule")
+        else:
+            stripe_schedule = getattr(stripe_subscription, "schedule", None)
+        target_billing_mode = pending_plan_change.get("target_billing_mode")
+        if pending_plan_change.get("status") == "scheduled" and (
+            target_billing_mode == "free"
+            or (target_billing_mode is None and stripe_schedule is None)
+        ):
+            metadata.pop("pending_plan_change", None)
+            update_fields["metadata"] = metadata
+
+        # Update local subscription record only after Stripe confirms reactivation.
         await billing_service.update_organization_subscription(
             UUID(organization_id),
-            OrganizationSubscriptionUpdate(cancel_at_period_end=False),
+            OrganizationSubscriptionUpdate(**update_fields),
         )
 
         return {"message": "Subscription reactivated successfully"}

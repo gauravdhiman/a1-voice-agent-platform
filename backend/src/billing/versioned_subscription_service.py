@@ -30,6 +30,10 @@ from .versioned_subscription_models import (
 logger = logging.getLogger(__name__)
 
 
+class PlanChangeInProgressError(ValueError):
+    """Raised when another plan change is awaiting its Stripe confirmation."""
+
+
 class VersionedSubscriptionService:
     """List published plan versions and activate them without legacy inference."""
 
@@ -311,12 +315,49 @@ class VersionedSubscriptionService:
         ``transition_id`` is retained as an idempotency/correlation key in
         checkout metadata and pending local state.
         """
-        preview = await self.preview_plan_change(
-            request.organization_id, request.target_plan_version_id
-        )
         existing = await self._get_existing_subscription(request.organization_id)
         if not existing:
             raise ValueError("Organization does not have an active subscription")
+        if existing.get("pending_plan_transition"):
+            old_version_id = str(existing.get("plan_version_id"))
+            reconciled = await self.reconcile_pending_plan_transition(existing)
+            if reconciled:
+                existing = await self._get_existing_subscription(
+                    request.organization_id
+                )
+                if not existing:
+                    raise ValueError(
+                        "Organization does not have an active subscription"
+                    )
+                if existing.get("status") not in {
+                    SubscriptionStatus.ACTIVE.value,
+                    SubscriptionStatus.TRIAL.value,
+                }:
+                    raise ValueError(
+                        "Organization does not have an active subscription"
+                    )
+                if str(existing.get("plan_version_id")) != old_version_id:
+                    raise PlanChangeInProgressError(
+                        "A previous plan change was reconciled. Refresh billing "
+                        "before selecting another plan."
+                    )
+        if existing and existing.get("pending_plan_transition"):
+            raise PlanChangeInProgressError(
+                "A plan change is still being processed. Wait for its payment "
+                "confirmation, then refresh and try again."
+            )
+        pending_scheduled_change = (existing.get("metadata") or {}).get(
+            "pending_plan_change"
+        ) or {}
+        if pending_scheduled_change.get("status") == "scheduled":
+            raise PlanChangeInProgressError(
+                "A plan change is already scheduled. Wait for it to take effect "
+                "before scheduling another plan change."
+            )
+
+        preview = await self.preview_plan_change(
+            request.organization_id, request.target_plan_version_id
+        )
 
         if preview.effective_mode is PlanChangeEffectiveMode.CHECKOUT:
             origin = settings.app_base_url or "http://localhost:3000"
@@ -344,21 +385,57 @@ class VersionedSubscriptionService:
         if not stripe_subscription_id:
             raise ValueError("Active paid subscription is missing its Stripe ID")
 
+        billing_interval_changed = (
+            preview.effective_mode is PlanChangeEffectiveMode.IMMEDIATE
+            and preview.current_plan.billing_interval
+            != preview.target_plan.billing_interval
+        )
+        transition = {
+            "transition_id": str(request.transition_id),
+            "source_plan_version_id": str(preview.current_plan.id),
+            "target_plan_version_id": str(request.target_plan_version_id),
+            "target_billing_mode": preview.target_plan.billing_mode.value,
+            "source_price_id": preview.current_plan.stripe_price_id,
+            "target_price_id": preview.target_plan.stripe_price_id,
+            "billing_interval_changed": billing_interval_changed,
+            "effective_mode": preview.effective_mode.value,
+            "effective_at": (
+                preview.effective_at.isoformat() if preview.effective_at else None
+            ),
+            "operation": "customer_plan_change",
+            "status": "awaiting_invoice" if billing_interval_changed else "applying",
+        }
+        if not self.claim_plan_transition(existing["id"], transition):
+            raise PlanChangeInProgressError(
+                "A plan change is already being processed. Wait for its payment "
+                "confirmation, then refresh and try again."
+            )
+
         if preview.effective_mode is PlanChangeEffectiveMode.IMMEDIATE:
+            metadata = dict(existing.get("metadata") or {})
+
             await stripe_service.change_subscription_price(
                 stripe_subscription_id,
                 str(preview.target_plan.stripe_price_id),
                 proration_behavior=preview.proration_behavior,
             )
-            metadata = dict(existing.get("metadata") or {})
-            metadata.pop("pending_plan_change", None)
-            metadata["billing_mode"] = BillingMode.PAID.value
-            self.supabase.table("organization_subscriptions").update(
-                {
-                    "plan_version_id": str(request.target_plan_version_id),
-                    "metadata": metadata,
-                }
-            ).eq("id", str(existing["id"])).execute()
+            if billing_interval_changed:
+                # Preserve the prewritten marker for the paid invoice webhook.
+                # Updating only the plan version avoids racing with a webhook
+                # that may already have consumed and cleared that marker.
+                self.supabase.table("organization_subscriptions").update(
+                    {"plan_version_id": str(request.target_plan_version_id)}
+                ).eq("id", str(existing["id"])).execute()
+            else:
+                metadata.pop("pending_plan_change", None)
+                metadata["billing_mode"] = BillingMode.PAID.value
+                self.supabase.table("organization_subscriptions").update(
+                    {
+                        "plan_version_id": str(request.target_plan_version_id),
+                        "metadata": metadata,
+                    }
+                ).eq("id", str(existing["id"])).execute()
+                self.clear_plan_transition(existing["id"], request.transition_id)
             return PlanChangeConfirmationResponse(
                 status="applied",
                 target_plan_version_id=request.target_plan_version_id,
@@ -380,6 +457,7 @@ class VersionedSubscriptionService:
         metadata["pending_plan_change"] = {
             "transition_id": str(request.transition_id),
             "target_plan_version_id": str(request.target_plan_version_id),
+            "target_billing_mode": preview.target_plan.billing_mode.value,
             "effective_at": (
                 preview.effective_at.isoformat() if preview.effective_at else None
             ),
@@ -392,11 +470,178 @@ class VersionedSubscriptionService:
                 "cancel_at_period_end": pending_cancel,
             }
         ).eq("id", str(existing["id"])).execute()
+        self.clear_plan_transition(existing["id"], request.transition_id)
         return PlanChangeConfirmationResponse(
             status="scheduled",
             target_plan_version_id=request.target_plan_version_id,
             effective_at=preview.effective_at,
         )
+
+    def claim_plan_transition(
+        self, subscription_id: UUID | str, transition: dict[str, Any]
+    ) -> bool:
+        """Atomically reserve a subscription while its Stripe plan change runs."""
+        result = self.supabase.rpc(
+            "claim_subscription_plan_transition",
+            {
+                "p_subscription_id": str(subscription_id),
+                "p_transition": transition,
+            },
+        ).execute()
+        return result.data is True
+
+    async def reconcile_pending_plan_transition(
+        self, subscription: dict[str, Any]
+    ) -> bool:
+        """Reconcile a claimed change against Stripe before allowing another.
+
+        Returns true only when the claim is safely cleared and another change
+        can proceed. A live interval-reset invoice remains claimed until the
+        paid-invoice webhook grants the new period's credits.
+        """
+        transition = subscription.get("pending_plan_transition") or {}
+        transition_id = transition.get("transition_id")
+        subscription_id = subscription.get("id")
+        stripe_subscription_id = subscription.get("stripe_subscription_id")
+        if not transition_id or not subscription_id or not stripe_subscription_id:
+            return False
+
+        try:
+            stripe_subscription = await stripe_service.get_subscription(
+                str(stripe_subscription_id)
+            )
+        except Exception:
+            logger.exception(
+                "Could not reconcile pending plan transition %s with Stripe",
+                transition_id,
+            )
+            return False
+
+        stripe_status = str(stripe_subscription.get("status") or "")
+        terminal_status = {
+            "canceled": SubscriptionStatus.CANCELLED.value,
+            "incomplete_expired": SubscriptionStatus.INCOMPLETE_EXPIRED.value,
+            "unpaid": SubscriptionStatus.EXPIRED.value,
+        }.get(stripe_status)
+        if terminal_status:
+            metadata = dict(subscription.get("metadata") or {})
+            pending_plan_change = metadata.get("pending_plan_change") or {}
+            update_fields: dict[str, Any] = {"status": terminal_status}
+            if str(pending_plan_change.get("transition_id")) == str(transition_id):
+                metadata.pop("pending_plan_change", None)
+                update_fields["metadata"] = metadata
+            self.supabase.table("organization_subscriptions").update(update_fields).eq(
+                "id", str(subscription_id)
+            ).execute()
+            return self.clear_plan_transition(subscription_id, transition_id)
+
+        items = (stripe_subscription.get("items") or {}).get("data") or []
+        current_price = None
+        if items:
+            price = items[0].get("price") or {}
+            current_price = price.get("id") if isinstance(price, dict) else price
+
+        target_price = transition.get("target_price_id")
+        source_price = transition.get("source_price_id")
+        effective_mode = transition.get("effective_mode")
+        interval_changed = transition.get("billing_interval_changed") is True
+
+        if effective_mode in {
+            PlanChangeEffectiveMode.PERIOD_END.value,
+            "scheduled",
+        }:
+            schedule_ref = stripe_subscription.get("schedule")
+            schedule_id = (
+                schedule_ref.get("id")
+                if isinstance(schedule_ref, dict)
+                else schedule_ref
+            )
+            schedule_matches = False
+            if schedule_id:
+                try:
+                    schedule = await stripe_service.get_subscription_schedule(
+                        str(schedule_id)
+                    )
+                    phases = schedule.get("phases") or []
+                    schedule_matches = any(
+                        self._schedule_phase_uses_price(phase, target_price)
+                        for phase in phases[1:]
+                    )
+                except Exception:
+                    logger.exception(
+                        "Could not inspect schedule for pending plan transition %s",
+                        transition_id,
+                    )
+                    return False
+
+            if schedule_matches:
+                metadata = dict(subscription.get("metadata") or {})
+                scheduled_change = {
+                    "transition_id": str(transition_id),
+                    "target_plan_version_id": str(
+                        transition.get("target_plan_version_id")
+                    ),
+                    "effective_at": transition.get("effective_at"),
+                    "status": "scheduled",
+                }
+                if transition.get("target_billing_mode"):
+                    scheduled_change["target_billing_mode"] = transition[
+                        "target_billing_mode"
+                    ]
+                metadata["pending_plan_change"] = scheduled_change
+                update_fields: dict[str, Any] = {"metadata": metadata}
+                if transition.get("operation") == "migration":
+                    update_fields["plan_version_id"] = str(
+                        transition.get("target_plan_version_id")
+                    )
+                self.supabase.table("organization_subscriptions").update(
+                    update_fields
+                ).eq("id", str(subscription_id)).execute()
+                self.clear_plan_transition(subscription_id, transition_id)
+                return False
+
+            if current_price == source_price:
+                return self.clear_plan_transition(subscription_id, transition_id)
+            return False
+
+        if current_price == source_price:
+            return self.clear_plan_transition(subscription_id, transition_id)
+
+        if current_price == target_price and target_price:
+            target_version_id = transition.get("target_plan_version_id")
+            if target_version_id:
+                self.supabase.table("organization_subscriptions").update(
+                    {"plan_version_id": str(target_version_id)}
+                ).eq("id", str(subscription_id)).execute()
+            if interval_changed:
+                # The invoice webhook remains responsible for the allowance.
+                return False
+            return self.clear_plan_transition(subscription_id, transition_id)
+
+        return False
+
+    @staticmethod
+    def _schedule_phase_uses_price(phase: dict[str, Any], price_id: str) -> bool:
+        """Return whether a Stripe schedule phase contains the target price."""
+        for item in phase.get("items") or []:
+            price = item.get("price") or {}
+            resolved_price_id = price.get("id") if isinstance(price, dict) else price
+            if str(resolved_price_id) == str(price_id):
+                return True
+        return False
+
+    def clear_plan_transition(
+        self, subscription_id: UUID | str, transition_id: UUID | str
+    ) -> bool:
+        """Clear a transition only when its ID still owns the subscription lock."""
+        result = self.supabase.rpc(
+            "clear_subscription_plan_transition",
+            {
+                "p_subscription_id": str(subscription_id),
+                "p_transition_id": str(transition_id),
+            },
+        ).execute()
+        return result.data is True
 
     async def activate_free_plan(
         self, organization_id: UUID, plan_version_id: UUID
@@ -520,13 +765,37 @@ class VersionedSubscriptionService:
             raise ValueError("Stripe Price is required for paid plan checkout")
 
         existing = await self._get_existing_subscription(request.organization_id)
+        if existing and existing.get("pending_plan_transition"):
+            reconciled = await self.reconcile_pending_plan_transition(existing)
+            if reconciled:
+                existing = await self._get_existing_subscription(
+                    request.organization_id
+                )
+            if existing and existing.get("pending_plan_transition"):
+                raise PlanChangeInProgressError(
+                    "A plan change is still being processed. Wait for its payment "
+                    "confirmation, then refresh and try again."
+                )
+
         existing_metadata = (existing or {}).get("metadata") or {}
+        if (existing_metadata.get("pending_plan_change") or {}).get("status") == (
+            "scheduled"
+        ):
+            raise PlanChangeInProgressError(
+                "A plan change is already scheduled. Wait for it to take effect "
+                "before starting another checkout."
+            )
         existing_is_free = bool(
             existing_metadata.get("billing_mode") == BillingMode.FREE.value
         )
         if (
             existing
-            and existing.get("status") not in {"cancelled", "expired"}
+            and existing.get("status")
+            not in {
+                SubscriptionStatus.CANCELLED.value,
+                SubscriptionStatus.EXPIRED.value,
+                SubscriptionStatus.INCOMPLETE_EXPIRED.value,
+            }
             and not (allow_active_free and existing_is_free)
         ):
             raise ValueError("Organization already has an active subscription")
@@ -614,6 +883,14 @@ class VersionedSubscriptionService:
             subscription_status=SubscriptionStatus(status) if status else None,
         )
 
+    async def get_plan_version_for_display(
+        self, plan_version_id: UUID
+    ) -> CustomerPlanVersion:
+        """Return a saved plan version for subscription and billing displays."""
+        return await self._get_customer_plan_version(
+            plan_version_id, require_current_for_signup=False
+        )
+
     async def record_paid_subscription_from_stripe(
         self,
         organization_id: UUID,
@@ -630,13 +907,25 @@ class VersionedSubscriptionService:
         existing = await self._get_existing_subscription(organization_id)
         period_start = stripe_subscription.get("current_period_start")
         period_end = stripe_subscription.get("current_period_end")
+        stripe_status = stripe_subscription.get("status", "active")
+        status_mapping = {
+            "trialing": SubscriptionStatus.TRIAL,
+            "active": SubscriptionStatus.ACTIVE,
+            "past_due": SubscriptionStatus.PAST_DUE,
+            "canceled": SubscriptionStatus.CANCELLED,
+            "unpaid": SubscriptionStatus.EXPIRED,
+            "incomplete": SubscriptionStatus.INCOMPLETE,
+            "incomplete_expired": SubscriptionStatus.INCOMPLETE_EXPIRED,
+        }
         payload = {
             "organization_id": str(organization_id),
             "subscription_plan_id": None,
             "plan_version_id": str(resolved_plan.plan_version_id),
             "stripe_subscription_id": stripe_subscription["id"],
             "stripe_customer_id": stripe_subscription.get("customer"),
-            "status": stripe_subscription.get("status", "active"),
+            "status": status_mapping.get(
+                stripe_status, SubscriptionStatus.ACTIVE
+            ).value,
             "current_period_start": (
                 datetime.fromtimestamp(period_start, tz=timezone.utc).isoformat()
                 if period_start
@@ -879,6 +1168,7 @@ class VersionedSubscriptionService:
         slug = str(product.get("slug", "")).lower()
         for keyword, rank in (
             ("enterprise", 30),
+            ("scale", 30),
             ("pro", 20),
             ("growth", 20),
             ("starter", 10),

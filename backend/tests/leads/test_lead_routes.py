@@ -48,6 +48,12 @@ def _submit_payload(**overrides: Any) -> InterestLeadCreate:
     return InterestLeadCreate(**data)
 
 
+def test_contact_us_is_a_supported_interest_lead_source():
+    payload = _submit_payload(source="contact-us")
+
+    assert payload.source == "contact-us"
+
+
 def _chain_client(response=None, explode=False):
     """Fake service-role client emulating the fluent query chain."""
     resp = MagicMock()
@@ -112,7 +118,7 @@ class TestSubmitInterestLeadRoute:
             "src.leads.routes.lead_service.submit_lead",
             new=AsyncMock(return_value=(Mock(), None)),
         ), patch(
-            "src.leads.routes.interest_lead_notifier.notify_interest_lead",
+            "src.leads.routes.interest_lead_notification_outbox.process_pending",
             new=AsyncMock(),
         ):
             ack = await submit_interest_lead(request=_request(), body=_submit_payload())
@@ -128,9 +134,9 @@ class TestSubmitInterestLeadRoute:
             "src.leads.routes.lead_service.submit_lead",
             new=AsyncMock(return_value=(lead, None)),
         ), patch(
-            "src.leads.routes.interest_lead_notifier.notify_interest_lead",
+            "src.leads.routes.interest_lead_notification_outbox.process_pending",
             new=AsyncMock(),
-        ) as notify_mock:
+        ) as process_mock:
             ack = await submit_interest_lead(
                 request=_request(),
                 body=_submit_payload(source="outcome-form", demo_slug="dental-demo"),
@@ -139,7 +145,7 @@ class TestSubmitInterestLeadRoute:
             await background_tasks()
 
         assert ack.received is True
-        notify_mock.assert_awaited_once_with(lead)
+        process_mock.assert_awaited_once_with(lead_id=LEAD_ID, limit=1)
 
     @pytest.mark.asyncio
     async def test_submit_keeps_ack_when_notification_fails(self):
@@ -150,7 +156,7 @@ class TestSubmitInterestLeadRoute:
             "src.leads.routes.lead_service.submit_lead",
             new=AsyncMock(return_value=(lead, None)),
         ), patch(
-            "src.leads.routes.interest_lead_notifier.notify_interest_lead",
+            "src.leads.routes.interest_lead_notification_outbox.process_pending",
             new=AsyncMock(side_effect=RuntimeError("provider unavailable")),
         ):
             ack = await submit_interest_lead(request=_request(), body=_submit_payload())

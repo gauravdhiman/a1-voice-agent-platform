@@ -74,6 +74,11 @@ Stores tenant organization information. Each organization represents a separate 
 
 **Foreign Keys**: None
 **RLS**: Enabled
+
+The Stripe catalog manager reconciles the complete approved pack set through
+the service-role-only `sync_credit_product_catalog(jsonb)` function. It validates
+all rows, switches the active set, and upserts products in one database
+transaction; an error leaves the prior active catalog unchanged.
 **Indexes**: Unique on `name`, `slug`
 
 **Derived (not a column):** `provider_credentials_status` — a per-provider
@@ -382,7 +387,7 @@ leads persist until converted/dropped and are never shown to visitors.
 | phone | VARCHAR(32) | NULLABLE | Callback number |
 | vertical | VARCHAR(40) | NULLABLE | Business vertical slug selected on the public request form |
 | message | TEXT | NULLABLE | What the business needs |
-| source | VARCHAR(40) | NOT NULL, DEFAULT `'request-demo'`, CHECK `request-demo`, `outcome-form`, `demo-call`, or `manual` | Capture channel |
+| source | VARCHAR(40) | NOT NULL, DEFAULT `'request-demo'`, CHECK `request-demo`, `outcome-form`, `contact-us`, `demo-call`, or `manual` | Capture channel |
 | demo_slug | VARCHAR(100) | NULLABLE | Demo agent slug when captured post-demo |
 | status | VARCHAR(20) | NOT NULL, DEFAULT `'new'`, CHECK `new`, `contacted`, `invited`, `converted`, or `dropped` | Follow-up state |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Submission timestamp |
@@ -397,6 +402,36 @@ fixed ack envelope so submitters cannot probe which emails already exist.
 for duplicate review.
 
 **Migrations**: `20260903000001_add_interest_leads.py`.
+
+### interest_lead_notification_outbox
+
+One retryable platform-admin alert record is created in the same transaction
+as each new `interest_leads` row by an `AFTER INSERT` trigger. It references
+the lead instead of copying its personal details. Email, Telegram, and
+WhatsApp have independent delivery state, so a retry does not resend a channel
+already acknowledged as sent. Disabled Telegram/WhatsApp channels are marked
+skipped; enabled but incomplete or failing channels remain pending for retry.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Queue row identifier |
+| lead_id | UUID | UNIQUE, NOT NULL, FK → interest_leads.id (CASCADE) | Submitted lead |
+| email_state / telegram_state / whatsapp_state | TEXT | NOT NULL, DEFAULT 'pending', CHECK `pending`, `sent`, or `skipped` | Independent channel delivery state |
+| email_attempts / telegram_attempts / whatsapp_attempts | INTEGER | NOT NULL, DEFAULT 0, CHECK >= 0 | Channel attempt counters |
+| available_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Earliest retry time |
+| lease_claim / lease_until | TEXT / TIMESTAMPTZ | NULLABLE | Worker claim and crash-recovery lease |
+| last_error_code | TEXT | NULLABLE | Safe generic configuration/provider error categories |
+| created_at / updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Queue timestamps |
+| delivered_at | TIMESTAMPTZ | NULLABLE | Set when all channels are sent or skipped |
+
+**RLS**: Enabled with no client policies; backend service role only. The
+insert trigger makes lead capture and durable alert enqueue atomic.
+`claim_interest_lead_notification_outbox` uses `FOR UPDATE SKIP LOCKED`;
+failed channels retry with bounded exponential backoff. Provider delivery is
+at-least-once if a provider accepts a message but its database acknowledgment
+is lost.
+
+**Migration**: `20261001000004_durable_interest_lead_alerts.py`.
 
 ---
 
@@ -837,6 +872,7 @@ the sole source of truth for phone-to-agent routing; the legacy
 | country_code | VARCHAR(2) | NOT NULL, DEFAULT US | ISO country code; `ZZ` means legacy geography requires review |
 | area_code | VARCHAR(10) | NULLABLE | Provider/catalog area code |
 | monthly_cost_credits | INTEGER | NOT NULL, >= 0 | Current system monthly rate |
+| is_included_in_plan | BOOLEAN | NOT NULL, DEFAULT FALSE | True for the organization's single included platform-managed US local line while the paid plan allowance applies; the line uses 0 credits during that allowance |
 | status | VARCHAR(30) | NOT NULL | provisioning, purchased, active, verification_required, release_pending, disconnected, or cancelled |
 | assigned_agent_id | UUID | NULLABLE, FK → voice_agents.id | Agent receiving calls from this number |
 | is_incoming_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | Whether inbound routing is enabled |
@@ -862,8 +898,12 @@ The phone-rental scheduler checks platform-rental rows daily (both the billing
 cadence and release-retry cadence are configurable), disables inbound calls
 when a renewal debit fails, retries during the configurable seven-day default
 grace period, and releases the Twilio number after grace expiry. A provider
-release failure remains `release_pending` for the next retry. Customer-owned
-rows are never billed or released; disconnecting one only disables routing.
+release failure remains `release_pending` for the next retry. One active
+platform-managed US local line per organization is marked included, renews at
+zero credits, and is reassigned to the oldest remaining eligible US local line
+when released. Other platform rentals use the configured system-pricing rate.
+Customer-owned rows are never billed or released; disconnecting one only
+disables routing.
 
 Platform purchases send the canonical voice and status callback URLs to Twilio
 in the same purchase request. Customer-owned rows receive tokenized URLs for
@@ -896,6 +936,7 @@ database failure occurs.
 - `ix_phone_numbers_organization_status` on `(organization_id, status)`
 - `ix_phone_numbers_assigned_agent_id` on `assigned_agent_id`
 - `ix_phone_numbers_next_billing_at` on `next_billing_at`
+- `uq_phone_numbers_one_included_us_local_per_org` on `organization_id` for one active included platform-managed US local line
 - `ix_phone_numbers_organization_agent_active` on
   `(organization_id, assigned_agent_id)` for non-terminal rows — migration
   `20260812000009`
@@ -1029,6 +1070,7 @@ Tracks organization subscription status.
 | cancel_at_period_end   | BOOLEAN      | NOT NULL, DEFAULT FALSE              | Auto-renewal flag                                   |
 | cancelled_at           | TIMESTAMPTZ  | NULLABLE                             | Cancellation timestamp                              |
 | metadata               | JSONB        | NULLABLE                             | Additional metadata                                 |
+| pending_plan_transition | JSONB        | NULLABLE                             | Atomic plan-change claim; held through interval-reset invoice credit grant |
 | created_at             | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()              | Creation timestamp                                  |
 | updated_at             | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()              | Last update timestamp                               |
 
@@ -1408,7 +1450,7 @@ Stores one-time tokens for Resend-delivered email verification during signup.
 ### platform_notification_settings
 
 Singleton table for platform-admin notification configuration (lead-alert
-recipient, verification sender, and Telegram alerts).
+recipients, verification sender, and Telegram alerts).
 
 | Column                         | Type         | Constraints              | Description                                      |
 | ------------------------------ | ------------ | ------------------------ | ------------------------------------------------ |
@@ -1416,6 +1458,8 @@ recipient, verification sender, and Telegram alerts).
 | platform_admin_email           | VARCHAR(320) | NULLABLE                 | Recipient for platform-admin demo, interest-lead, and OAuth alerts |
 | platform_admin_sms_phone       | VARCHAR(32)  | NULLABLE                 | Optional platform-admin OAuth alert destination in E.164 format |
 | platform_admin_sms_notifications_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | Explicit platform-admin SMS opt-in for OAuth attention alerts |
+| platform_admin_whatsapp_phone | VARCHAR(32) | NULLABLE | WhatsApp destination for platform-admin lead alerts in E.164 format |
+| platform_admin_whatsapp_notifications_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | Explicit platform-admin WhatsApp opt-in for lead alerts |
 | verification_from_email        | VARCHAR(255) | NULLABLE                 | Resend sender for verification emails            |
 | verification_from_name         | VARCHAR(100) | NULLABLE                 | Display name for verification emails             |
 | telegram_bot_token_encrypted   | TEXT         | NULLABLE                 | Fernet-encrypted Telegram bot token              |
@@ -1430,6 +1474,11 @@ recipient, verification sender, and Telegram alerts).
 SMS delivery also requires backend Twilio credentials and
 `TWILIO_SMS_FROM_NUMBER`. The API's `sms_sender_configured` status does not
 expose provider credentials.
+
+WhatsApp lead alerts require an approved Twilio Content template, the backend
+Twilio credentials, `TWILIO_WHATSAPP_FROM_NUMBER`, and
+`TWILIO_WHATSAPP_CONTENT_SID`. The API exposes only whether the sender is
+configured; the admin recipient and opt-in are stored on this singleton row.
 
 ### organization_notification_settings
 
@@ -2002,8 +2051,10 @@ erDiagram
     organizations ||--o{ demo_outcome_receipts : "owns"
     voice_agents ||--o{ demo_feedback : "rated"
     organizations ||--o{ demo_feedback : "owns"
-    %% interest_leads is standalone (no FKs; private funnel table, no relations)
+    %% interest_leads is private; its delivery outbox references each lead.
     interest_leads
+    interest_lead_notification_outbox
+    interest_leads ||--o| interest_lead_notification_outbox : alerts
     organizations ||--o{ callback_escalations : "owns"
     voice_agents ||--o{ callback_escalations : "handles (SET NULL on delete)"
     credit_transactions ||--o| call_logs : "explains call charge"
@@ -2115,7 +2166,7 @@ erDiagram
 46. `20260809000003` - Add `organizations.admin_credit_balance` and the audited `platform_credit_grants` table. Add atomic `grant_admin_credits`, and update the debit, voice-call consumption, and subscription grant functions to account for plan → platform bonus → purchased credit precedence.
 47. `20260810000001` - Add `plan_version_entitlements.display_order` with a `(plan_version_id, display_order)` lookup index and backfill existing entitlement rows in creation order so admin drag-and-drop ordering is stable.
 48. `20260811000001` - Add explicit `credit_events.meter_type` and `billing_unit` fields with compatibility checks and annotate voice-call pricing as duration/minute.
-49. `20260811000002` - Restrict active usage pricing to voice minutes and local/mobile/toll-free monthly phone rentals; allow count/month semantics and add phone-number billing status, due date, and grace-period columns.
+49. `20260811000002` - Restrict active usage pricing to connected call minutes and local/mobile/toll-free monthly phone rentals; allow count/month semantics and add phone-number billing status, due date, and grace-period columns.
 50. `20260811000003` - Add notification delivery idempotency keys, attempt counters, and last-attempt timestamps for safe provider retries.
 51. `20260811000004` - Seed the enabled `credits.low_balance` notification event and its built-in template metadata so billing warnings work after migrations without a manual event seed.
 52. `20260811000005` - Add the transaction-linked `credit_notification_outbox` with retry diagnostics; atomically enqueue voice settlement warnings and allow an admitted call to settle its full duration into a temporary negative plan balance.
@@ -2156,15 +2207,23 @@ erDiagram
 87. `20260909000001` - Persist the organization-scoped role selected for an invitation and apply it atomically when the invitation is claimed. New invitations support `regular_user` (default) or `org_admin`; legacy invitations remain regular-user invitations.
 88. `20260911000001` - Add optional `platform_notification_settings.platform_admin_email` for the recipient of platform-admin demo and interest-lead alerts.
 89. `20260911000002` - Seed the enabled `lead.interest_submitted` notification event used by public demo and interest-form alerts.
-90. `9f2c4a7b1e3d` - Add service-role-only `demo_feedback` for PII-free visitor star ratings on public demo calls (one row per voice session, upsert on repeat taps). Visitors write through the signed receipt-token endpoint; platform admins read aggregates and recent rows.
-91. `20260920000001` - Replace the Jordan-specific Google Sheets catalog path with the configurable `Google_Sheets` row contract (`read_rows`, `find_rows`, `create_row`, and `update_row`), allow `sheet_row_created` demo receipts, and retire the legacy `Google_Sheets_lead_capture` catalog row while keeping saved links runtime-compatible.
-92. `20260922000001` - Update the existing system-default realtime voice preset to Google `gemini-3.8-live` with the `Zephyr` voice while preserving its other runtime settings. Explicit agent presets are unchanged.
-93. `20260922000002` - Complete organization provider-credential hardening: preserve existing encrypted values, move any remaining legacy Google key into the Fernet blob when needed, clear `organizations.google_api_key` atomically, and retain the empty compatibility column for a later drop after rolling old writers are gone. Fails closed on an unreadable existing ciphertext and is followed by a read-only deployment verifier.
-94. `20260923000001` - Add `organizations.provider_credentials_descriptions` (JSONB NULLABLE) for non-secret per-provider reference notes on the API Credentials screen. Notes are edited through `provider_credentials_descriptions_input` and stored separately from encrypted provider keys.
-95. `20260924000001` - Fence OAuth refreshes with credential generations and lease-checked SQL writes; persist ambiguous/re-auth-required states, add platform-admin SMS settings, and create a claimed durable Telegram/SMS OAuth alert outbox.
-96. `20260924000002` - Add tenant-scoped optional OAuth alert destinations, atomic partial settings updates, and independent organization Telegram/SMS outbox state and retry counters.
-97. `20260925000001` - Store each organization's encrypted Telegram bot token and derive SMS/Telegram activation from configured destination fields.
-98. `20260925000002` - Merge the secret-hardening and notification-channel migration heads so every supported environment has one connected Alembic head for `upgrade head`. This revision changes no tables or data.
+90. `20261001000001` - Add an E.164 platform-admin WhatsApp destination and explicit opt-in for interest-lead notifications.
+91. `20261001000002` - Set the toll-free phone-number rental price to 120 credits per month (the launch conversion is 40 credits per USD).
+92. `9f2c4a7b1e3d` - Add service-role-only `demo_feedback` for PII-free visitor star ratings on public demo calls (one row per voice session, upsert on repeat taps). Visitors write through the signed receipt-token endpoint; platform admins read aggregates and recent rows.
+93. `20260920000001` - Replace the Jordan-specific Google Sheets catalog path with the configurable `Google_Sheets` row contract (`read_rows`, `find_rows`, `create_row`, and `update_row`), allow `sheet_row_created` demo receipts, and retire the legacy `Google_Sheets_lead_capture` catalog row while keeping saved links runtime-compatible.
+94. `20260922000001` - Update the existing system-default realtime voice preset to Google `gemini-3.8-live` with the `Zephyr` voice while preserving its other runtime settings. Explicit agent presets are unchanged.
+95. `20260922000002` - Complete organization provider-credential hardening: preserve existing encrypted values, move any remaining legacy Google key into the Fernet blob when needed, clear `organizations.google_api_key` atomically, and retain the empty compatibility column for a later drop after rolling old writers are gone. Fails closed on an unreadable existing ciphertext and is followed by a read-only deployment verifier.
+96. `20260923000001` - Add `organizations.provider_credentials_descriptions` (JSONB NULLABLE) for non-secret per-provider reference notes on the API Credentials screen. Notes are edited through `provider_credentials_descriptions_input` and stored separately from encrypted provider keys.
+97. `20260924000001` - Fence OAuth refreshes with credential generations and lease-checked SQL writes; persist ambiguous/re-auth-required states, add platform-admin SMS settings, and create a claimed durable Telegram/SMS OAuth alert outbox.
+98. `20260924000002` - Add tenant-scoped optional OAuth alert destinations, atomic partial settings updates, and independent organization Telegram/SMS outbox state and retry counters.
+99. `20260925000001` - Store each organization's encrypted Telegram bot token and derive SMS/Telegram activation from configured destination fields.
+100. `20260925000002` - Merge the secret-hardening and notification-channel migration heads so every supported environment has one connected Alembic head for `upgrade head`. This revision changes no tables or data.
+101. `20260930000001` - Add the one-included-US-local-number marker and per-organization active-number guard; backfill one included line only for organizations with an active paid plan, update additional US local platform-number rentals to 80 credits/month, and retain the platform credit-ledger billing model for add-on numbers.
+102. `20261001000003` - Add an atomic, service-role-only Stripe credit-purchase RPC keyed by payment intent plus a partial unique index; refuse the migration if existing purchase ledger rows already duplicate a payment intent so they can be reconciled before deployment.
+103. `20261001000004` - Extend the interest-lead source constraint for the contact form and add a trigger-backed, service-role-only notification outbox with independent retry state for platform-admin email, Telegram, and WhatsApp alerts.
+104. `20261001000005` - Add a service-role-only credit catalog sync function that validates the complete launch pack set and atomically upserts it while deactivating stale database products.
+105. `20261001000006` - Add an atomic subscription plan-transition claim and transition-ID-guarded clear RPC so overlapping plan changes cannot erase an interval-reset credit grant signal.
+106. `20261002000001` - Update the `premium_tools` entitlement label and description to identify the included premium integrations.
 
 ---
 
@@ -2479,4 +2538,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-09-25
+**Last Updated**: 2026-10-01

@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from src.leads.models import InterestLead
 from src.notifications.email_providers import EmailSendResult
+from src.notifications.lead_notifier import build_interest_lead_template_variables
 from src.notifications.models import NotificationEvent, SendNotificationRequest
 from src.notifications.service import NotificationService
 
@@ -32,6 +33,22 @@ def _low_balance_event() -> NotificationEvent:
         description="Low balance",
         event_key="credits.low_balance",
         category="billing",
+        is_enabled=True,
+        default_template_id=None,
+        metadata=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _interest_lead_event() -> NotificationEvent:
+    now = datetime.now(timezone.utc)
+    return NotificationEvent(
+        id=uuid4(),
+        name="Interest Lead Submitted",
+        description="A public visitor submitted an interest request",
+        event_key="lead.interest_submitted",
+        category="system",
         is_enabled=True,
         default_template_id=None,
         metadata=None,
@@ -126,6 +143,58 @@ async def test_failed_idempotency_key_retries_and_marks_delivery_sent(
     assert len(provider.sent) == 1
     assert provider.sent[0].idempotency_key == "low-credit:org:20:user"
     assert table.update.call_args_list[-1].args[0]["status"] == "sent"
+
+
+@pytest.mark.asyncio
+async def test_interest_lead_email_escapes_submission_once_before_rendering(
+    mock_supabase_client,
+):
+    provider = FakeEmailProvider()
+    with patch("src.notifications.service.supabase_config") as config, patch(
+        "src.notifications.service.settings"
+    ) as settings:
+        config.client = mock_supabase_client
+        settings.resend_from_email = "noreply@example.com"
+        settings.resend_from_name = "24x7 AI"
+        service = NotificationService(email_provider=provider)
+
+    service.get_notification_event_by_key = AsyncMock(
+        return_value=_interest_lead_event()
+    )
+    service._find_notification_log_by_idempotency_key = AsyncMock(
+        return_value={"id": str(uuid4()), "status": "failed", "attempt_count": 1}
+    )
+    table = mock_supabase_client.table.return_value
+    table.update.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{}]
+    )
+    lead = InterestLead(
+        id=uuid4(),
+        name="Sam Owner",
+        business_name="Bright Smiles Dental",
+        email="sam@example.com",
+        phone="+14805550100",
+        vertical="dental",
+        message='<img src=x onerror="alert(1)">',
+        source="contact-form",
+        status="new",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    response = await service.send_notification(
+        SendNotificationRequest(
+            event_key="lead.interest_submitted",
+            recipient_email="admin@example.com",
+            template_variables=build_interest_lead_template_variables(lead),
+            idempotency_key=f"interest-lead:{lead.id}:email",
+        )
+    )
+
+    assert response.success is True
+    rendered = provider.sent[0].html_content
+    assert '<img src=x onerror="alert(1)">' not in rendered
+    assert "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;" in rendered
+    assert "&amp;lt;img" not in rendered
 
 
 @pytest.mark.asyncio

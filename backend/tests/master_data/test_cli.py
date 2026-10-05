@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from src.master_data import cli
+from src.master_data.definitions import build_master_data_catalog
 
 
 def _preview(*, definition_hash: str = "hash-v1") -> list[dict[str, object]]:
@@ -71,6 +72,24 @@ def _skill_preview() -> list[dict[str, object]]:
             ],
             "last_run": None,
         }
+    ]
+
+
+def test_credit_pack_inventory_uses_code_catalog_but_is_not_generic_seedable():
+    credit_products = next(
+        item
+        for item in build_master_data_catalog(tool_names=[])
+        if item.key == "credit_products"
+    )
+
+    assert credit_products.source.startswith("backend/src/billing/credit_catalog.py")
+    assert credit_products.expected_count == 3
+    assert credit_products.seedable is False
+    assert credit_products.requires_review is True
+    assert [pack["credit_amount"] for pack in credit_products.payload] == [
+        200,
+        400,
+        1000,
     ]
 
 

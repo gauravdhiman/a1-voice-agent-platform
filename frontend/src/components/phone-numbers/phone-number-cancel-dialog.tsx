@@ -23,6 +23,14 @@ interface PhoneNumberCancelDialogProps {
   onCancelSuccess: (message?: string) => void;
 }
 
+function formatMonthlyCreditCost(credits: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(credits / 40);
+}
+
 export function PhoneNumberCancelDialog({
   organizationId,
   phoneNumber,
@@ -95,7 +103,9 @@ export function PhoneNumberCancelDialog({
               <div className="text-sm text-muted-foreground">
                 {isCustomerManaged
                   ? "Customer-owned Twilio number"
-                  : `${phoneNumber.monthly_cost_credits} credits/month`}
+                  : phoneNumber.is_included_in_plan
+                    ? "Included with your plan"
+                    : `${phoneNumber.monthly_cost_credits} credits/month (${formatMonthlyCreditCost(phoneNumber.monthly_cost_credits)} equivalent)`}
               </div>
             </div>
           </div>

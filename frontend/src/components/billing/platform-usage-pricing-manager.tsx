@@ -43,6 +43,8 @@ interface SystemPricingCopy {
   rule: string;
 }
 
+const CREDITS_PER_DOLLAR = 40;
+
 const SYSTEM_PRICING_COPY: Record<string, SystemPricingCopy> = {
   voice_call_minute: {
     category: "Voice",
@@ -51,13 +53,18 @@ const SYSTEM_PRICING_COPY: Record<string, SystemPricingCopy> = {
   },
   phone_number_local_month: {
     category: "Phone number",
-    label: "Local phone numbers",
-    rule: "Per active number / month",
+    label: "Legacy non-US local numbers",
+    rule: "Per existing number / month",
+  },
+  phone_number_us_local_month: {
+    category: "Phone number",
+    label: "Additional US local numbers",
+    rule: "Per additional number / month",
   },
   phone_number_mobile_month: {
     category: "Phone number",
-    label: "Mobile phone numbers",
-    rule: "Per active number / month",
+    label: "Existing mobile number rentals (legacy)",
+    rule: "Existing rental / month; new mobile numbers are unavailable in v1",
   },
   phone_number_toll_free_month: {
     category: "Phone number",
@@ -85,6 +92,15 @@ function pricingRule(event: CreditEvent): string {
 /** Return the fixed category used to group a system pricing activity. */
 function pricingCategory(event: CreditEvent): string {
   return SYSTEM_PRICING_COPY[event.name]?.category ?? "System";
+}
+
+/** Show an approximate dollar equivalent using the published credit-pack rate. */
+function formatCreditDollarEquivalent(credits: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(credits / CREDITS_PER_DOLLAR);
 }
 
 /**
@@ -176,6 +192,7 @@ export function PlatformUsagePricingManager() {
               These are the only activities currently charged from credits. Rates
               apply across the platform and can be set to zero when an activity
               is included. The platform owns the measurement rule for each one.
+              At the published top-up rate, 40 credits are worth about $1.
             </p>
           </div>
         </div>
@@ -246,6 +263,10 @@ export function PlatformUsagePricingManager() {
                               </TooltipContent>
                             </Tooltip>
                           </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            ≈ {formatCreditDollarEquivalent(draft.credit_cost)}{" "}
+                            {pricingRule(event).toLowerCase()}
+                          </p>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {pricingRule(event)}

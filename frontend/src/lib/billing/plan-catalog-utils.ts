@@ -39,6 +39,7 @@ function catalogTierRank(product: PlanProductWithVersions): number {
   const slug = product.slug.toLowerCase();
   for (const [keyword, rank] of [
     ["enterprise", 30],
+    ["scale", 30],
     ["pro", 20],
     ["growth", 20],
     ["starter", 10],

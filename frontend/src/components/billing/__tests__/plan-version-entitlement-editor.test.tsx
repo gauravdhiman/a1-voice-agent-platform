@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PlanVersionEntitlementEditor } from "../plan-version-entitlement-editor";
 import { PlanVersionEntitlementDisplay } from "../plan-version-entitlement-display";
+import { buildEntitlementInputs } from "@/lib/billing/plan-version-entitlements";
 import type { EntitlementDefinition } from "@/types/admin-plans";
 
 const definitions: EntitlementDefinition[] = [
@@ -19,6 +20,18 @@ const definitions: EntitlementDefinition[] = [
     description: "Maximum number of agents.",
   },
   {
+    key: "max_phone_numbers",
+    kind: "limit",
+    display_name: "Maximum phone numbers",
+    value_type: "integer",
+    unit: "count",
+    validation_schema: {},
+    enforcement_handler: "limit.max_count",
+    default_when_absent: { type: "integer", value: 0 },
+    is_active: true,
+    description: "Maximum platform-managed phone numbers.",
+  },
+  {
     key: "payg_enabled",
     kind: "feature",
     display_name: "Pay as you go",
@@ -33,6 +46,33 @@ const definitions: EntitlementDefinition[] = [
 ];
 
 describe("PlanVersionEntitlementEditor ordering", () => {
+  it("supports unlimited count limits and serializes them for the API", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+
+    render(
+      <PlanVersionEntitlementEditor
+        definitions={definitions}
+        assigned={[{ key: "max_phone_numbers", integerValue: 1 }]}
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("switch", { name: "Unlimited" }));
+
+    const unlimitedEntitlements = [
+      { key: "max_phone_numbers", integerValue: 1, unlimited: true },
+    ];
+    expect(onChange).toHaveBeenCalledWith(unlimitedEntitlements);
+    expect(buildEntitlementInputs(unlimitedEntitlements, definitions)).toEqual([
+      {
+        entitlement_key: "max_phone_numbers",
+        value: { type: "unlimited" },
+        display_order: 0,
+      },
+    ]);
+  });
+
   it("reorders entitlement blocks with the keyboard controls", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

@@ -52,6 +52,7 @@ export function PhoneNumberPurchase({
         phone_number: selectedNumber.phone_number,
         country_code: selectedNumber.country_code,
         phone_number_type: selectedNumber.phone_number_type,
+        expected_included_in_plan: selectedNumber.is_included_in_plan ?? false,
       });
 
       if (response.success) {
@@ -81,8 +82,13 @@ export function PhoneNumberPurchase({
 
   if (!selectedNumber) return null;
 
-  const canAfford = creditBalance >= selectedNumber.monthly_cost_credits;
-  const newBalance = creditBalance - selectedNumber.monthly_cost_credits;
+  const isIncluded = selectedNumber.is_included_in_plan === true;
+  const monthlyCost = selectedNumber.monthly_cost_credits;
+  const monthlyDollarEquivalent = (monthlyCost / 40)
+    .toFixed(2)
+    .replace(/\.00$/, "");
+  const canAfford = isIncluded || creditBalance >= monthlyCost;
+  const newBalance = creditBalance - monthlyCost;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -93,7 +99,7 @@ export function PhoneNumberPurchase({
             Buy Phone Number
           </DialogTitle>
           <DialogDescription>
-            Purchase a new phone number for your organization
+            Add a phone number for your organization
           </DialogDescription>
         </DialogHeader>
 
@@ -115,9 +121,15 @@ export function PhoneNumberPurchase({
               </div>
               <div className="text-left sm:text-right">
                 <div className="whitespace-nowrap font-semibold">
-                  {selectedNumber.monthly_cost_credits} credits
+                  {isIncluded
+                    ? "Included with your plan"
+                    : `${monthlyCost} credits/month · $${monthlyDollarEquivalent} equivalent`}
                 </div>
-                <div className="text-xs text-muted-foreground">per month</div>
+                {!isIncluded ? (
+                  <div className="text-xs text-muted-foreground">
+                    Charged now and monthly from your shared credit balance
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -138,7 +150,7 @@ export function PhoneNumberPurchase({
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
                 Insufficient credits. You need{" "}
-                {selectedNumber.monthly_cost_credits} credits but only have{" "}
+                {monthlyCost} credits but only have{" "}
                 {creditBalance}.
               </AlertDescription>
             </Alert>
@@ -147,26 +159,27 @@ export function PhoneNumberPurchase({
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              By purchasing, you agree to be charged monthly. If you cancel, the
-              number will be released immediately and you will not be refunded
-              for the current period.
+              {isIncluded
+                ? "This is your one included US local number while your paid plan is active. Additional US local numbers cost 80 credits per month ($2 equivalent each) from this same balance, which can leave fewer credits for calls. You can also connect a Twilio number you already own at no platform rental cost."
+                : `This number costs ${monthlyCost} credits per month ($${monthlyDollarEquivalent} equivalent). The first rental month is charged now, then it renews monthly from the same balance as calls. If you release the number, it is released immediately and the current period is not refunded.`}
             </AlertDescription>
           </Alert>
 
-          <label className="flex items-start gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={acknowledged}
-              onChange={(e) => setAcknowledged(e.target.checked)}
-              className="mt-1"
-            />
-            <span className="text-sm text-muted-foreground">
-              I understand that I will be charged{" "}
-              {selectedNumber.monthly_cost_credits} credits per month and that
-              if I cancel, the number will be released immediately with no
-              refund.
-            </span>
-          </label>
+          {!isIncluded ? (
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+                className="mt-1"
+              />
+              <span className="text-sm text-muted-foreground">
+                I understand the first rental month costs {monthlyCost} credits
+                now, then renews monthly from my shared balance and may reduce
+                call time.
+              </span>
+            </label>
+          ) : null}
         </div>
 
         <DialogFooter className="gap-2">
@@ -181,7 +194,7 @@ export function PhoneNumberPurchase({
           <Button
             className="w-full sm:w-auto"
             onClick={handlePurchase}
-            disabled={!canAfford || !acknowledged || purchasing}
+            disabled={!canAfford || (!isIncluded && !acknowledged) || purchasing}
           >
             {purchasing ? (
               <>
@@ -191,7 +204,7 @@ export function PhoneNumberPurchase({
             ) : (
               <>
                 <CheckCircle className="w-4 h-4 mr-2" />
-                Purchase Number
+                Add Number
               </>
             )}
           </Button>

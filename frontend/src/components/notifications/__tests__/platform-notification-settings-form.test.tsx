@@ -23,6 +23,9 @@ const settings = {
   platform_admin_sms_phone: null,
   platform_admin_sms_notifications_enabled: false,
   sms_sender_configured: true,
+  platform_admin_whatsapp_phone: null,
+  platform_admin_whatsapp_notifications_enabled: false,
+  whatsapp_sender_configured: false,
   verification_from_email: "noreply@example.com",
   verification_from_name: "24x7 AI",
   email_verification_active: true,
@@ -76,6 +79,26 @@ describe("PlatformNotificationSettingsForm", () => {
       expect.objectContaining({
         platform_admin_sms_phone: "+15551234567",
         platform_admin_sms_notifications_enabled: true,
+      }),
+    );
+  });
+
+  it("saves an opted-in platform WhatsApp destination in E.164 form", async () => {
+    const user = userEvent.setup();
+    render(<PlatformNotificationSettingsForm />);
+
+    const phone = await screen.findByLabelText("Platform admin WhatsApp number");
+    await user.type(phone, "+15551234567");
+    await user.click(
+      screen.getByRole("switch", { name: "Enable WhatsApp lead alerts" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenCalled());
+    expect(updateSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platform_admin_whatsapp_phone: "+15551234567",
+        platform_admin_whatsapp_notifications_enabled: true,
       }),
     );
   });

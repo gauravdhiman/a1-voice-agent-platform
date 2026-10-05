@@ -31,7 +31,12 @@ RESEND_FROM_NAME=24x7 AI
 EMAIL_PROVIDER=resend
 NOTIFICATION_RETRY_CHECK_INTERVAL_MINUTES=5
 ENCRYPTION_KEY=your-fernet-key
+TWILIO_WHATSAPP_FROM_NUMBER=whatsapp:+15555550100
+TWILIO_WHATSAPP_CONTENT_SID=HX_template_content_sid
 ```
+
+The WhatsApp sender and approved Content template are required only when
+platform-admin WhatsApp lead alerts are enabled.
 
 ### 2. Run Migration
 
@@ -69,12 +74,19 @@ their own Telegram bot token and chat on **Organization → Notifications**
 SMS uses the platform's Twilio integration. Organization-admin account emails
 remain recipients even when no shared inbox is set.
 
-Public demo and interest-form submissions are retained in `interest_leads` and
-then notify the configured recipient and/or Telegram chat. Email requires the
-recipient, `RESEND_API_KEY`, and a valid sender. Telegram requires the enabled
-switch, bot token, and chat ID. An incomplete channel is skipped; a provider
-failure does not affect the visitor's successful submission. Email failures
-use the existing idempotent retry scheduler.
+Public demo and contact-form submissions are retained in `interest_leads`.
+An insert trigger creates a durable per-channel alert row in
+`interest_lead_notification_outbox` in the same transaction. Email requires the
+platform-admin recipient, `RESEND_API_KEY`, and a valid sender. Telegram
+requires its enabled switch, bot token, and chat ID. WhatsApp requires its
+enabled switch, an E.164 recipient, and the configured Twilio WhatsApp sender
+and approved Content template. Disabled optional channels are skipped;
+enabled but incomplete or failing channels remain pending for retry. Email,
+Telegram, and WhatsApp each have separate state, so retrying one channel does
+not resend channels already acknowledged as delivered. Provider delivery is
+at-least-once if the provider accepts a message but the database acknowledgment
+is lost. Lead submission remains successful after persistence even when a
+provider is unavailable.
 
 ## Signup Verification Flow
 

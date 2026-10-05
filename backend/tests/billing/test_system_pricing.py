@@ -1,11 +1,12 @@
 """Tests for the fixed, system-wide usage-pricing catalog."""
 
-from shared.organization.phone_number_models import PhoneNumberType
 from src.billing.system_pricing import (
     SYSTEM_PRICING_EVENT_NAMES,
     get_phone_number_pricing_event_name,
     get_system_pricing_definition,
 )
+
+from shared.organization.phone_number_models import PhoneNumberType
 
 
 def test_system_pricing_contains_only_supported_billable_activities():
@@ -13,6 +14,7 @@ def test_system_pricing_contains_only_supported_billable_activities():
     assert SYSTEM_PRICING_EVENT_NAMES == (
         "voice_call_minute",
         "phone_number_local_month",
+        "phone_number_us_local_month",
         "phone_number_mobile_month",
         "phone_number_toll_free_month",
     )
@@ -31,6 +33,10 @@ def test_phone_number_type_maps_to_monthly_system_event():
     """Each supported phone-number type resolves to its own monthly rate."""
     assert (
         get_phone_number_pricing_event_name(PhoneNumberType.LOCAL)
+        == "phone_number_us_local_month"
+    )
+    assert (
+        get_phone_number_pricing_event_name(PhoneNumberType.LOCAL, "CA")
         == "phone_number_local_month"
     )
     assert (
@@ -40,4 +46,26 @@ def test_phone_number_type_maps_to_monthly_system_event():
     assert (
         get_phone_number_pricing_event_name(PhoneNumberType.TOLL_FREE)
         == "phone_number_toll_free_month"
+    )
+
+
+def test_phone_number_rental_rates_match_launch_credit_value():
+    """US local is $2/month, toll-free $3; older number types keep legacy rates."""
+    assert (
+        get_system_pricing_definition("phone_number_us_local_month").default_credit_cost
+        == 80
+    )
+    assert (
+        get_system_pricing_definition(
+            "phone_number_toll_free_month"
+        ).default_credit_cost
+        == 120
+    )
+    assert (
+        get_system_pricing_definition("phone_number_mobile_month").default_credit_cost
+        == 200
+    )
+    assert (
+        get_system_pricing_definition("phone_number_local_month").default_credit_cost
+        == 200
     )

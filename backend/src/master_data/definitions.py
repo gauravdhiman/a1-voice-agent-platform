@@ -63,6 +63,7 @@ def build_master_data_catalog(
         A tuple containing code-backed, migration-backed, and review-gated
         domains in a stable order for CLI plans and review artifacts.
     """
+    from src.billing.credit_catalog import CREDIT_PACKS
     from src.billing.system_pricing import SYSTEM_PRICING
     from src.notifications.templates import TEMPLATE_REGISTRY
     from src.voice_agents.skill_seeds import PLATFORM_SKILL_TEMPLATES
@@ -83,6 +84,14 @@ def build_master_data_catalog(
             f"Built-in template with {len(value.get('variables', []))} variables",
         )
         for key, value in sorted(TEMPLATE_REGISTRY.items())
+    ]
+    credit_pack_items = [
+        (
+            str(pack["credit_amount"]),
+            pack["name"],
+            f"${pack['price_usd']:.2f}",
+        )
+        for pack in CREDIT_PACKS
     ]
 
     return (
@@ -176,14 +185,17 @@ def build_master_data_catalog(
             key="credit_products",
             display_name="Credit top-up products",
             category="billing",
-            description="Legacy credit-pack catalog has no approved production source definition yet.",
-            source="credit_products table and Stripe catalog",
-            expected_count=0,
+            description=(
+                "Code-owned credit packs are synchronized to Stripe by the Stripe "
+                "manager; this domain is excluded from generic master-data apply."
+            ),
+            source="backend/src/billing/credit_catalog.py and backend/scripts/stripe_manager.py",
+            expected_count=len(credit_pack_items),
             seedable=False,
             requires_review=True,
             migration_managed=False,
-            items=_items([]),
-            payload="review-gated-credit-products",
+            items=_items(credit_pack_items),
+            payload=[dict(pack) for pack in CREDIT_PACKS],
         ),
         MasterDataDefinition(
             key="entitlement_definitions",

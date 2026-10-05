@@ -14,10 +14,10 @@ page.
 | --- | --- | --- | --- | --- |
 | Platform skill templates | `backend/src/voice_agents/skill_seeds.py` | 15 markdown skills plus reference files across dental, restaurant, and HVAC | CLI plan and explicit apply; content-hash idempotent; normal apply never deletes | In scope for launch; review content and safety gates per [launch strategy](../05_operations/master_data_launch_strategy.md) |
 | Platform tool schemas | `shared/voice_agents/tools/implementations` and `PlatformToolRegistry` | Runtime-discovered tools and function schemas | CLI plan and explicit schema resync | In scope; schema changes must be intentional |
-| System usage pricing | `backend/src/billing/system_pricing.py` | Four finite runtime meters: voice minute and three monthly phone-number rentals | CLI apply creates missing rows and preserves existing rates; reset is non-production only | In scope; rates are hypotheses until measured COGS is available |
+| System usage pricing | `backend/src/billing/system_pricing.py` | Five finite runtime meters: voice minute and four monthly phone-number rates, including US and legacy non-US local rentals | CLI apply creates missing rows and preserves existing rates; reset is non-production only | In scope; rates are hypotheses until measured COGS is available |
 | Notification events | `backend/src/notifications/templates.py` | Nine built-in event keys with template variables | CLI apply creates missing rows; existing rows remain administrator-owned | In scope |
 | Plans and prices | Plan/entitlement migrations plus admin plan catalog | Free plan is migration-managed; no approved paid launch catalog in code | Review-only inventory; blocked from this CLI | Review required; do not seed paid plans from staging data |
-| Credit top-up products | `credit_products` plus Stripe catalog | Legacy table with no approved production source definition | Review-only inventory; blocked from this CLI | Review required |
+| Credit top-up products | `backend/src/billing/credit_catalog.py` plus Stripe catalog | Three code-owned packs; Stripe product/price IDs are created or reconciled by `backend/scripts/stripe_manager.py` | Preview and explicit Stripe-manager sync; intentionally outside this generic CLI | Review before syncing the selected Stripe account |
 | Entitlement definitions | `20260807000002_add_plan_versioning_and_entitlements.py` | Runtime-enforced limit and feature keys | Migration-managed | In scope as inventory, not a second seeder |
 | Onboarding voice templates | `20260329000001_add_onboarding_and_voice_templates.py` | Five starter templates: dental, HVAC, salon, real estate, plumbing | Migration-managed | In scope as inventory; align with industry rollout later |
 | Voice pipeline presets | `20260729000002_add_pipeline_presets_is_default.py` | One system-default realtime preset | Migration-managed | In scope as inventory |
@@ -154,7 +154,8 @@ container orchestrator, run it as a completion-tracked release/bootstrap Job.
   draft/publish lifecycle is not changed by a native sync.
 - System pricing derives from the finite `SYSTEM_PRICING` tuple. A normal seed
   creates missing rows, skips unchanged rows, and preserves administrator-set
-  credit rates and activation state; reset restores source defaults.
+  credit rates and activation state; reset restores source defaults. The US
+  local number rate is separate from the legacy non-US local rate.
 - Notification events create only missing rows from `TEMPLATE_REGISTRY`.
 
 ### Migration-backed providers
@@ -163,12 +164,16 @@ RBAC, plan entitlement definitions, the free plan, voice templates, the system
 pipeline preset, and platform singleton settings remain migration-owned. If
 these need a new default, add a migration and update this inventory.
 
-### Review-gated providers
+### Separately managed billing catalogs
 
-Paid plan versions and credit top-up products are deliberately not seeded. The
-repository does not yet contain an approved launch catalog backed by market
-research, measured COGS, Stripe price IDs, support policy, and margin approval.
-Staging rows are not a production source of truth.
+Paid plan versions remain configured through the authenticated Plan Catalog
+admin; they are not created by the generic master-data CLI or seeded from
+worktree fixtures. The three credit top-up pack amounts are code-owned in
+`backend/src/billing/credit_catalog.py`; use the preview and explicit sync
+commands in `backend/scripts/stripe_manager.py` to reconcile Stripe products
+and prices for the selected account. Stripe price IDs and customer billing
+state remain environment/account data, and staging rows are not a production
+source of truth.
 
 ## Testing and rollout checklist
 

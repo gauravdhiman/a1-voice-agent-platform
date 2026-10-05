@@ -50,7 +50,7 @@ describe("SubscriptionManagement", () => {
       plan_version_id: "version-free",
       plan_product_slug: "free",
       plan_version_number: 1,
-      plan_version_label: "Free",
+      plan_version_label: "Free Plan:Month v1",
       is_legacy_version: false,
       is_entitled: true,
       cancel_at_period_end: false,
@@ -70,8 +70,9 @@ describe("SubscriptionManagement", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Free plan")).toBeInTheDocument();
+      expect(screen.getAllByText("Free", { exact: true }).length).toBeGreaterThan(0);
     });
+    expect(screen.queryByText("Free Plan:Month v1")).toBeNull();
 
     expect(
       screen.queryByRole("button", { name: /manage billing/i }),
@@ -107,5 +108,51 @@ describe("SubscriptionManagement", () => {
         screen.getByRole("button", { name: /buy credits/i }),
       ).toBeInTheDocument();
     });
+  });
+
+  it("shows canonical plan details when no legacy plan row exists", async () => {
+    const versionOnlyPaidSubscription = {
+      ...freeSubscription,
+      stripe_subscription_id: "sub-starter",
+      stripe_customer_id: "cus-starter",
+      metadata: { billing_mode: "paid" },
+      plan_version: {
+        id: "version-starter",
+        plan_product_id: "product-starter",
+        tier_rank: 10,
+        product_slug: "starter",
+        product_name: "Starter",
+        product_description: "For small teams",
+        version_number: 1,
+        display_label: "Starter:Month v1",
+        billing_mode: "paid" as const,
+        credit_grant_policy: "recurring" as const,
+        price_amount_cents: 4900,
+        currency: "USD",
+        billing_interval: "monthly",
+        trial_period_days: null,
+        stripe_price_id: "price-starter",
+        entitlements: {
+          included_credits_per_billing_period: { type: "integer", value: 2500 },
+          max_org_members: { type: "integer", value: 5 },
+        },
+      },
+    };
+
+    render(
+      <SubscriptionManagement
+        organizationId="org-1"
+        subscription={versionOnlyPaidSubscription}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Starter")).toBeTruthy();
+      expect(screen.getByText("$49.00/monthly")).toBeTruthy();
+      expect(screen.getByText("2,500")).toBeTruthy();
+      expect(screen.getByText("Max Users")).toBeTruthy();
+      expect(screen.getByText("5")).toBeTruthy();
+    });
+    expect(screen.queryByText("Starter:Month v1")).toBeNull();
   });
 });

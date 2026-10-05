@@ -196,24 +196,38 @@ class TestPlatformNotificationSettingsService:
             data=_settings_row(
                 platform_admin_sms_phone="+15551234567",
                 platform_admin_sms_notifications_enabled=True,
+                platform_admin_whatsapp_phone="+15557654321",
+                platform_admin_whatsapp_notifications_enabled=True,
             )
         )
 
         payload = PlatformNotificationSettingsUpdate(
             platform_admin_sms_phone="+15551234567",
             platform_admin_sms_notifications_enabled=True,
+            platform_admin_whatsapp_phone="+15557654321",
+            platform_admin_whatsapp_notifications_enabled=True,
         )
         result = await settings_service.update_settings(payload, ADMIN_ID)
 
         update_data = table_mock.update.call_args.args[0]
         assert update_data["platform_admin_sms_phone"] == "+15551234567"
         assert update_data["platform_admin_sms_notifications_enabled"] is True
+        assert update_data["platform_admin_whatsapp_phone"] == "+15557654321"
+        assert update_data["platform_admin_whatsapp_notifications_enabled"] is True
         assert result.platform_admin_sms_phone == "+15551234567"
         assert result.platform_admin_sms_notifications_enabled is True
+        assert result.platform_admin_whatsapp_phone == "+15557654321"
+        assert result.platform_admin_whatsapp_notifications_enabled is True
 
     def test_sms_destination_must_be_e164(self):
         with pytest.raises(ValueError):
             PlatformNotificationSettingsUpdate(platform_admin_sms_phone="5551234567")
+
+    def test_whatsapp_destination_must_be_e164(self):
+        with pytest.raises(ValueError):
+            PlatformNotificationSettingsUpdate(
+                platform_admin_whatsapp_phone="5551234567"
+            )
 
 
 class TestExtractTelegramBotId:

@@ -61,6 +61,12 @@ scheduler retries the current system rate and releases the Twilio number when
 grace expires. A failed initial purchase debit releases the provider number
 immediately.
 
+The first US local platform number is included while the organization has
+active paid-plan access. If it is kept after that access ends, the number
+converts to the configured US local rental rate at its next renewal. The
+customer is told about the 80-credit/month rate in the subscription-cancel
+dialog; the same credit-balance and renewal grace rules then apply.
+
 #### Platform usage pricing
 
 Platform admins manage activity pricing from **Plan Catalog → Usage pricing**;
@@ -279,9 +285,10 @@ INSERT INTO credit_events
     (name, description, credit_cost, category, meter_type, billing_unit)
 VALUES
 ('voice_call_minute', 'Connected voice-call minute', 10, 'voice', 'duration', 'minute'),
-('phone_number_local_month', 'Local number rental', 200, 'phone_number', 'count', 'month'),
+('phone_number_local_month', 'Existing non-US local number rental', 200, 'phone_number', 'count', 'month'),
+('phone_number_us_local_month', 'Additional US local number rental', 80, 'phone_number', 'count', 'month'),
 ('phone_number_mobile_month', 'Mobile number rental', 200, 'phone_number', 'count', 'month'),
-('phone_number_toll_free_month', 'Toll-free number rental', 500, 'phone_number', 'count', 'month');
+('phone_number_toll_free_month', 'Toll-free number rental', 120, 'phone_number', 'count', 'month');
 ```
 
 ### Credit Precedence

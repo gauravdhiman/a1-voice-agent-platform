@@ -21,7 +21,7 @@ const content: IndustryPageContent = {
     sourceNote: "Directional benchmark.",
     sources: [{ label: "Research", href: "https://example.com/research" }],
   },
-  faqs: [{ question: "What does it cost?", answer: "Pilots from $79/mo." }],
+  faqs: [{ question: "What does it cost?", answer: "Plans from $49/month." }],
 };
 
 describe("IndustryPage", () => {

@@ -1,5 +1,12 @@
 # 24x7 AI — Launch Strategy Report: Controlled SaaS, Not Open SaaS, Not Custom Agency
 
+> **Historical pricing analysis (2026-09-03).** Its proposed $79/$179/$399
+> package is superseded by the approved pilot package in
+> [05-pilot-billing-runbook.md](05-pilot-billing-runbook.md) and
+> [06-plan-publish-spec.md](06-plan-publish-spec.md). Keep the market
+> observations as historical research; use those two documents for current
+> price, minutes, phone-number, and billing policy.
+
 **Date:** 2026-09-03 | **Market:** US SMBs first | **Team constraint:** tiny / low-touch | **Pricing:** rethought from scratch
 **Question answered:** Should we launch as open SaaS with pre-configured plans, or as gated / concierge onboarding with discovery calls?
 **Recommendation up front:** Launch as **Controlled SaaS (gated self-serve)** — public demos + interest form → 15-min qualification → concierge setup for first 20–30 customers → then progressively open self-serve. Do **not** open Stripe self-serve on day one. Do **not** sell pure-custom quotes either.
@@ -117,7 +124,7 @@ sequenceDiagram
 | Paid tiers ($49/2000cr, $149/8000cr, $399/25000cr @ 10cr/min) exist only in `master_data_launch_strategy.md` + `definitions.py` (`seedable=False, requires_review=True`) | Publishing them = manual Stripe Product/Price creation + admin publish + margin review. Not a flag flip. |
 | Metering: `ceil(sec/60, min 1) × 10cr/min`; settle order plan → admin bonus → purchased; admitted calls may go negative, next call blocked | Correct for pilots; no partial-credit proration on upgrades, no overage/PAYG (removed in `20260807000004`), no annual, no tax/invoice-download, manual refunds only |
 | Paid activation is async: browser return ≠ paid; must wait `customer.subscription.created + invoice.payment_succeeded` webhooks | Abandoned checkout leaves old plan; retryable but no auto-recovery UI beyond `payment=cancelled/failed` alert |
-| System pricing: `voice_call_minute=10cr`, `local/mobile=200cr/mo`, `toll-free=500cr/mo`; top-up packs `100/$15, 1000/$25, 2500/$50, 5000/$90` in scripts only | Phone rental + overage math must be decided before quoting; today rentals would burn free credits fast |
+| System pricing: voice calls 10 credits/minute, additional US local 80 credits/month, toll-free 120 credits/month, and existing legacy non-US local/mobile 200 credits/month; top-ups 200/$5, 400/$10, and 1,000/$25 are code-owned in `credit_catalog.py` and synced by the Stripe manager | Customer-facing phone rental and credit-pack terms must match the current pilot catalog; see the [plan publish spec](06-plan-publish-spec.md) |
 | E2E billing is mocked; cloud Stripe + staging PSTN gate still required | Don't declare "billing done" from green CI |
 
 ```mermaid
@@ -204,7 +211,12 @@ Don't fight Vapi/Retell on "lowest $/min for developers." Don't fight Smith.ai o
 
 ---
 
-## 7. Recommended pricing (rethought — minutes in marketing, credits inside)
+## 7. Historical pricing research (superseded)
+
+> The tier prices, minutes, overage assumptions, annual discount, and top-up
+> examples in this research section are historical and are no longer the launch
+> proposal. Use the [current plan publish spec](06-plan-publish-spec.md) for the
+> Free, Starter, Pro, and Scale catalog, annual terms, and credit packages.
 
 Keep `credits` internally (you already meter 10cr/min) but **sell minutes + outcomes**. SMBs don't think in credits.
 

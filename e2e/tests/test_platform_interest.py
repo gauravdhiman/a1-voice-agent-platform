@@ -37,6 +37,9 @@ def test_platform_interest_lists_and_advances_leads(
         )
 
     def handle_patch(route):
+        if route.request.method != "PATCH":
+            route.fallback()
+            return
         state["status"] = "contacted"
         route.fulfill(
             status=200,
@@ -44,8 +47,8 @@ def test_platform_interest_lists_and_advances_leads(
             body=LEAD_ROW.format(status="contacted"),
         )
 
-    page.route(re.compile(r".*/api/v1/leads$"), handle_list)
-    page.route(re.compile(r".*/api/v1/leads/.*"), handle_patch)
+    page.route(re.compile(r".*/api/v1/leads/?(?:\?.*)?$"), handle_list)
+    page.route(re.compile(r".*/api/v1/leads/[^/?]+(?:\?.*)?$"), handle_patch)
 
     step("Sign in as the mocked platform admin")
     signin_user(page, base_url)

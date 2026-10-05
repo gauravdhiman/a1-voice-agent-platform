@@ -226,6 +226,18 @@ class StripeService:
             logger.error(f"Failed to retrieve subscription {subscription_id}: {e}")
             raise
 
+    async def get_subscription_schedule(
+        self, schedule_id: str
+    ) -> stripe.SubscriptionSchedule:
+        """Retrieve a subscription schedule to reconcile an uncertain plan change."""
+        try:
+            return stripe.SubscriptionSchedule.retrieve(schedule_id)
+        except stripe.error.StripeError as e:
+            logger.error(
+                "Failed to retrieve subscription schedule %s: %s", schedule_id, e
+            )
+            raise
+
     async def update_subscription(
         self, subscription_id: str, **kwargs
     ) -> stripe.Subscription:
@@ -467,7 +479,12 @@ class StripeService:
             raise
 
     async def create_credits_checkout_session(
-        self, price_id: str, customer_id: str, organization_id: str, product_id: str
+        self,
+        price_id: str,
+        customer_id: str,
+        organization_id: str,
+        product_id: str,
+        credit_amount: int,
     ) -> stripe.checkout.Session:
         """Create a Stripe Checkout session for credit purchase."""
         try:
@@ -485,12 +502,14 @@ class StripeService:
                 metadata={
                     "organization_id": organization_id,
                     "product_id": product_id,
+                    "credit_amount": str(credit_amount),
                     "type": "credits",
                 },
                 payment_intent_data={
                     "metadata": {
                         "organization_id": organization_id,
                         "product_id": product_id,
+                        "credit_amount": str(credit_amount),
                         "type": "credits",
                     }
                 },

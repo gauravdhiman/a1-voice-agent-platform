@@ -467,6 +467,10 @@ async def test_purchase_refunds_and_marks_release_pending_when_provider_compensa
     )
     lifecycle_service.billing_service.refund_credits = AsyncMock()
     lifecycle_service._get_credits_for_type = AsyncMock(return_value=200)
+    lifecycle_service._phone_number_limit_error = AsyncMock(return_value=None)
+    lifecycle_service._qualifies_for_included_us_local_number = AsyncMock(
+        return_value=False
+    )
     lifecycle_service.twilio_service.purchase_phone_number.return_value = MagicMock(
         sid="PN-ORPHAN"
     )
@@ -487,7 +491,9 @@ async def test_purchase_refunds_and_marks_release_pending_when_provider_compensa
     )
 
     assert result is None
-    assert "Failed to purchase" in error
+    from src.phone_numbers.service import PHONE_NUMBER_PURCHASE_UNAVAILABLE
+
+    assert error == PHONE_NUMBER_PURCHASE_UNAVAILABLE
     lifecycle_service.billing_service.refund_credits.assert_awaited_once()
     assert table.update.call_args.args[0]["status"] == "release_pending"
 

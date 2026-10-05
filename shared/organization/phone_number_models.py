@@ -105,6 +105,10 @@ class PhoneNumberBase(BaseModel):
     monthly_cost_credits: int = Field(
         default=0, ge=0, description="Monthly cost in credits"
     )
+    is_included_in_plan: bool = Field(
+        default=False,
+        description="Whether this is the organization's included US local number",
+    )
     status: PhoneNumberStatus = Field(
         default=PhoneNumberStatus.PURCHASED, description="Current status"
     )
@@ -208,6 +212,10 @@ class AvailablePhoneNumber(BaseModel):
     country_code: str = Field(..., description="Country code")
     area_code: Optional[str] = Field(None, description="Area code")
     monthly_cost_credits: int = Field(..., description="Monthly cost in credits")
+    is_included_in_plan: bool = Field(
+        default=False,
+        description="Whether this would use the included US local number allowance",
+    )
     capabilities: dict[str, bool] = Field(
         default_factory=dict,
         description="Capabilities (voice, sms, mms)",
@@ -250,6 +258,10 @@ class PhoneNumberPurchaseRequest(BaseModel):
     )
     phone_number_type: PhoneNumberType = Field(
         default=PhoneNumberType.LOCAL, description="Type of phone number"
+    )
+    expected_included_in_plan: bool = Field(
+        default=False,
+        description="Whether search showed this as the included US local number",
     )
 
 

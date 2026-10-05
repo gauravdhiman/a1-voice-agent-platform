@@ -46,7 +46,7 @@ describe("PhoneNumberSearch", () => {
 
   it("submits the search form when Enter is pressed", async () => {
     const user = userEvent.setup();
-    render(<PhoneNumberSearch creditBalance={500} />);
+    render(<PhoneNumberSearch organizationId="org-1" creditBalance={500} />);
 
     await user.type(screen.getByLabelText(/area code/i), "480");
     const patternInput = screen.getByLabelText(/phone number pattern/i);
@@ -54,6 +54,7 @@ describe("PhoneNumberSearch", () => {
 
     await waitFor(() => {
       expect(searchAvailable).toHaveBeenCalledWith({
+        organization_id: "org-1",
         country_code: "US",
         phone_number_type: "local",
         area_code: "480",
@@ -65,9 +66,15 @@ describe("PhoneNumberSearch", () => {
     });
   });
 
+  it("does not offer unsupported mobile inventory in v1", () => {
+    render(<PhoneNumberSearch organizationId="org-1" creditBalance={500} />);
+
+    expect(screen.queryByRole("option", { name: "Mobile" })).toBeNull();
+  });
+
   it("sends Begin as the selected prefix match mode", async () => {
     const user = userEvent.setup();
-    render(<PhoneNumberSearch creditBalance={500} />);
+    render(<PhoneNumberSearch organizationId="org-1" creditBalance={500} />);
 
     const matchSelect = Array.from(document.querySelectorAll("select")).find(
       (select) => select.value === "contains",
@@ -95,28 +102,25 @@ describe("PhoneNumberSearch", () => {
     });
   });
 
-  it("disables search and explains the minimum credit requirement", async () => {
+  it("allows searching without credits and blocks selection of paid numbers", async () => {
     const user = userEvent.setup();
-    render(<PhoneNumberSearch creditBalance={100} />);
+    render(<PhoneNumberSearch organizationId="org-1" creditBalance={100} />);
 
     const searchButton = screen.getByRole("button", {
       name: /search numbers/i,
     });
-    expect(searchButton).toBeDisabled();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      /search is unavailable.*minimum of 200 credits/i,
-    );
+    expect((searchButton as HTMLButtonElement).disabled).toBe(false);
 
-    await user.type(
-      screen.getByLabelText(/phone number pattern/i),
-      "480{Enter}",
-    );
-    expect(searchAvailable).not.toHaveBeenCalled();
+    await user.click(searchButton);
+    await waitFor(() => expect(searchAvailable).toHaveBeenCalledTimes(1));
+    const selectButton = await screen.findByRole("button", { name: "Select" });
+    expect((selectButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/insufficient credits/i)).toBeTruthy();
   });
 
   it("uses a readable warning style when a returned number costs too much", async () => {
     const user = userEvent.setup();
-    render(<PhoneNumberSearch creditBalance={200} />);
+    render(<PhoneNumberSearch organizationId="org-1" creditBalance={200} />);
 
     fireEvent.submit(
       screen.getByRole("form", { name: /available phone number search/i }),
@@ -129,17 +133,19 @@ describe("PhoneNumberSearch", () => {
     });
   });
 
-  it("shows a toast when the provider search fails", async () => {
+  it("shows a search error instead of reporting an empty inventory", async () => {
     const user = userEvent.setup();
-    searchAvailable.mockRejectedValueOnce(new Error("provider unavailable"));
-    render(<PhoneNumberSearch creditBalance={200} />);
+    const message =
+      "Phone number search is temporarily unavailable. Please try again later.";
+    searchAvailable.mockRejectedValueOnce(new Error(message));
+    render(<PhoneNumberSearch organizationId="org-1" creditBalance={200} />);
 
-    await user.type(
-      screen.getByLabelText(/phone number pattern/i),
-      "480{Enter}",
-    );
+    await user.click(screen.getByRole("button", { name: /search numbers/i }));
 
     await waitFor(() => expect(searchAvailable).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("alert").textContent).toBe(message);
+    expect(screen.queryByText("0 numbers found")).toBeNull();
+    expect(screen.queryByText("No available numbers found")).toBeNull();
   });
 
   it("allows selecting a result that fits the current balance", async () => {
@@ -158,6 +164,7 @@ describe("PhoneNumberSearch", () => {
     });
     render(
       <PhoneNumberSearch
+        organizationId="org-1"
         creditBalance={200}
         onNumberSelected={onNumberSelected}
       />,
@@ -184,8 +191,59 @@ describe("PhoneNumberSearch", () => {
     );
   });
 
+  it("formats whole-dollar US rental equivalents without trailing decimals", async () => {
+    const user = userEvent.setup();
+    searchAvailable.mockResolvedValueOnce({
+      ...SEARCH_RESPONSE,
+      items: [{ ...AVAILABLE_NUMBER, monthly_cost_credits: 80 }],
+    });
+    render(<PhoneNumberSearch organizationId="org-1" creditBalance={485} />);
+
+    await user.click(screen.getByRole("button", { name: /search numbers/i }));
+
+    expect(await screen.findByText("80 credits/mo · $2/mo value")).toBeTruthy();
+  });
+
+  it("allows a zero-balance organization to choose its included number", async () => {
+    const user = userEvent.setup();
+    const onNumberSelected = vi.fn();
+    searchAvailable.mockResolvedValueOnce({
+      ...SEARCH_RESPONSE,
+      items: [
+        {
+          ...AVAILABLE_NUMBER,
+          monthly_cost_credits: 0,
+          is_included_in_plan: true,
+        },
+      ],
+    });
+    render(
+      <PhoneNumberSearch
+        organizationId="org-1"
+        creditBalance={0}
+        onNumberSelected={onNumberSelected}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /search numbers/i }));
+    const selectButton = await screen.findByRole("button", { name: "Select" });
+
+    expect(screen.getByText("Included with plan")).toBeTruthy();
+    expect((selectButton as HTMLButtonElement).disabled).toBe(false);
+    await user.click(selectButton);
+    expect(onNumberSelected).toHaveBeenCalledWith(
+      expect.objectContaining({ is_included_in_plan: true }),
+    );
+  });
+
   it("lets the available numbers section fill the drawer height", async () => {
-    render(<PhoneNumberSearch creditBalance={500} className="min-h-full" />);
+    render(
+      <PhoneNumberSearch
+        organizationId="org-1"
+        creditBalance={500}
+        className="min-h-full"
+      />,
+    );
 
     fireEvent.submit(
       screen.getByRole("form", { name: /available phone number search/i }),

@@ -110,6 +110,12 @@ export function CancelSubscriptionDialog({
                     free tier unless you resubscribe
                   </li>
                   <li>
+                    • Your included US local number stays included through that
+                    date. If you keep it, it renews at 80 credits per month
+                    from your shared balance after paid access ends. Release it
+                    before its next renewal to avoid that add-on charge.
+                  </li>
+                  <li>
                     • You can reactivate anytime before {accessUntilLabel}
                   </li>
                 </ul>

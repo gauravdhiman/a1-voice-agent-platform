@@ -4,7 +4,7 @@ API routes for phone number management.
 Permission contract (see permission-matrix.md / N1 Epic C):
 
   - List organization numbers → ``phone_number:read``
-  - Search available numbers  → authenticated (catalog is not org-scoped)
+  - Search available numbers  → ``phone_number:create`` (pricing is org-scoped)
   - Purchase                  → ``phone_number:create``
   - Assign to agent           → ``phone_number:update``
   - Cancel / release          → ``phone_number:delete``
@@ -18,6 +18,10 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from src.auth.dependencies import assert_has_permission
+from src.auth.middleware import get_authenticated_user
+from src.auth.models import UserProfile
+from src.security.rate_limiter import limiter
 
 from shared.organization.phone_number_models import (
     PhoneNumberAssignRequest,
@@ -32,21 +36,32 @@ from shared.organization.phone_number_models import (
     PhoneNumberWebhookDetailsResponse,
     PhoneNumberWithAgent,
 )
-from src.auth.dependencies import assert_has_permission
-from src.auth.middleware import get_authenticated_user
-from src.auth.models import UserProfile
-from src.security.rate_limiter import limiter
 
 from .platform_settings_models import (
     PlatformPhoneNumberSettings,
     PlatformPhoneNumberSettingsUpdate,
 )
 from .platform_settings_service import platform_phone_number_settings_service
-from .service import phone_number_service
+from .service import (
+    PHONE_NUMBER_PURCHASE_UNAVAILABLE,
+    PHONE_NUMBER_SEARCH_UNAVAILABLE,
+    phone_number_service,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/phone-numbers", tags=["phone-numbers"])
+
+
+def _is_plan_limit_error(error: str) -> bool:
+    """Recognize the entitlement service's stable plan-limit messages.
+
+    Provider errors are also returned as strings by the service layer, so a
+    broad substring check for ``"limit"`` can incorrectly turn a provider
+    rate-limit failure into a customer billing error.
+    """
+    normalized = error.strip().lower()
+    return normalized.startswith(("your plan allows ", "plan allows ", "plan limit '"))
 
 
 def _assert_platform_admin(user_profile: UserProfile) -> None:
@@ -85,6 +100,7 @@ async def update_platform_phone_number_settings(
 
 @router.get("/available", response_model=PhoneNumberSearchResponse)
 async def search_available_numbers(
+    organization_id: UUID,
     country_code: str = "US",
     phone_number_type: str = "local",
     area_code: str | None = None,
@@ -97,10 +113,23 @@ async def search_available_numbers(
     """Search for available phone numbers.
 
     Returns a list of phone numbers available for purchase from the provider.
-    Maximum 50 results per page. Requires authentication only (provider
-    catalog is not org-scoped); purchase still requires ``phone_number:create``.
+    Maximum 50 results per page. The caller needs ``phone_number:create`` so
+    the response can accurately price the organization's included number.
     """
     try:
+        _user_id, user_profile = user_auth
+        assert_has_permission(
+            user_profile,
+            "phone_number",
+            "create",
+            organization_id,
+            error_message="Insufficient permissions to search phone numbers",
+        )
+        if country_code.strip().upper() != "US":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only US platform-provided phone numbers are available in v1.",
+            )
         search_request = PhoneNumberSearchRequest(
             country_code=country_code,
             phone_number_type=phone_number_type,
@@ -111,12 +140,24 @@ async def search_available_numbers(
             page_size=min(page_size, 50),
         )
 
-        result, error = await phone_number_service.search_available(search_request)
+        result, error = await phone_number_service.search_available(
+            search_request, organization_id
+        )
 
         if error:
+            if error.startswith(
+                (
+                    "Only US platform-provided",
+                    "Mobile phone numbers are not available",
+                )
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=error,
+                )
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=error,
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=PHONE_NUMBER_SEARCH_UNAVAILABLE,
             )
 
         return result
@@ -124,10 +165,13 @@ async def search_available_numbers(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error searching available numbers: {e}")
+        logger.error(
+            "Unexpected phone number search failure (error_type=%s)",
+            type(e).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to search available numbers",
+            detail=PHONE_NUMBER_SEARCH_UNAVAILABLE,
         )
 
 
@@ -153,7 +197,6 @@ async def purchase_phone_number(
             organization_id,
             error_message="Insufficient permissions to purchase phone numbers",
         )
-
         result, error = await phone_number_service.purchase_number(
             organization_id=organization_id,
             purchase_request=purchase_request,
@@ -161,9 +204,26 @@ async def purchase_phone_number(
         )
 
         if error:
-            if "Insufficient credits" in error:
+            if error == PHONE_NUMBER_PURCHASE_UNAVAILABLE:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=PHONE_NUMBER_PURCHASE_UNAVAILABLE,
+                )
+            if error.strip().lower().startswith(
+                "insufficient credits to purchase the phone number"
+            ) or _is_plan_limit_error(error):
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail=error,
+                )
+            if (
+                "idempotency key" in error.lower()
+                or "already provisioning" in error.lower()
+                or "awaiting provider release" in error.lower()
+                or "purchase attempt has ended" in error.lower()
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
                     detail=error,
                 )
             raise HTTPException(
@@ -176,7 +236,9 @@ async def purchase_phone_number(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error purchasing phone number: {e}")
+        logger.error(
+            "Phone number purchase route failed (error_type=%s)", type(e).__name__
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to purchase phone number",
@@ -204,7 +266,7 @@ async def import_phone_number(
             import_request=import_request,
         )
         if error:
-            if "limit" in error.lower() or "plan allows" in error.lower():
+            if _is_plan_limit_error(error):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
         return result

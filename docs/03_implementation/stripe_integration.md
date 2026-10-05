@@ -93,16 +93,18 @@ For subscription plans, create **recurring prices** in Stripe with the following
 
 ### 2. Credit Products (One-time Prices)
 
-For credit products, create **one-time prices** in Stripe with the following **product metadata**:
+For each managed credit product, add Product metadata and a matching one-time Price:
 
 #### Required Metadata Fields:
 
+- `catalog_owner` (string): `24x7-ai-credit-catalog-v1`, set on both the product and its one-time price
 - `credit_amount` (string): Number of credits this product provides
 
 #### Example Product Metadata:
 
 ```json
 {
+  "catalog_owner": "24x7-ai-credit-catalog-v1",
   "credit_amount": "1000"
 }
 ```
@@ -122,7 +124,7 @@ For credit products, create **one-time prices** in Stripe with the following **p
 1. Go to **Products** → **Add product**
 2. Fill in product name and description
 3. Create a **one-time** price
-4. In the **Product** section, add the `credit_amount` metadata
+4. In the **Product** section, add both metadata fields; add the same ownership marker to the one-time Price metadata
 5. Make sure the product is **Active**
 
 ## Stripe Manager Tool
@@ -181,15 +183,21 @@ python scripts/stripe_manager.py cleanup --dry-run
 python scripts/stripe_manager.py cleanup
 ```
 
-### 4. Seed Your Database
+### 4. Sync the Approved Credit Packs
 
 ```bash
-# Preview what would be seeded (recommended first)
+# Preview the approved credit-pack sync (recommended first)
 python scripts/stripe_manager.py seed --dry-run
 
-# Seed the database with intelligent detection
+# Sync only the approved credit packs to the database
 python scripts/stripe_manager.py seed
 ```
+
+The default `seed` command does not import subscription plans or usage rates
+from Stripe. Configure plan versions in Plan Catalog and rates in the
+system-pricing admin UI. `--include-legacy-billing-data` is an explicit opt-in
+for a reviewed pre-migration backfill; it imports only legacy subscription-plan
+rows.
 
 ## Detailed Usage
 
@@ -222,7 +230,8 @@ python scripts/stripe_manager.py cleanup --dry-run
 python scripts/stripe_manager.py cleanup
 ```
 
-This command specifically targets old "All Credit Packages" products for deactivation.
+`setup-credits` only edits products and prices carrying the managed catalog
+ownership marker. It leaves unmarked Stripe catalog entries untouched.
 
 ### Set Up Credit Products
 
@@ -236,31 +245,35 @@ python scripts/stripe_manager.py setup-credits
 
 This creates standardized credit products:
 
-- 100 Credits Pack ($15.00)
+- 200 Credits Pack ($5.00)
+- 400 Credits Pack ($10.00)
 - 1000 Credits Pack ($25.00)
-- 2500 Credits Pack ($50.00)
-- 5000 Credits Pack ($90.00)
 
-### Seed Database with Stripe Data
+### Sync Credit Packs; Import Legacy Billing Data Only by Exception
 
 ```bash
-# Preview what would be seeded (recommended first)
+# Preview the approved credit-pack sync
 python scripts/stripe_manager.py seed --dry-run
 
-# Seed the database with intelligent detection
+# Sync the approved credit packs
 python scripts/stripe_manager.py seed
 
-# Seed with detailed output showing analysis of each product
-python scripts/stripe_manager.py seed --verbose --dry-run
-python scripts/stripe_manager.py seed --verbose
+# A reviewed legacy plan backfill is a separate pre-migration step
+python scripts/stripe_manager.py seed --include-legacy-billing-data --skip-credit-products --dry-run
 ```
 
-The seed command:
+The default command:
 
 - Uses pagination to fetch all Stripe products
-- Intelligently detects subscription plans and credit products
-- Provides smart defaults when metadata is missing
+- Detects legacy subscription products but leaves those records unchanged
+- Synchronizes only the three approved credit products
 - Reports uncategorized items for manual review
+
+Use `--include-legacy-billing-data --skip-credit-products` only for the
+reviewed, pre-migration legacy backfill described in
+[staging_environment.md](../05_operations/staging_environment.md). Load those
+rows after `20260807000001` and before `20260807000002`; run the normal
+credit-pack seed after upgrading to `head`.
 
 ### Show Metadata Setup Instructions
 
@@ -277,18 +290,13 @@ The tool includes smart detection capabilities:
 ### For Subscription Plans:
 
 - **Smart Defaults**: Plans without metadata get 1000 included credits by default
-- **Flexible Naming**: Automatically appends billing interval to plan names
+- **Plan Naming**: Keeps customer-facing plan names separate from billing cadence
 - **Metadata Parsing**: Safely parses JSON features with fallbacks
 
 ### For Credit Products:
 
-- **Metadata Detection**: Prefers explicit `credit_amount` metadata
-- **Name-based Inference**: Extracts credit amounts from product names like "100 Credits Pack"
-- **Price-based Inference**: Infers credits from common pricing patterns:
-  - $15.00 → 100 credits
-  - $25.00 → 1000 credits
-  - $50.00 → 2500 credits
-  - $90.00 → 5000 credits
+- **Ownership detection** requires `catalog_owner=24x7-ai-credit-catalog-v1` on both Product and Price, plus a supported `credit_amount` and approved USD amount.
+- `setup-credits` only reconciles owned products and prices and keeps existing Prices active. `seed` ignores unowned one-time products and uses `sync_credit_product_catalog` to atomically activate the full approved database catalog and deactivate stale rows. Older Stripe Prices may remain active, but the billing UI offers only the active database catalog.
 
 ## Troubleshooting
 
@@ -296,8 +304,8 @@ The tool includes smart detection capabilities:
 
 - Check that `STRIPE_SECRET_KEY` is set correctly
 - Ensure products are marked as **Active** in Stripe
-- Verify metadata fields are set on products (not prices)
-- For credit products, ensure they have `credit_amount` metadata
+- Verify subscription metadata is set on products
+- For credit products, ensure Product and Price both carry the ownership marker and Product has `credit_amount`
 
 ### Missing fields in database:
 
@@ -326,8 +334,12 @@ If you were using the old individual scripts, here's the mapping:
 | `python scripts/stripe_diagnostic.py`                                      | `python scripts/stripe_manager.py diagnostic`               |
 | `python scripts/cleanup_old_stripe_products.py --dry-run`                  | `python scripts/stripe_manager.py cleanup --dry-run`        |
 | `python scripts/setup_stripe_credit_products.py --setup-credits --dry-run` | `python scripts/stripe_manager.py setup-credits --dry-run`  |
-| `python scripts/seed_billing_data.py --dry-run`                            | `python scripts/stripe_manager.py seed --dry-run`           |
-| `python scripts/seed_billing_data_enhanced.py --dry-run`                   | `python scripts/stripe_manager.py seed --dry-run --verbose` |
+| `python scripts/seed_billing_data.py --dry-run`                            | `python scripts/stripe_manager.py seed --include-legacy-billing-data --skip-credit-products --dry-run` |
+| `python scripts/seed_billing_data_enhanced.py --dry-run`                   | `python scripts/stripe_manager.py seed --include-legacy-billing-data --skip-credit-products --dry-run --verbose` |
+
+Run these legacy imports only after `20260807000001` and before
+`20260807000002`; then apply the remaining migrations and run the normal
+credit-pack seed. Routine setup uses the default credit-only seed.
 
 ## Best Practices
 

@@ -290,13 +290,20 @@ Run the full disposable lifecycle:
 ```bash
 ./scripts/run-e2e.sh
 ./scripts/run-e2e.sh --video-on
+./scripts/run-e2e.sh -- -k 'billing_flow or phone_number_management_smoke or platform_plan_catalog_smoke' -x -vv
 ```
+
+Arguments after `--` are passed to pytest, which supports selecting focused
+scenarios without changing the disposable stack lifecycle.
 
 The runner builds docker-compose.e2e.yml, applies the test schema and
 migrations, runs Python Playwright tests against ports 3001/8001, stores the
 HTML report under e2e/reports, and tears down only its named transient stack.
-Do not copy its down -v cleanup to persistent local Supabase or worktree
-stacks.
+Its database is disposable PostgreSQL and its Supabase URL uses the reserved
+`.invalid` domain because the browser suite mocks Supabase auth at the network
+boundary. The runner waits for backend liveness; dependency-aware `/health`
+would fail because this stack intentionally has no Supabase REST service. Do
+not copy its down -v cleanup to persistent local Supabase or worktree stacks.
 
 Use the `agent-browser`/browser automation skill for focused UI smoke checks.
 Extend existing

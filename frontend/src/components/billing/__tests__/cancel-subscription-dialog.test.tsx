@@ -22,6 +22,9 @@ describe("CancelSubscriptionDialog", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText(/no refund is issued/i).length).toBeGreaterThan(0);
     expect(
+      screen.getByText(/renews at 80 credits per month from your shared balance/i),
+    ).toBeTruthy();
+    expect(
       screen.queryByText(/All access to premium features will be removed/i),
     ).not.toBeInTheDocument();
   });

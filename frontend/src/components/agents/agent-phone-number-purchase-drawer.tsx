@@ -146,6 +146,7 @@ export function AgentPhoneNumberPurchaseDrawer({
               </Alert>
             ) : creditBalance !== null ? (
               <PhoneNumberSearch
+                organizationId={organizationId}
                 creditBalance={creditBalance}
                 className="min-h-full"
                 onNumberSelected={(number) => {

@@ -111,7 +111,11 @@ assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'apply --plan'
 assert_contains "$ROOT/scripts/deploy/sync-native-tools.sh" 'docker compose'
 assert_contains "$ROOT/scripts/deploy/sync-release-fixtures.sh" 'sync_demo_fixtures.py'
 assert_contains "$ROOT/scripts/deploy/sync-release-fixtures.sh" 'preview --domain platform_tools'
+assert_contains "$ROOT/scripts/deploy/sync-release-fixtures.sh" '--domain system_pricing'
 assert_contains "$ROOT/scripts/deploy/sync-release-fixtures.sh" 'apply --plan'
+assert_contains "$ROOT/scripts/bootstrap-staging-db.sh" '--domain system_pricing'
+assert_contains "$ROOT/scripts/bootstrap-staging-db.sh" 'master_data.cli apply --plan'
+assert_contains "$ROOT/scripts/validate-staging.sh" 'rerun ./scripts/validate-staging.sh'
 [[ -x "$ROOT/scripts/deploy/sync-release-fixtures.sh" ]] || {
   echo "Release fixture synchronization script is not executable" >&2
   exit 1

@@ -372,6 +372,14 @@ class Settings(BaseSettings):
         default=None,
         description="Twilio E.164 sender number used for platform SMS alerts",
     )
+    twilio_whatsapp_from_number: Optional[str] = Field(
+        default=None,
+        description="Twilio WhatsApp-enabled sender in E.164 format",
+    )
+    twilio_whatsapp_content_sid: Optional[str] = Field(
+        default=None,
+        description="Approved Twilio WhatsApp Content template SID for lead alerts",
+    )
     twilio_webhook_signature_validation_enabled: bool = Field(
         default=True,
         description="Validate X-Twilio-Signature on inbound and status webhooks",

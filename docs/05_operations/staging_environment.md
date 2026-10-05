@@ -63,8 +63,9 @@ startup command also applies the idempotent migration gate, so a direct local
 staging start cannot silently run against an older schema:
 
 ```bash
-./scripts/validate-staging.sh           # check + migrate + sync tools/demos + restart local stack
-./start.sh start dev --env staging      # migrate + start local app directly
+./scripts/validate-staging.sh           # check + migrate + sync usage meters/tools/demos + restart local stack
+# Direct start is only for a database whose release catalogs were already synced.
+./start.sh start dev --env staging
 ```
 
 Check any future checkout before touching shared staging:
@@ -134,27 +135,46 @@ Copy Stripe keys from production `.env.prod` for now (same Stripe account). Spli
 ```
 
 When the staging project is empty or at an older known revision, this runs
-three steps in order:
+four steps in order:
 
 ```mermaid
 flowchart LR
-  A["alembic upgrade 20260807000001"] --> B["stripe_manager seed"]
-  B --> C["alembic upgrade head"]
+  A["alembic upgrade 20260807000001"] --> B["alembic upgrade head"]
+  B --> C["master-data apply (missing system-pricing meters)"]
+  C --> D["stripe_manager seed (approved credit packs)"]
 ```
 
-**Why this order?** Migration `20260807000002` backfills `plan_products` / `plan_versions` from rows in `subscription_plans`. Seeding must happen **before** that migration on an empty database.
+The head upgrade first runs the legacy `subscription_plans` backfill and creates
+the atomic credit-catalog sync function. The default Stripe Manager seed then
+syncs only the approved credit packs; it does not import Stripe subscription
+prices or overwrite the admin-managed plan and usage catalogs. Bootstrap and
+release fixture sync create missing code-owned system-pricing meters (including
+new phone rental meters) while preserving existing rates.
+
+Legacy Stripe plan imports are a separate, deliberate backfill. If one is
+required, first preview it against the intended Stripe account and database
+with `seed --include-legacy-billing-data --skip-credit-products --dry-run` at
+revision `20260807000001`, review the imported plans, then run that command
+without `--dry-run` before upgrading to `head`. After the migration backfills
+those rows into plan versions, run the normal `seed` command to sync approved
+credit packs. Do not use this legacy path to publish current paid plans; manage
+those through the Plan Catalog admin UI.
 
 Options:
 
 ```bash
-./scripts/bootstrap-staging-db.sh --dry-run-seed   # preview Stripe seed
+./scripts/bootstrap-staging-db.sh --dry-run-seed   # preview system-pricing + Stripe seed
 ./scripts/bootstrap-staging-db.sh --skip-seed      # migrations only
 ```
+
+After bootstrap (including `--skip-seed`), use `./scripts/validate-staging.sh`
+to synchronize the release catalogs and start the local application. A direct
+`start.sh` command does not synchronize system pricing, tools, or demos.
 
 ### 3. Point local app at staging
 
 ```bash
-./start.sh restart dev --env staging
+./scripts/validate-staging.sh
 ```
 
 Open http://localhost:3000 — auth and data come from staging Supabase.
@@ -183,9 +203,13 @@ ON CONFLICT DO NOTHING;
 The normal path is the validator:
 
 ```bash
-./scripts/validate-staging.sh                 # check + migrate + verify + sync tools/demos + restart
-./scripts/validate-staging.sh --migrate-only  # check + migrate + verify
+./scripts/validate-staging.sh                 # check + migrate + verify + sync meters/tools/demos + restart
+./scripts/validate-staging.sh --migrate-only  # check + migrate + verify; no catalog sync or app start
 ```
+
+After `--migrate-only`, rerun the full validator before starting the staging
+app. This applies the reviewed release catalogs, including any newly added
+system-pricing meter.
 
 For granular control:
 
@@ -231,9 +255,12 @@ SELECT COUNT(*) AS entitlements FROM entitlement_definitions;
 Expected after full bootstrap:
 
 - `alembic_version` at head
-- `subscription_plans` > 0 (from Stripe seed)
-- `plan_products` includes `free` + backfilled paid products
+- `subscription_plans` contains legacy rows only when the separate backfill was used
+- `plan_products` includes Free and any paid products backfilled from existing legacy rows
 - `entitlement_definitions` ≈ 11 rows (seeded in migration)
+
+The default credit-pack sync does not populate paid subscription plans. Add
+current paid plans through the authenticated Plan Catalog after bootstrap.
 
 ---
 

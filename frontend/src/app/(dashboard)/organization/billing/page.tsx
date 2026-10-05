@@ -24,6 +24,7 @@ import { useOrganization } from "@/contexts/organization-context";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { PlanSelection } from "@/components/billing/plan-selection";
+import { friendlyPlanName } from "@/components/billing/plan-card";
 import { CreditPurchase } from "@/components/billing/credit-purchase";
 import { CreditUsagePanel } from "@/components/billing/credit-usage-panel";
 import { SubscriptionManagement } from "@/components/billing/subscription-management";
@@ -32,6 +33,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useOrganizationById } from "@/hooks/use-organization-by-id";
 import { useCreditUsage } from "@/hooks/use-credit-usage";
 import { AccessDenied } from "@/components/ui/access-denied";
+import { billingService } from "@/services/billing-service";
 
 export default function BillingPage() {
   const { loading: authLoading } = useAuth();
@@ -89,6 +91,63 @@ export default function BillingPage() {
   } = useCreditUsage(orgId || undefined);
 
   const [userSelectedTab, setUserSelectedTab] = useState<string | null>(null);
+  const [checkoutConfirmation, setCheckoutConfirmation] = useState<
+    "idle" | "pending" | "confirmed" | "delayed"
+  >("idle");
+  const [activationRetry, setActivationRetry] = useState(0);
+  const paymentStatus = searchParams.get("payment");
+  const checkoutPlanVersionId = searchParams.get("plan_version_id");
+
+  useEffect(() => {
+    if (paymentStatus !== "success" || !orgId || !checkoutPlanVersionId) {
+      setCheckoutConfirmation("idle");
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    setCheckoutConfirmation("pending");
+
+    const confirmPlanActivation = async () => {
+      attempts += 1;
+      try {
+        const activation = await billingService.getSubscriptionActivationStatus(orgId);
+        if (
+          !cancelled &&
+          activation.plan_version_id === checkoutPlanVersionId &&
+          (activation.state === "active" || activation.state === "trial")
+        ) {
+          setCheckoutConfirmation("confirmed");
+          await Promise.all([refetch(), refetchCreditUsage()]);
+          return;
+        }
+      } catch {
+        // Stripe's webhook may still be persisting the subscription. Keep
+        // checking for a bounded period and let the user refresh afterward.
+      }
+
+      if (cancelled) return;
+      if (attempts >= 20) {
+        setCheckoutConfirmation("delayed");
+        return;
+      }
+      timer = setTimeout(() => void confirmPlanActivation(), 1500);
+    };
+
+    void confirmPlanActivation();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    paymentStatus,
+    orgId,
+    checkoutPlanVersionId,
+    activationRetry,
+    refetch,
+    refetchCreditUsage,
+  ]);
 
   const error = queryError
     ? queryError instanceof Error
@@ -102,9 +161,19 @@ export default function BillingPage() {
 
   const isFreePlan =
     billingSummary?.subscription?.metadata?.billing_mode === "free";
-  const currentPlanName =
-    billingSummary?.subscription?.plan?.name ??
-    (isFreePlan ? "Free plan" : "No Plan");
+  const currentPlan = billingSummary?.subscription?.plan;
+  const currentPlanVersion = billingSummary?.subscription?.plan_version;
+  const currentPlanName = currentPlanVersion
+    ? friendlyPlanName({
+        product_slug: currentPlanVersion.product_slug,
+        product_name: currentPlanVersion.product_name,
+        display_label: currentPlanVersion.display_label,
+      })
+    : currentPlan
+      ? friendlyPlanName({ product_name: currentPlan.name, display_label: null })
+    : isFreePlan
+      ? "Free"
+      : "No Plan";
 
   const activeTab =
     userSelectedTab ?? (hasActiveSubscription ? "overview" : "plans");
@@ -255,6 +324,51 @@ export default function BillingPage() {
           </span>
         </div>
       </div>
+
+      {paymentStatus === "cancelled" ? (
+        <Alert>
+          <AlertDescription>
+            Checkout was cancelled. Your current plan and billing have not changed.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {checkoutConfirmation === "pending" ? (
+        <Alert>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <AlertDescription>
+            Payment completed. We&apos;re confirming the selected plan with the
+            billing system. This page will refresh when activation is confirmed;
+            don&apos;t submit the payment again.
+          </AlertDescription>
+        </Alert>
+      ) : checkoutConfirmation === "confirmed" ? (
+        <Alert className="border-green-200 bg-green-50 text-green-900">
+          <AlertDescription>
+            Your selected plan is active and the billing information has been refreshed.
+          </AlertDescription>
+        </Alert>
+      ) : checkoutConfirmation === "delayed" ? (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Payment completed, but plan activation is still pending. Your account
+            will continue to show the current plan until confirmation arrives.
+            Don&apos;t pay again.{" "}
+            <button
+              className="font-medium underline"
+              onClick={() => {
+                setCheckoutConfirmation("pending");
+                setActivationRetry((retry) => retry + 1);
+                void Promise.all([refetch(), refetchCreditUsage()]);
+              }}
+              type="button"
+            >
+              Check activation again
+            </button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {/* Overview Cards */}
       {billingSummary && (

@@ -39,6 +39,7 @@ export interface PhoneNumberBase {
   country_code: string;
   area_code: string | null;
   monthly_cost_credits: number;
+  is_included_in_plan?: boolean;
   status: PhoneNumberStatus;
   assigned_agent_id: string | null;
   is_incoming_enabled: boolean;
@@ -73,6 +74,7 @@ export interface AvailablePhoneNumber {
   country_code: string;
   area_code: string | null;
   monthly_cost_credits: number;
+  is_included_in_plan?: boolean;
   capabilities: {
     voice?: boolean;
     sms?: boolean;
@@ -83,6 +85,7 @@ export interface AvailablePhoneNumber {
 }
 
 export interface PhoneNumberSearchRequest {
+  organization_id: string;
   country_code?: string;
   phone_number_type?: PhoneNumberType;
   area_code?: string | null;
@@ -96,6 +99,7 @@ export interface PhoneNumberPurchaseRequest {
   phone_number: string;
   country_code?: string;
   phone_number_type?: PhoneNumberType;
+  expected_included_in_plan?: boolean;
 }
 
 export interface PhoneNumberAssignRequest {
@@ -198,8 +202,8 @@ export const getPhoneNumberStatusLabel = (status: PhoneNumberStatus): string => 
 
 export const getCreditsForType = (type: PhoneNumberType): number => {
   const costs: Record<PhoneNumberType, number> = {
-    local: 200,
-    toll_free: 500,
+    local: 80,
+    toll_free: 120,
     mobile: 200,
   };
   return costs[type] || 200;

@@ -21,7 +21,12 @@ export interface InterestLeadData {
   /** What the business needs. */
   message?: string;
   /** Capture channel; defaults to the request-demo form. */
-  source?: "request-demo" | "outcome-form" | "demo-call" | "manual";
+  source?:
+    | "request-demo"
+    | "contact-us"
+    | "outcome-form"
+    | "demo-call"
+    | "manual";
   /** Demo agent slug when captured post-demo. */
   demoSlug?: string;
   /** Cloudflare Turnstile token (sent when the widget is enabled). */

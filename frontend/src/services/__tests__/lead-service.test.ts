@@ -41,7 +41,24 @@ describe("leadService", () => {
       message: undefined,
       source: "request-demo",
       demo_slug: undefined,
+      captcha_token: undefined,
     });
+  });
+
+  it("preserves the contact form source for platform notifications", async () => {
+    postMock.mockResolvedValue({ data: { received: true } });
+
+    const result = await leadService.submitInterestLead({
+      name: "Sam Owner",
+      email: "sam@example.com",
+      source: "contact-us",
+    });
+
+    expect(result.success).toBe(true);
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/v1/public/leads",
+      expect.objectContaining({ source: "contact-us" }),
+    );
   });
 
   it("returns a safe error when submission fails", async () => {

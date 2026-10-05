@@ -120,7 +120,7 @@ the ownership diagram and the cutover checklist.
 | 3 | Cloudflare DNS (`api`, `www`, apex, and `voice`) | You |
 | 4 | Supabase Auth — Site URL + redirect URLs for production | You |
 | 5 | GCP Secret Manager + OCI Vault + runtime identities | See [secret management](secret-management.md); provision versions, IAM, the OCI dynamic group, and instance-principal access before the first managed release. |
-| 6 | Production DB migrations + credential/phone verification + public demo bootstrap | Migrations and verification run in the protected `Promote to production` workflow; the GCP backend deployment then syncs the native tools and all three public demos. Manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by both read-only verifiers and an approved GCP/backend deployment. |
+| 6 | Production DB migrations + credential/phone verification + public demo bootstrap | Migrations and verification run in the protected `Promote to production` workflow; the GCP backend deployment then syncs missing system-pricing meters (preserving existing rates), native tools, and all three public demos. Manual recovery: `./scripts/deploy.sh migrate --env-file .env.prod` followed by both read-only verifiers and an approved GCP/backend deployment. |
 | 7 | OCI A1 Flex VM + Docker + Caddy + voice-ws | `./scripts/deploy.sh voice-ws` |
 ## Scripts and artifacts
 
@@ -131,7 +131,7 @@ the ownership diagram and the cutover checklist.
 | `.env.prod.example` | Production env template |
 | `.env.staging.example` | Staging env template (local app + cloud DB) |
 | `scripts/deploy/gcp-deploy.sh` | Build + deploy backend and/or frontend to Cloud Run |
-| `scripts/deploy/sync-release-fixtures.sh` | Explicit bootstrap for native tools and the three public demo agents |
+| `scripts/deploy/sync-release-fixtures.sh` | Explicit bootstrap for system-pricing meters, native tools, and the three public demo agents |
 | `scripts/deploy/gcp-env-from-cloud.py` | Filter `.env.prod` per service |
 | `scripts/deploy/render-gcp-env.py` | Render a short-lived migration env from GCP Secret Manager |
 | `scripts/deploy/sync-gcp-secrets.py` | Preview/apply secret versions during initial provisioning |
@@ -281,10 +281,18 @@ logs.
 Organization admins receive email. Configure the platform-admin email and
 Telegram settings on the Platform Notification Settings page. Platform SMS
 requires an E.164 destination, the explicit SMS opt-in, Twilio account
-credentials, and `TWILIO_SMS_FROM_NUMBER`. Telegram and SMS retries use the
-database outbox; email retries use the notification log scheduler. A provider
-may accept an alert just before the database acknowledgment is lost, so a rare
-duplicate message is possible.
+credentials, and `TWILIO_SMS_FROM_NUMBER`. WhatsApp lead alerts require an
+approved Twilio Content template, `TWILIO_WHATSAPP_FROM_NUMBER`,
+`TWILIO_WHATSAPP_CONTENT_SID`, the Twilio account credentials, and a platform
+admin E.164 destination with WhatsApp notifications explicitly enabled. The
+template must define placeholders `{{1}}` through `{{10}}` for the submitted
+name, business, email, phone, vertical, message, source, demo, submission time,
+and interests URL. Email, Telegram, and WhatsApp receive the full submitted
+lead details when configured; a channel without its credentials and recipient
+is skipped. Telegram, SMS, and WhatsApp retries use the database outbox; email
+retries use the notification log scheduler. A provider may accept an alert just
+before the database acknowledgment is lost, so a rare duplicate message is
+possible.
 
 For a normal planned `K1` to `K2` rotation, use the general command instead:
 
