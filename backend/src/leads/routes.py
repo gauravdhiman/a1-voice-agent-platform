@@ -25,7 +25,9 @@ from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.leads.models import InterestLead, InterestLeadAck, InterestLeadCreate
 from src.leads.service import lead_service
-from src.notifications.lead_notifier import interest_lead_notifier
+from src.notifications.lead_notification_outbox import (
+    interest_lead_notification_outbox,
+)
 from src.security.rate_limiter import limiter
 from src.security.turnstile import is_turnstile_configured, verify_turnstile_token
 
@@ -124,18 +126,25 @@ async def submit_interest_lead(
         )
     if lead is not None:
         if background_tasks is not None:
-            background_tasks.add_task(interest_lead_notifier.notify_interest_lead, lead)
+            background_tasks.add_task(
+                interest_lead_notification_outbox.process_pending,
+                lead_id=lead.id,
+                limit=1,
+            )
         else:
-            # Direct invocation is used by unit tests and internal callers that
-            # do not have FastAPI's background-task container.
+            # The database trigger has already persisted the outbox row with
+            # the lead; direct callers may attempt immediate delivery as well.
             try:
-                await interest_lead_notifier.notify_interest_lead(lead)
+                await interest_lead_notification_outbox.process_pending(
+                    lead_id=lead.id,
+                    limit=1,
+                )
             except Exception:
                 logger.exception(
-                    "Interest notification failed after lead %s was persisted",
+                    "Interest notification dispatch failed for persisted lead %s",
                     lead.id,
                 )
-        current_span.set_attribute("lead.notification_scheduled", True)
+        current_span.set_attribute("lead.notification_outbox_scheduled", True)
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     return InterestLeadAck(received=True)
 

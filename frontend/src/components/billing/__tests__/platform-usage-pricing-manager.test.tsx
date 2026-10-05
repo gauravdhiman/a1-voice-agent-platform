@@ -20,8 +20,22 @@ const events = [
   {
     id: "event-2",
     name: "phone_number_local_month",
-    description: "An active local phone number is charged once per month.",
+    description: "Existing non-US local platform rentals retain their legacy monthly rate.",
     credit_cost: 200,
+    category: "phone_number",
+    is_active: true,
+    metadata: null,
+    meter_type: "count" as const,
+    billing_unit: "month" as const,
+    created_at: "2026-08-11T00:00:00Z",
+    updated_at: "2026-08-11T00:00:00Z",
+  },
+  {
+    id: "event-5",
+    name: "phone_number_us_local_month",
+    description:
+      "Each additional platform-provided US local phone number uses 80 credits per rental month.",
+    credit_cost: 80,
     category: "phone_number",
     is_active: true,
     metadata: null,
@@ -33,7 +47,8 @@ const events = [
   {
     id: "event-3",
     name: "phone_number_mobile_month",
-    description: "An active mobile phone number is charged once per month.",
+    description:
+      "Legacy active mobile rentals retain their monthly rate; new mobile-number purchases are unavailable in v1.",
     credit_cost: 200,
     category: "phone_number",
     is_active: true,
@@ -46,8 +61,9 @@ const events = [
   {
     id: "event-4",
     name: "phone_number_toll_free_month",
-    description: "An active toll-free phone number is charged once per month.",
-    credit_cost: 500,
+    description:
+      "A platform-provided toll-free number uses 120 credits per rental month.",
+    credit_cost: 120,
     category: "phone_number",
     is_active: true,
     metadata: null,
@@ -94,14 +110,32 @@ describe("PlatformUsagePricingManager", () => {
     expect(
       await screen.findByRole("table", { name: "System usage pricing" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("row")).toHaveLength(5);
+    expect(screen.getAllByRole("row")).toHaveLength(6);
     expect(screen.getByText("Voice")).toBeInTheDocument();
-    expect(screen.getAllByText("Phone number")).toHaveLength(3);
+    expect(screen.getAllByText("Phone number")).toHaveLength(4);
     expect(screen.getByText("Voice calls")).toBeInTheDocument();
-    expect(screen.getByText("Local phone numbers")).toBeInTheDocument();
-    expect(screen.getByText("Mobile phone numbers")).toBeInTheDocument();
+    expect(screen.getByText("Additional US local numbers")).toBeInTheDocument();
+    expect(screen.getByText("Legacy non-US local numbers")).toBeInTheDocument();
+    expect(
+      screen.getByText("Existing mobile number rentals (legacy)"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Toll-free phone numbers")).toBeInTheDocument();
-    expect(screen.getAllByText("Per active number / month")).toHaveLength(3);
+    const expectedRates = [
+      ["Voice calls", "10"],
+      ["Legacy non-US local numbers", "200"],
+      ["Additional US local numbers", "80"],
+      ["Existing mobile number rentals (legacy)", "200"],
+      ["Toll-free phone numbers", "120"],
+    ] as const;
+    for (const [activity, value] of expectedRates) {
+      const input = screen.getByRole("spinbutton", {
+        name: `Credit cost for ${activity}`,
+      }) as HTMLInputElement;
+      expect(input.value).toBe(value);
+    }
+    expect(screen.getAllByText(/Per active number \/ month/)).toHaveLength(1);
+    expect(screen.getByText("Per existing number / month")).toBeInTheDocument();
+    expect(screen.getByText("Per additional number / month")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.queryByText("Call recording storage")).not.toBeInTheDocument();
   });
@@ -113,10 +147,10 @@ describe("PlatformUsagePricingManager", () => {
       name: /More information about/,
     });
 
-    expect(infoButtons).toHaveLength(4);
+    expect(infoButtons).toHaveLength(5);
     expect(infoButtons[0]).toHaveAccessibleName("More information about Voice calls");
-    expect(infoButtons[1]).toHaveAccessibleName(
-      "More information about Local phone numbers",
+    expect(infoButtons[2]).toHaveAccessibleName(
+      "More information about Additional US local numbers",
     );
   });
 });

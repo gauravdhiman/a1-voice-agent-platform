@@ -2,7 +2,7 @@
 
 ## Overview
 
-The billing system manages subscriptions, payments, and credit-based usage tracking through Stripe integration. Organizations purchase plans, receive credits, and consume credits through platform usage (voice agent calls, tool execution, etc.).
+The billing system manages subscriptions, payments, and credit-based usage tracking through Stripe integration. Organizations purchase plans, receive credits, and consume credits for connected call minutes and platform-provided phone-number rentals. Tool execution and SMS notifications are not separate credit meters.
 
 ## Current implementation: subscription-aware onboarding
 
@@ -59,7 +59,7 @@ available without pushing the purchase action below the initial viewport.
 ## What It Provides
 
 - ✅ **Stripe Integration**: Secure payment processing
-- ✅ **Subscription Plans**: Multiple pricing tiers (trial, starter, pro, enterprise)
+- ✅ **Subscription Plans**: Free, Starter, Pro, and Scale tiers
 - ✅ **Credit Management**: Track usage and credit balance
 - ✅ **Automatic Billing**: Recurring monthly/annual charges
 - ✅ **Webhook Handling**: Real-time payment status updates
@@ -111,18 +111,41 @@ graph TB
 
 ### Plans
 
-Plans define pricing and included resources. Each **plan product** (e.g. Starter, Growth) can have multiple **immutable versions**. New signups receive the current published version; existing subscribers remain on the version they subscribed to until they migrate (see [Plan Versioning](../03_implementation/plan_entitlements_and_limits.md)).
+Plans define pricing and included resources. Each **plan product** can have
+multiple **immutable versions**. New signups receive the current published
+version; existing subscribers remain on their current version until they
+migrate (see [Plan Versioning](../03_implementation/plan_entitlements_and_limits.md)).
+The following is the approved pilot catalog to configure in the Plan Catalog;
+it is not a claim that live Stripe prices have already been created.
 
-| Plan           | Price/Month | Included Credits | Features                               |
-| -------------- | ----------- | ---------------- | -------------------------------------- |
-| **Trial**      | Free        | 100              | 1 agent, basic tools                   |
-| **Starter**    | $49         | 2,000            | 3 agents, premium tools                |
-| **Pro**        | $149        | 10,000           | Unlimited agents, all tools            |
-| **Enterprise** | Custom      | Custom           | Dedicated support, custom integrations |
+| Plan | Monthly | Annual (12 months) | Included credits | Up to call minutes¹ | Highlights |
+|---|---:|---:|---:|---:|---|
+| **Free** | $0 | — | 100/month | 10/month | 1 agent, 1 member, standard voice profile; no platform-number purchase allowance |
+| **Starter** | $49/month | $490/year | 2,500/month | 250/month | Embed widget, credit top-ups, 1 US local number on request; extra US local numbers use 80 credits/month each |
+| **Pro** | $149/month | $1,490/year | 10,000/month | 1,000/month | Starter features plus custom branding |
+| **Scale** | $299/month | $2,990/year | 21,000/month | 2,100/month | Pro features plus premium tools; publish the exact tool list during launch review |
+
+¹ Calls consume 10 credits per connected minute, rounded up per call. The
+minutes shown are the maximum equivalent when all included credits go to calls;
+other paid usage, including extra numbers, uses the same balance. Each annual
+plan charges the price of 10 monthly payments for 12 months of service and
+grants 12 times the monthly credits. The first requested US local platform
+number is included while a paid plan is active. BYO Twilio numbers have no
+platform rental charge. A mobile-carrier number cannot connect directly; it can
+forward calls to a connected number, subject to the carrier's charges. If the
+customer keeps the included line after paid access ends, it converts to the
+80-credit rental on its next renewal date; the cancellation dialog discloses
+this. One-time credit top-ups are $5/200, $10/400, and $25/1,000 credits, equal
+to up to 20, 40, and 100 additional call minutes respectively.
+
+One standard voice profile is included. Optional voice profiles may require
+the customer to connect a provider account, with any provider charges billed
+directly by that provider. Higher volume and multi-location plans are a sales
+conversation, not a fourth fixed tier.
 
 **Plan attributes (per version):**
 
-- Price (monthly/annual) — new Stripe Price per published version
+- Price and billing interval — a new Stripe Price per published version
 - Included credits and any other limits (sparse — each plan only defines what applies)
 - Feature flags (premium tools, embed, credit top-ups, etc.)
 - Billing interval and trial days
@@ -195,10 +218,12 @@ it twice.
 
 **Credit Consumption**:
 
-- Voice agent calls (per minute)
-- Tool execution (per call)
-- SMS notifications (per message)
-- Additional features
+- Connected voice calls: 10 credits per whole connected minute, rounded up per call.
+- Additional US local platform numbers: 80 credits per rental month.
+- Toll-free platform numbers: 120 credits per rental month.
+- Existing legacy non-US local and mobile rentals: 200 credits per rental month.
+- Customer-owned numbers and native tool/SMS activity do not incur a separate
+  platform credit charge.
 
 **Credit Tracking**:
 
@@ -360,51 +385,46 @@ sequenceDiagram
 
 ### Credit Pricing
 
-| Action                    | Credit Cost | Description                        |
-| ------------------------- | ----------- | ---------------------------------- |
-| Voice call (per minute)   | 10 credits  | Including agent and LLM processing |
-| Tool execution (per call) | 5 credits   | Any tool function called by agent  |
-| SMS notification          | 2 credits   | Outbound SMS message               |
-| Additional features       | Variable    | Future features                    |
+| Meter | Default credit cost | Billing basis |
+| --- | ---: | --- |
+| Voice calls | 10 credits | Per whole connected minute, rounded up per call |
+| Additional US local phone numbers | 80 credits | Per rental month |
+| Toll-free phone numbers | 120 credits | Per rental month |
+| Existing non-US local phone numbers (legacy) | 200 credits | Per rental month |
+| Existing mobile numbers (legacy) | 200 credits | Per rental month |
 
 ### Plan Comparison
 
 ```mermaid
 graph TB
-    subgraph Trial[Trial Plan]
-        T1[100 credits]
-        T2[1 agent]
-        T3[Basic tools]
-        T4[Email support]
-    end
-
     subgraph Starter[Starter Plan $49/mo]
-        S1[2,000 credits]
-        S2[3 agents]
-        S3[Premium tools]
-        S4[Priority email]
+        S1[2,500 credits]
+        S2[Up to 250 call minutes]
+        S3[1 US local number on request]
+        S4[80 credits/month per extra US local number]
     end
 
     subgraph Pro[Pro Plan $149/mo]
         P1[10,000 credits]
-        P2[Unlimited agents]
-        P3[All tools]
-        P4[Chat support]
+        P2[Up to 1,000 call minutes]
+        P3[1 US local number on request]
+        P4[80 credits/month per extra US local number]
     end
 
-    subgraph Enterprise[Enterprise Custom]
-        E1[Custom credits]
-        E2[Custom agents]
-        E3[Custom tools]
-        E4[Phone support]
-        E5[SLA]
+    subgraph Scale[Scale Plan $299/mo]
+        E1[21,000 credits]
+        E2[Up to 2,100 call minutes]
+        E3[1 US local number on request]
+        E4[80 credits/month per extra US local number]
     end
 
-    style Trial fill:#9ca3af
     style Starter fill:#3b82f6
     style Pro fill:#10b981
-    style Enterprise fill:#f59e0b
+    style Scale fill:#f59e0b
 ```
+
+Higher volume and multi-location customers should contact sales for a scoped
+offer rather than selecting a fourth fixed plan.
 
 ## API Endpoints
 

@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -26,14 +25,15 @@ import {
   PhoneNumberSearchMode,
   PhoneNumberType,
   formatPhoneNumber,
-  getCreditsForType,
   getPhoneNumberTypeLabel,
 } from "@/types/phone-number";
 import { phoneNumberService } from "@/services/phone-number-service";
 import { cn } from "@/lib/utils";
 
 interface PhoneNumberSearchProps {
-  /** Current organization credit balance used to gate searches and purchases. */
+  /** Organization whose included-number allowance and permissions apply. */
+  organizationId: string;
+  /** Current credit balance used to gate paid number purchases. */
   creditBalance: number;
   /** Called when the user selects an available number. */
   onNumberSelected?: (number: AvailablePhoneNumber) => void;
@@ -46,7 +46,6 @@ const COUNTRIES = [{ code: "US", name: "United States" }];
 const NUMBER_TYPES: { value: PhoneNumberType; label: string }[] = [
   { value: "local", label: "Local" },
   { value: "toll_free", label: "Toll-Free" },
-  { value: "mobile", label: "Mobile" },
 ];
 
 const SEARCH_MODES: { value: PhoneNumberSearchMode; label: string }[] = [
@@ -56,6 +55,7 @@ const SEARCH_MODES: { value: PhoneNumberSearchMode; label: string }[] = [
 ];
 
 export function PhoneNumberSearch({
+  organizationId,
   creditBalance,
   onNumberSelected,
   className,
@@ -69,19 +69,17 @@ export function PhoneNumberSearch({
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<AvailablePhoneNumber[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
-
-  const minimumRentalCredits = getCreditsForType(numberType);
-  const hasMinimumCredits = creditBalance >= minimumRentalCredits;
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const handleSearch = async () => {
-    if (!hasMinimumCredits) return;
-
     setSearching(true);
     setHasSearched(true);
     setResults([]);
+    setSearchError(null);
 
     try {
       const response = await phoneNumberService.searchAvailable({
+        organization_id: organizationId,
         country_code: countryCode,
         phone_number_type: numberType,
         area_code: areaCode || null,
@@ -94,7 +92,12 @@ export function PhoneNumberSearch({
       setResults(response.items);
     } catch (error) {
       console.error("Error searching phone numbers:", error);
-      toast.error("Failed to search phone numbers");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Phone number search is temporarily unavailable. Please try again later.";
+      setSearchError(message);
+      toast.error(message);
     } finally {
       setSearching(false);
     }
@@ -236,26 +239,9 @@ export function PhoneNumberSearch({
               </div>
             </div>
 
-            {!hasMinimumCredits && (
-              <Alert
-                id="phone-number-credit-help"
-                className="border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-400/50 dark:bg-amber-950/30 dark:text-amber-100"
-              >
-                <AlertDescription className="text-amber-950 dark:text-amber-100">
-                  Search is unavailable because your balance is below the
-                  minimum of {minimumRentalCredits} credits required for a{" "}
-                  {getPhoneNumberTypeLabel(numberType).toLowerCase()} number.
-                  Add credits to search and purchase a number.
-                </AlertDescription>
-              </Alert>
-            )}
-
             <Button
               type="submit"
-              disabled={searching || !hasMinimumCredits}
-              aria-describedby={
-                !hasMinimumCredits ? "phone-number-credit-help" : undefined
-              }
+              disabled={searching}
               className="w-full"
             >
               {searching ? (
@@ -271,13 +257,7 @@ export function PhoneNumberSearch({
               )}
             </Button>
 
-            <div
-              className={
-                hasMinimumCredits
-                  ? "text-sm text-muted-foreground"
-                  : "text-sm font-medium text-amber-950 dark:text-amber-100"
-              }
-            >
+            <div className="text-sm text-muted-foreground">
               Your balance:{" "}
               <span className="font-semibold">{creditBalance} credits</span>
             </div>
@@ -290,8 +270,10 @@ export function PhoneNumberSearch({
           <CardHeader>
             <CardTitle>Available Numbers</CardTitle>
             <CardDescription>
-              {results.length} numbers found
-              {results.length > 0 && (
+              {searchError
+                ? "Search could not be completed"
+                : `${results.length} numbers found`}
+              {!searchError && results.length > 0 && (
                 <span className="ml-2">(monthly pricing shown per number)</span>
               )}
             </CardDescription>
@@ -300,6 +282,14 @@ export function PhoneNumberSearch({
             {searching ? (
               <div className="flex flex-1 items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : searchError ? (
+              <div
+                className="flex flex-1 flex-col items-center justify-center py-8 text-center text-muted-foreground"
+                role="alert"
+              >
+                <Phone className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>{searchError}</p>
               </div>
             ) : results.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center py-8 text-center text-muted-foreground">
@@ -341,7 +331,9 @@ export function PhoneNumberSearch({
                     <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center lg:justify-end">
                       <div className="min-w-0 text-left lg:text-right">
                         <div className="whitespace-nowrap font-semibold">
-                          {number.monthly_cost_credits} credits/mo
+                          {number.is_included_in_plan
+                            ? "Included with plan"
+                            : `${number.monthly_cost_credits} credits/mo${number.phone_number_type === "local" && number.country_code === "US" ? ` · $${(number.monthly_cost_credits / 40).toFixed(2).replace(/\.00$/, "")}/mo value` : ""}`}
                         </div>
                         {!canAfford(number.monthly_cost_credits) && (
                           <Badge

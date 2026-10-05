@@ -31,7 +31,8 @@ const mocks = vi.hoisted(() => {
     slug: "acme",
   };
   const OTHER_ORG = { ...FIXTURE_ORG, id: "org-2", name: "Other" };
-  return { FIXTURE_ORG, OTHER_ORG };
+  const getSubscriptionActivationStatus = vi.fn();
+  return { FIXTURE_ORG, OTHER_ORG, getSubscriptionActivationStatus };
 });
 
 const mockUseAuth = vi.fn();
@@ -84,6 +85,13 @@ vi.mock("@/hooks/use-credit-usage", () => ({
   useCreditUsage: (...args: unknown[]) => mockUseCreditUsage(...args),
 }));
 
+vi.mock("@/services/billing-service", () => ({
+  billingService: {
+    getSubscriptionActivationStatus:
+      mocks.getSubscriptionActivationStatus,
+  },
+}));
+
 // Stub the heavy children — we just want to assert the gate.
 vi.mock("@/components/billing/plan-selection", () => ({
   PlanSelection: () => <div data-testid="plan-selection" />,
@@ -113,6 +121,14 @@ function makeWrapper(queryClient: QueryClient) {
 describe("/organization/billing page (N1 — fallback + page-level admin gate)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getSubscriptionActivationStatus.mockResolvedValue({
+      organization_id: "org-1",
+      state: "active",
+      subscription_id: "subscription-1",
+      plan_version_id: "plan-pro",
+      billing_mode: "paid",
+      subscription_status: "active",
+    });
     globalThis.__orgBillingSearchParams = undefined;
     mockUseAuth.mockReturnValue({
       user: { id: "user-1", roles: [] },
@@ -205,6 +221,45 @@ describe("/organization/billing page (N1 — fallback + page-level admin gate)",
 
     expect(mockUseOrganizationById).toHaveBeenCalledWith("org-2");
     expect(mockUseBillingSummary).toHaveBeenCalledWith("org-2");
+  });
+
+  it("waits for the selected Stripe plan, then refreshes the billing summary", async () => {
+    globalThis.__orgBillingSearchParams =
+      "org_id=org-1&tab=manage&payment=success&plan_version_id=plan-pro";
+    const refreshBilling = vi.fn();
+    const refreshUsage = vi.fn();
+    mockUseBillingSummary.mockReturnValue({
+      data: {
+        subscription: { status: "active", plan: { name: "Pro" } },
+        credit_balance: 1000,
+        next_billing_date: null,
+        amount_due: 0,
+      },
+      isLoading: false,
+      error: null,
+      refetch: refreshBilling,
+      isRefetching: false,
+    });
+    mockUseCreditUsage.mockReturnValue({
+      data: null,
+      isLoading: false,
+      error: null,
+      refetch: refreshUsage,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(<BillingPage />, { wrapper: makeWrapper(queryClient) });
+
+    expect(
+      await screen.findByText(/Your selected plan is active/i),
+    ).toBeTruthy();
+    expect(
+      mocks.getSubscriptionActivationStatus,
+    ).toHaveBeenCalledWith("org-1");
+    expect(refreshBilling).toHaveBeenCalled();
+    expect(refreshUsage).toHaveBeenCalled();
   });
 
   it("shows AccessDenied when neither ?org_id= nor currentOrganization provide an org", async () => {
@@ -354,7 +409,7 @@ describe("/organization/billing page (N1 — fallback + page-level admin gate)",
     render(<BillingPage />, { wrapper: makeWrapper(queryClient) });
 
     await waitFor(() => {
-      expect(screen.getByText("Free plan")).toBeInTheDocument();
+      expect(screen.getByText("Free", { exact: true })).toBeInTheDocument();
     });
     expect(screen.queryByText("No Plan")).not.toBeInTheDocument();
   });

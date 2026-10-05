@@ -40,9 +40,10 @@ SYSTEM_PRICING: tuple[SystemPricingDefinition, ...] = (
     ),
     SystemPricingDefinition(
         event_name="phone_number_local_month",
-        display_name="Local phone numbers",
+        display_name="Existing non-US local phone numbers",
         description=(
-            "An active local phone number is charged once for each rental month."
+            "Existing non-US platform local rentals retain their legacy monthly "
+            "rate; new platform purchases are US-only in v1."
         ),
         category="phone_number",
         meter_type="count",
@@ -50,10 +51,23 @@ SYSTEM_PRICING: tuple[SystemPricingDefinition, ...] = (
         default_credit_cost=200,
     ),
     SystemPricingDefinition(
-        event_name="phone_number_mobile_month",
-        display_name="Mobile phone numbers",
+        event_name="phone_number_us_local_month",
+        display_name="Additional US local phone numbers",
         description=(
-            "An active mobile phone number is charged once for each rental month."
+            "Each additional platform-provided US local phone number uses 80 "
+            "credits per rental month."
+        ),
+        category="phone_number",
+        meter_type="count",
+        billing_unit="month",
+        default_credit_cost=80,
+    ),
+    SystemPricingDefinition(
+        event_name="phone_number_mobile_month",
+        display_name="Existing mobile number rentals (legacy)",
+        description=(
+            "Legacy active mobile rentals retain their existing monthly rate. "
+            "New mobile-number purchases are unavailable in v1."
         ),
         category="phone_number",
         meter_type="count",
@@ -64,12 +78,13 @@ SYSTEM_PRICING: tuple[SystemPricingDefinition, ...] = (
         event_name="phone_number_toll_free_month",
         display_name="Toll-free phone numbers",
         description=(
-            "An active toll-free phone number is charged once for each rental month."
+            "An active toll-free phone number uses 120 credits ($3 at 40 credits "
+            "per dollar) for each rental month."
         ),
         category="phone_number",
         meter_type="count",
         billing_unit="month",
-        default_credit_cost=500,
+        default_credit_cost=120,
     ),
 )
 
@@ -103,6 +118,14 @@ def get_system_pricing_definition(event_name: str) -> SystemPricingDefinition:
         ) from exc
 
 
-def get_phone_number_pricing_event_name(phone_type: PhoneNumberType) -> str:
-    """Return the monthly pricing event for a phone-number type."""
+def get_phone_number_pricing_event_name(
+    phone_type: PhoneNumberType, country_code: str = "US"
+) -> str:
+    """Return the monthly pricing event for a phone-number type and country."""
+    if phone_type == PhoneNumberType.LOCAL:
+        return (
+            "phone_number_us_local_month"
+            if country_code.strip().upper() == "US"
+            else "phone_number_local_month"
+        )
     return _PHONE_NUMBER_EVENT_BY_TYPE[phone_type]

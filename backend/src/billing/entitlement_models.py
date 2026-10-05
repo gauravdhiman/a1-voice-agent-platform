@@ -103,6 +103,7 @@ class OrgPlanMigrationInfo(BaseModel):
     status: PlanMigrationStatus
     grace_period_ends_at: Optional[str] = None
     target_plan_version_label: Optional[str] = None
+    target_plan_product_slug: Optional[str] = None
     allow_indefinite_legacy: bool = True
     can_self_migrate: bool = True
 

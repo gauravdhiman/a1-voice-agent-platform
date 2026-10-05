@@ -41,6 +41,14 @@ class PlatformNotificationSettings(BaseModel):
         None, description="Platform administrator SMS destination in E.164 format"
     )
     platform_admin_sms_notifications_enabled: bool = False
+    platform_admin_whatsapp_phone: Optional[str] = Field(
+        None, description="Platform administrator WhatsApp destination in E.164 format"
+    )
+    platform_admin_whatsapp_notifications_enabled: bool = False
+    whatsapp_sender_configured: bool = Field(
+        False,
+        description="Whether Twilio WhatsApp credentials, sender, and template are configured",
+    )
     sms_sender_configured: bool = Field(
         False, description="Whether Twilio credentials and an SMS sender are configured"
     )
@@ -77,6 +85,14 @@ class PlatformNotificationSettingsUpdate(BaseModel):
         description="Platform administrator SMS destination in E.164 format",
     )
     platform_admin_sms_notifications_enabled: Optional[bool] = None
+    platform_admin_whatsapp_phone: Optional[str] = Field(
+        None,
+        min_length=8,
+        max_length=16,
+        pattern=r"^\+[1-9]\d{1,14}$",
+        description="Platform administrator WhatsApp destination in E.164 format",
+    )
+    platform_admin_whatsapp_notifications_enabled: Optional[bool] = None
     verification_from_email: Optional[EmailStr] = None
     verification_from_name: Optional[str] = Field(None, max_length=100)
     telegram_chat_id: Optional[str] = Field(None, max_length=100)

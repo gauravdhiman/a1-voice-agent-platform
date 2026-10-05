@@ -28,7 +28,7 @@ def signin_user(page: Page, base_url: str, wait_for_dashboard: bool = True):
     page.click('button[type="submit"]')
     
     if wait_for_dashboard:
-        expect(page.get_by_role("heading", name=re.compile(r"Dashboard", re.I))).to_be_visible(timeout=10000)
+        expect(page).to_have_url(re.compile(r".*/dashboard(?:\?.*)?$"), timeout=10000)
 
 
 def setup_billing_context(page, total_credits: int = 1250):
@@ -105,7 +105,7 @@ def setup_billing_plans_context(page):
     ))
 
 
-def setup_credit_products_context(page):
+def setup_credit_products_context(page, organization_id: str = "test-org-id"):
     """Setup credit products context for tests requiring credit purchase options.
     
     This function mocks the credit products API to return sample credit packages,
@@ -119,35 +119,78 @@ def setup_credit_products_context(page):
         setup_credit_products_context(page)
         ```
     """
+    page.route(
+        re.compile(r".*/api/v1/billing/entitlements/.*"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=f'''{{
+                "organization_id": "{organization_id}",
+                "plan_version_id": "test-plan-version",
+                "plan_product_slug": "pro",
+                "plan_version_number": 1,
+                "plan_version_label": "Pro",
+                "is_legacy_version": false,
+                "is_entitled": true,
+                "cancel_at_period_end": false,
+                "access_until": null,
+                "limits": {{}},
+                "features": {{
+                    "credit_topup_enabled": {{
+                        "key": "credit_topup_enabled",
+                        "kind": "feature",
+                        "assigned": true,
+                        "raw_value": null,
+                        "effective_value": true,
+                        "is_unlimited": false
+                    }}
+                }},
+                "migration": null
+            }}''',
+        ),
+    )
     page.route(re.compile(r".*/api/v1/billing/credit-products.*"), lambda route: route.fulfill(
         status=200,
         content_type="application/json",
         body='''[
             {
-                "name": "100 Credits Pack",
-                "description": "100 credits for small usage",
-                "stripe_price_id": "price_1S8TBKDCTx1JlMd8qVCd2C3z",
-                "stripe_product_id": "prod_T4cQgYdUHvaUDo",
-                "credit_amount": 100,
-                "price_amount": 1500,
+                "name": "200 Credits Pack",
+                "description": "200 credits for small usage",
+                "stripe_price_id": "price_test_200_credits",
+                "stripe_product_id": "prod_test_200_credits",
+                "credit_amount": 200,
+                "price_amount": 500,
                 "currency": "USD",
                 "is_active": true,
-                "id": "462ddaab-a189-469c-b325-c5d89fa4627c",
-                "created_at": "2025-10-02T05:59:18.070927Z",
-                "updated_at": "2025-10-02T05:59:18.070927Z"
+                "id": "20000000-0000-0000-0000-000000000001",
+                "created_at": "2026-10-02T00:00:00Z",
+                "updated_at": "2026-10-02T00:00:00Z"
+            },
+            {
+                "name": "400 Credits Pack",
+                "description": "400 credits for regular usage",
+                "stripe_price_id": "price_test_400_credits",
+                "stripe_product_id": "prod_test_400_credits",
+                "credit_amount": 400,
+                "price_amount": 1000,
+                "currency": "USD",
+                "is_active": true,
+                "id": "40000000-0000-0000-0000-000000000001",
+                "created_at": "2026-10-02T00:00:00Z",
+                "updated_at": "2026-10-02T00:00:00Z"
             },
             {
                 "name": "1000 Credits Pack",
-                "description": "1000 credits for regular usage",
-                "stripe_price_id": "price_1S8TBKDCTx1JlMd8QhI5MZjY",
-                "stripe_product_id": "prod_T4cQFSfYo14Chr",
+                "description": "1000 credits for heavy usage",
+                "stripe_price_id": "price_test_1000_credits",
+                "stripe_product_id": "prod_test_1000_credits",
                 "credit_amount": 1000,
                 "price_amount": 2500,
                 "currency": "USD",
                 "is_active": true,
-                "id": "6575d8a0-a1d4-4d7b-b821-5e8710cbd5f5",
-                "created_at": "2025-10-02T05:59:17.855402Z",
-                "updated_at": "2025-10-02T05:59:17.855402Z"
+                "id": "10000000-0000-0000-0000-000000000001",
+                "created_at": "2026-10-02T00:00:00Z",
+                "updated_at": "2026-10-02T00:00:00Z"
             }
         ]'''
     ))

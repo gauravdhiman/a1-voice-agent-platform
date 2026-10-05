@@ -99,6 +99,7 @@ export interface OrganizationSubscription {
 
 export interface OrganizationSubscriptionWithPlan extends OrganizationSubscription {
   plan: SubscriptionPlan | null;
+  plan_version?: CustomerPlanVersion | null;
 }
 
 export interface OrganizationSubscriptionCreate {
@@ -419,6 +420,7 @@ export interface OrgPlanMigrationInfo {
   status: PlanMigrationStatus;
   grace_period_ends_at: string | null;
   target_plan_version_label: string | null;
+  target_plan_product_slug: string | null;
   allow_indefinite_legacy: boolean;
   can_self_migrate: boolean;
 }

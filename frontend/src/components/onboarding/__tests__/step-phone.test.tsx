@@ -25,7 +25,7 @@ const AVAILABLE_NUMBER: AvailablePhoneNumber = {
   phone_number_type: "local",
   country_code: "US",
   area_code: "480",
-  monthly_cost_credits: 200,
+  monthly_cost_credits: 80,
   capabilities: { voice: true },
   locality: "Phoenix",
   postal_code: "85001",
@@ -76,6 +76,7 @@ describe("StepPhone", () => {
 
     await waitFor(() =>
       expect(searchAvailable).toHaveBeenCalledWith({
+        organization_id: "org-1",
         country_code: "US",
         phone_number_type: "local",
         area_code: "480",

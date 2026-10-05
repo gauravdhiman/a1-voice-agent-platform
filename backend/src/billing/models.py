@@ -150,6 +150,7 @@ class OrganizationSubscriptionBase(BaseModel):
     cancel_at_period_end: bool = Field(default=False)
     cancelled_at: Optional[datetime] = None
     metadata: Optional[dict[str, Any]] = None
+    pending_plan_transition: Optional[dict[str, Any]] = None
 
 
 class OrganizationSubscriptionCreate(BaseModel):
@@ -165,6 +166,8 @@ class OrganizationSubscriptionUpdate(BaseModel):
 
     subscription_plan_id: Optional[UUID] = None
     plan_version_id: Optional[UUID] = None
+    stripe_subscription_id: Optional[str] = Field(None, max_length=255)
+    stripe_customer_id: Optional[str] = Field(None, max_length=255)
     status: Optional[SubscriptionStatus] = None
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
@@ -173,6 +176,7 @@ class OrganizationSubscriptionUpdate(BaseModel):
     cancel_at_period_end: Optional[bool] = None
     cancelled_at: Optional[datetime] = None
     metadata: Optional[dict[str, Any]] = None
+    pending_plan_transition: Optional[dict[str, Any]] = None
 
 
 class OrganizationSubscription(OrganizationSubscriptionBase):
@@ -187,6 +191,7 @@ class OrganizationSubscriptionWithPlan(OrganizationSubscription):
     """Organization subscription with plan details."""
 
     plan: Optional[SubscriptionPlan] = None
+    plan_version: Optional[dict[str, Any]] = None
 
 
 # Credit Event Models

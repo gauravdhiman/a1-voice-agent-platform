@@ -395,9 +395,9 @@ def _render_markdown(plan: dict[str, Any]) -> str:
             "Migration/admin workflow; not seeded here",
         ),
         "credit_products": (
-            "Database and Stripe catalog",
+            "`CREDIT_PACKS` and Stripe manager",
             "`credit_products`",
-            "Review-gated; not seeded here",
+            "Stripe manager preview/sync; excluded from generic apply",
         ),
     }
 

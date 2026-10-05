@@ -109,7 +109,7 @@ describe("AgentPhoneNumberSelector", () => {
           phone_number_type: "local",
           country_code: "US",
           area_code: "480",
-          monthly_cost_credits: 200,
+          monthly_cost_credits: 80,
           capabilities: { voice: true },
           locality: "Phoenix",
           postal_code: "85001",
@@ -203,14 +203,20 @@ describe("AgentPhoneNumberSelector", () => {
     fireEvent.click(screen.getByRole("button", { name: /search numbers/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^select$/i }));
 
+    expect(
+      screen.getByRole("checkbox", {
+        name: /first rental month costs 80 credits now/i,
+      }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: /purchase number/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add number/i }));
 
     await waitFor(() => {
       expect(phoneNumberService.purchaseNumber).toHaveBeenCalledWith("org-1", {
         phone_number: "+14805550101",
         country_code: "US",
         phone_number_type: "local",
+        expected_included_in_plan: false,
       });
       expect(phoneNumberService.assignToAgent).toHaveBeenCalledWith(
         "pn-purchased",

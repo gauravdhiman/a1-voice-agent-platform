@@ -18,7 +18,7 @@ describe("Platform tour", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText(/no coding required/i)).toBeTruthy();
-    expect(screen.getByText(/monthly plans from \$79/i)).toBeTruthy();
+    expect(screen.getByText(/monthly plans from \$49/i)).toBeTruthy();
     expect(
       screen
         .getAllByRole("link", { name: /request a demo/i })
@@ -31,54 +31,29 @@ describe("Platform tour", () => {
     expect(screen.queryByText(/lorem|acme corp/i)).toBeNull();
   });
 
-  it("shows all five chapters with replayable run-throughs", () => {
+  it("shows all five chapters with illustrative previews", () => {
     render(<HowItWorksPage />);
     for (const name of [
-      /describe your business/i,
-      /one agent, every place/i,
+      /describe your business in plain words/i,
+      /one AI assistant, your number and website/i,
       /tools you already use/i,
-      /teach it your way/i,
-      /without hearing all/i,
+      /teach it your way of working/i,
+      /without listening to each one/i,
     ]) {
       expect(screen.getByRole("heading", { name })).toBeTruthy();
     }
     expect(screen.getAllByText("Illustrative preview").length).toBeGreaterThan(0);
-    const pauseButtons = screen.getAllByRole("button", {
-      name: "Pause the run-through",
-    });
-    expect(pauseButtons.length).toBeGreaterThan(0);
-    fireEvent.click(pauseButtons[0]);
     expect(
-      screen
-        .getAllByRole("button", { name: "Play the run-through" })[0]
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-    fireEvent.click(
-      screen.getAllByRole("button", { name: /replay .* from the start/i })[0],
-    );
-    expect(
-      screen.getAllByRole("button", { name: /pause the run-through/i })[0],
-    ).toBeTruthy();
+      document.querySelectorAll('[data-looping-preview="true"]').length,
+    ).toBeGreaterThanOrEqual(5);
   });
 
-  it("plays a dedicated scene per step, not one generic card", () => {
+  it("shows distinct scenes across setup, phone, and call-review chapters", () => {
     render(<HowItWorksPage />);
     expect(screen.getByText("Agent saved")).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: /step 2: hear it back on a test call/i }),
-    );
     expect(screen.getByText("Front desk · test line")).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: /step 3: approve it/i }),
-    );
     expect(screen.getByText("Live, able to answer now")).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: /step 1: keep your business number/i }),
-    );
     expect(screen.getByText("(555) 014-2200")).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: /step 3: kept for 30 days/i }),
-    );
     expect(screen.getByText("Recordings kept 30 days")).toBeTruthy();
   });
 

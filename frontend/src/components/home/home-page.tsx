@@ -150,7 +150,7 @@ export function HomePage() {
               </div>
               <p className={styles.heroNote}>
                 Concierge setup with you · You test and approve before it goes
-                live · No coding required, plans from $79/mo.
+                live · No coding required. Plans from $49/month, including up to 250 call minutes.
               </p>
             </div>
             <div className={styles.heroVisual}>
@@ -729,7 +729,7 @@ export function HomePage() {
             <p>
               Start with a concierge pilot, built around you.
               <br />
-              Monthly plans from $79 as you grow.
+              Monthly plans from $49/month, including up to 250 call minutes.
             </p>
             <div className={styles.ctaRow}>
               <Link className={styles.primary} href="/request-demo">

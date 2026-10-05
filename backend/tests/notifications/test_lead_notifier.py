@@ -36,6 +36,7 @@ def _settings(
     *,
     admin_email="admin@example.com",
     telegram_enabled=False,
+    whatsapp_enabled=False,
 ) -> PlatformNotificationSettings:
     now = datetime.now(timezone.utc)
     return PlatformNotificationSettings(
@@ -48,6 +49,8 @@ def _settings(
         telegram_notifications_enabled=telegram_enabled,
         telegram_bot_token_configured=telegram_enabled,
         telegram_bot_id="123" if telegram_enabled else None,
+        platform_admin_whatsapp_phone="+15551234567" if whatsapp_enabled else None,
+        platform_admin_whatsapp_notifications_enabled=whatsapp_enabled,
         created_at=now,
         updated_at=now,
     )
@@ -181,6 +184,39 @@ async def test_notify_interest_lead_swallows_channel_failures():
         app_settings.app_base_url = "https://247ai.live"
         app_settings.app_name = "24x7 AI"
         await notifier.notify_interest_lead(_lead())
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_alert_receives_all_submitted_lead_fields():
+    notifier = InterestLeadNotifier()
+    with patch("src.notifications.lead_notifier.settings") as app_settings, patch(
+        "src.notifications.lead_notifier.platform_notification_settings_service.get_settings",
+        new=AsyncMock(return_value=_settings(admin_email=None, whatsapp_enabled=True)),
+    ), patch(
+        "src.notifications.lead_notifier.whatsapp_service.is_configured",
+        return_value=True,
+    ), patch(
+        "src.notifications.lead_notifier.whatsapp_service.send_template_message",
+        new=AsyncMock(return_value=True),
+    ) as whatsapp_mock:
+        app_settings.app_base_url = "https://247ai.live"
+        app_settings.app_name = "24x7 AI"
+        await notifier.notify_interest_lead(_lead())
+
+    recipient, variables = whatsapp_mock.await_args.args
+    assert recipient == "+15551234567"
+    assert variables == {
+        "1": "Sam Owner",
+        "2": "Bright Smiles Dental",
+        "3": "sam@example.com",
+        "4": "+14805550100",
+        "5": "dental",
+        "6": "Miss after-hours calls",
+        "7": "outcome-form",
+        "8": "dental-demo",
+        "9": "2026-09-10 12:30 UTC",
+        "10": "https://247ai.live/platform/interest",
+    }
 
 
 def test_interest_template_variables_are_allowlisted_and_formatted():

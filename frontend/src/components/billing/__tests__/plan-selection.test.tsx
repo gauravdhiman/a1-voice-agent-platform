@@ -45,20 +45,21 @@ const freePlan = {
 
 const paidPlan = {
   ...freePlan,
-  id: "version-growth",
-  plan_product_id: "product-growth",
-  product_slug: "growth",
-  product_name: "Growth",
+  id: "version-pro-month",
+  plan_product_id: "product-pro",
+  product_slug: "pro-month-v1",
+  product_name: "Pro Plan:Month v1",
   product_description: "For growing teams.",
-  display_label: "Growth plan",
+  display_label: "Pro Plan:Month v1",
   billing_mode: "paid" as const,
-  price_amount_cents: 2900,
+  price_amount_cents: 14900,
   billing_interval: "monthly",
-  stripe_price_id: "price_growth",
+  stripe_price_id: "price_pro",
   tier_rank: 20,
   entitlements: {
     max_agents: { type: "integer", value: 10 },
     premium_tools: { type: "boolean", value: true },
+    included_credits_per_billing_period: { type: "integer", value: 10000 },
   },
 };
 
@@ -115,9 +116,9 @@ describe("PlanSelection", () => {
   it("renders the internal published plan catalog instead of legacy Stripe plans", async () => {
     render(<PlanSelection organizationId="org-1" />);
 
-    expect(await screen.findByText("Growth plan")).toBeInTheDocument();
+    expect(await screen.findByText("Pro")).toBeInTheDocument();
     expect(screen.getByText("For growing teams.")).toBeInTheDocument();
-    expect(screen.getByText(/10 Max Agents/i)).toBeInTheDocument();
+    expect(screen.getByText(/Up to 10 voice agents/i)).toBeInTheDocument();
     expect(mocks.getAvailablePlanVersions).toHaveBeenCalledTimes(1);
     expect(mocks.getSubscriptionPlans).not.toHaveBeenCalled();
   });
@@ -172,6 +173,9 @@ describe("PlanSelection", () => {
         expect.objectContaining({
           organization_id: "org-1",
           plan_version_id: paidPlan.id,
+          success_url: expect.stringContaining(
+            "plan_version_id=" + paidPlan.id,
+          ),
         }),
       );
     });
@@ -183,7 +187,7 @@ describe("PlanSelection", () => {
   it("sorts plan cards by tier rank instead of price", async () => {
     render(<PlanSelection organizationId="org-1" />);
 
-    await screen.findByText("Starter plan");
+    await screen.findByText("Starter");
 
     const cards = screen
       .getAllByTestId(/billing-plan-card-/)
@@ -194,6 +198,79 @@ describe("PlanSelection", () => {
       `billing-plan-card-${starterPlan.id}`,
       `billing-plan-card-${paidPlan.id}`,
     ]);
+  });
+
+  it("fits four plan cards across the desktop row", async () => {
+    const scalePlan = {
+      ...paidPlan,
+      id: "version-scale-month",
+      plan_product_id: "product-scale",
+      product_slug: "scale-month-v1",
+      product_name: "Scale",
+      display_label: "Scale",
+      tier_rank: 30,
+    };
+    mocks.getAvailablePlanVersions.mockResolvedValue([
+      paidPlan,
+      starterPlan,
+      scalePlan,
+      freePlan,
+    ]);
+
+    const { container } = render(<PlanSelection organizationId="org-1" />);
+
+    expect(await screen.findByTestId(`billing-plan-card-${scalePlan.id}`)).toBeTruthy();
+    expect(screen.getAllByTestId(/billing-plan-card-/)).toHaveLength(4);
+    expect(container.querySelector('[class~="xl:grid-cols-4"]')).toBeTruthy();
+  });
+
+  it("offers annual billing only when it is exactly ten monthly payments", async () => {
+    const monthlyForAnnual = {
+      ...paidPlan,
+      product_slug: "pro-monthly-v1",
+    };
+    const discountedAnnual = {
+      ...paidPlan,
+      id: "version-pro-annual",
+      product_slug: "pro-annual-v1",
+      product_name: "Pro Plan:Annual v1",
+      display_label: "Pro Plan:Annual v1",
+      billing_interval: "annual",
+      price_amount_cents: paidPlan.price_amount_cents * 10,
+      entitlements: {
+        ...paidPlan.entitlements,
+        included_credits_per_billing_period: {
+          type: "integer",
+          value: 120000,
+        },
+      },
+    };
+    const incorrectlyPricedAnnual = {
+      ...discountedAnnual,
+      id: "version-pro-annual-invalid",
+      product_slug: "pro-yearly",
+      price_amount_cents: paidPlan.price_amount_cents * 11,
+    };
+    mocks.getAvailablePlanVersions.mockResolvedValue([
+      monthlyForAnnual,
+      discountedAnnual,
+      incorrectlyPricedAnnual,
+      freePlan,
+    ]);
+    const user = userEvent.setup();
+
+    render(<PlanSelection organizationId="org-1" />);
+
+    await screen.findByText("Pro");
+    await user.click(
+      screen.getByRole("button", { name: /annual · 2 months free/i }),
+    );
+
+    expect(screen.getByTestId("billing-plan-card-version-pro-annual")).toBeTruthy();
+    expect(
+      screen.queryByTestId("billing-plan-card-version-pro-annual-invalid"),
+    ).toBeNull();
+    expect(screen.getByText("2 months free")).toBeTruthy();
   });
 
   it("lets an active organization preview and confirm a different plan", async () => {
@@ -228,7 +305,7 @@ describe("PlanSelection", () => {
       );
     });
     expect(
-      screen.getByText(/change from growth plan to starter plan/i),
+      screen.getByText(/change from pro to starter/i),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /schedule change/i }));
@@ -243,5 +320,109 @@ describe("PlanSelection", () => {
       );
     });
     expect(mocks.createVersionedSubscriptionCheckout).not.toHaveBeenCalled();
+  });
+
+  it("shows the new credit allowance and when it refreshes", async () => {
+    const user = userEvent.setup();
+    const freePlanWithCredits = {
+      ...freePlan,
+      entitlements: {
+        included_credits_per_billing_period: { type: "integer", value: 100 },
+      },
+    };
+    mocks.previewPlanChange.mockResolvedValue({
+      transition_id: "transition-credits",
+      current_plan: freePlanWithCredits,
+      target_plan: paidPlan,
+      effective_mode: "immediate",
+      effective_at: null,
+      price_delta_cents: 2900,
+      credit_delta: 900,
+      proration_behavior: "create_prorations",
+      purchased_credits_preserved: true,
+    });
+
+    render(
+      <PlanSelection
+        organizationId="org-1"
+        currentSubscription={
+          { status: "active", plan_version_id: freePlan.id } as never
+        }
+      />,
+    );
+
+    await user.click(
+      within(
+        await screen.findByTestId(`billing-plan-card-${paidPlan.id}`),
+      ).getByRole("button", { name: /review plan change/i }),
+    );
+
+    const previewDialog = await screen.findByRole("dialog");
+    expect(previewDialog.textContent).toContain(
+      "10,000 included credits per billing period (up to 1,000 call minutes)",
+    );
+    expect(previewDialog.textContent).toContain(
+      "This plan-credit balance refreshes after your next renewal payment succeeds",
+    );
+  });
+
+  it("shows the credit refresh timing for an immediate billing interval change", async () => {
+    const user = userEvent.setup();
+    const annualPlan = {
+      ...paidPlan,
+      id: "version-pro-annual",
+      product_slug: "pro-annual-v1",
+      product_name: "Pro Plan:Annual v1",
+      display_label: "Pro Plan:Annual v1",
+      billing_interval: "annual",
+      price_amount_cents: 149000,
+      entitlements: {
+        ...paidPlan.entitlements,
+        included_credits_per_billing_period: { type: "integer", value: 120000 },
+      },
+    };
+    mocks.getAvailablePlanVersions.mockResolvedValue([
+      paidPlan,
+      annualPlan,
+      freePlan,
+    ]);
+    mocks.previewPlanChange.mockResolvedValue({
+      transition_id: "transition-annual",
+      current_plan: paidPlan,
+      target_plan: annualPlan,
+      effective_mode: "immediate",
+      effective_at: null,
+      price_delta_cents: 134100,
+      credit_delta: 110000,
+      proration_behavior: "create_prorations",
+      purchased_credits_preserved: true,
+    });
+
+    render(
+      <PlanSelection
+        organizationId="org-1"
+        currentSubscription={
+          { status: "active", plan_version_id: paidPlan.id } as never
+        }
+      />,
+    );
+
+    await screen.findByText("Pro");
+    await user.click(
+      screen.getByRole("button", { name: /annual · 2 months free/i }),
+    );
+    await user.click(
+      within(
+        await screen.findByTestId(`billing-plan-card-${annualPlan.id}`),
+      ).getByRole("button", { name: /review plan change/i }),
+    );
+
+    const previewDialog = await screen.findByRole("dialog");
+    expect(previewDialog.textContent).toContain(
+      "120,000 included credits per billing period (up to 12,000 call minutes)",
+    );
+    expect(previewDialog.textContent).toContain(
+      "This plan-credit balance refreshes after payment for this plan change succeeds",
+    );
   });
 });

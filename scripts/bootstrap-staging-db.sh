@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Bootstrap the cloud staging Supabase project (gdzwiwukcwbqohfwxxrx).
 #
-# Brings schema current and seeds billing catalog so plan-version backfill works.
+# Brings schema current, creates missing code-owned system-pricing meters, and
+# syncs approved credit packs. Existing system-pricing rates are preserved.
+# Paid plan versions remain admin-managed; Stripe Manager does not import old
+# subscription prices.
 #
 # Prerequisites:
 #   1. Copy .env.staging.example → .env.staging and fill in:
@@ -14,10 +17,11 @@
 #   ./scripts/bootstrap-staging-db.sh --skip-seed   # migrations only
 #   ./scripts/bootstrap-staging-db.sh --dry-run-seed
 #
-# Order (important for plan_versions backfill):
+# Order (important for plan_versions backfill and credit catalog sync):
 #   1. alembic upgrade 20260807000001  (schema before entitlements)
-#   2. stripe_manager seed             (subscription_plans + credits)
-#   3. alembic upgrade head            (entitlements + backfill from subscription_plans)
+#   2. alembic upgrade head            (entitlements + legacy plan backfill)
+#   3. master-data apply               (missing system-pricing meters only)
+#   4. stripe_manager seed             (approved credit packs only)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -52,13 +56,13 @@ echo ""
 echo "==> Step 1/3: Alembic upgrade to 20260807000001 (pre-entitlements)..."
 ENV_FILE="$ENV_FILE" REVISION=20260807000001 "${ROOT}/scripts/deploy/run-alembic.sh"
 
+echo ""
+echo "==> Step 2/3: Alembic upgrade head (entitlements + legacy plan backfill)..."
+ENV_FILE="$ENV_FILE" REVISION=head "${ROOT}/scripts/deploy/run-alembic.sh"
+
 if [[ "$SKIP_SEED" == "false" ]]; then
   echo ""
-  echo "==> Step 2/3: Seed billing catalog from Stripe..."
-  SEED_ARGS=(seed)
-  if [[ "$DRY_RUN_SEED" == "true" ]]; then
-    SEED_ARGS+=(--dry-run)
-  fi
+  echo "==> Step 3/4: Sync system-pricing meters..."
   export PYTHONPATH="${ROOT}:${PYTHONPATH:-}"
 
   # Export staging secrets safely (handles special chars; avoids brittle ``source``).
@@ -73,17 +77,29 @@ if [[ "$SKIP_SEED" == "false" ]]; then
   done
 
   cd "${ROOT}/backend"
+  if [[ "$DRY_RUN_SEED" == "true" ]]; then
+    python3 -m src.master_data.cli preview --domain system_pricing --format markdown
+  else
+    PRICING_PLAN="$(mktemp)"
+    trap 'rm -f "$PRICING_PLAN"' EXIT
+    python3 -m src.master_data.cli preview \
+      --domain system_pricing --format json --output "$PRICING_PLAN" >/dev/null
+    python3 -m src.master_data.cli apply --plan "$PRICING_PLAN"
+  fi
+
+  echo ""
+  echo "==> Step 4/4: Sync approved credit packs from Stripe..."
+  SEED_ARGS=(seed)
+  if [[ "$DRY_RUN_SEED" == "true" ]]; then
+    SEED_ARGS+=(--dry-run)
+  fi
   python3 scripts/stripe_manager.py "${SEED_ARGS[@]}"
 else
   echo ""
-  echo "==> Step 2/3: Skipped (--skip-seed)"
+  echo "==> Steps 3/4 and 4/4: Skipped (--skip-seed)"
 fi
 
 echo ""
-echo "==> Step 3/3: Alembic upgrade head (entitlements + plan backfill)..."
-ENV_FILE="$ENV_FILE" REVISION=head "${ROOT}/scripts/deploy/run-alembic.sh"
-
-echo ""
 echo "==> Staging bootstrap complete."
-echo "    Verify: ./start.sh restart dev --env staging"
+echo "    Next:   ./scripts/validate-staging.sh (release sync + local app start)"
 echo "    Docs:   docs/05_operations/staging_environment.md"

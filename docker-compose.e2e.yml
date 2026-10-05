@@ -23,7 +23,7 @@ services:
       - ENVIRONMENT=test
       - DEBUG=true
       - DATABASE_URL=postgresql://postgres:postgres@db_e2e:5432/test_db
-      - SUPABASE_URL=https://gdzwiwukcwbqohfwxxrx.supabase.co
+      - SUPABASE_URL=http://e2e.supabase.invalid
       - SUPABASE_SERVICE_KEY=mock-key
       - SUPABASE_ANON_KEY=mock-key
       - JWT_SECRET_KEY=super-secret-test-key-for-e2e-testing-only
@@ -38,7 +38,7 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=http://localhost:8001
-        - NEXT_PUBLIC_SUPABASE_URL=https://gdzwiwukcwbqohfwxxrx.supabase.co
+        - NEXT_PUBLIC_SUPABASE_URL=http://e2e.supabase.invalid
         - NEXT_PUBLIC_SUPABASE_ANON_KEY=mock-key
         - NEXT_PUBLIC_GOOGLE_CLIENT_ID=mock-google-client.apps.googleusercontent.com
         - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy_key_for_e2e
@@ -48,7 +48,7 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://localhost:8001
-      - NEXT_PUBLIC_SUPABASE_URL=https://gdzwiwukcwbqohfwxxrx.supabase.co
+      - NEXT_PUBLIC_SUPABASE_URL=http://e2e.supabase.invalid
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=mock-key
       - NEXT_PUBLIC_GOOGLE_CLIENT_ID=mock-google-client.apps.googleusercontent.com
       - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy_key_for_e2e

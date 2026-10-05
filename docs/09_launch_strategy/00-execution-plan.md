@@ -54,7 +54,7 @@ Concrete plan (Epic A):
 - [ ] New env `PUBLIC_SIGNUP_ENABLED=false` (default closed) + `PLATFORM_ADMIN_ALLOWLIST` (your email). Sync across `.env.*.example` files.
 - [ ] Middleware on `/auth/signup` + `/auth/session` handoff: if no `invitation_token` param and email not allowlisted and flag off → redirect to `/request-demo` with context preserved (`?next=`).
 - [ ] `/auth/signin` stays reachable (admins + invited users need entry) but gets Turnstile + existing rate limits (Epic E hardens further).
-- [ ] Landing header: `Get Started Free` → `Request a Demo`; `Sign In` stays (small, ghost). Pricing section replaced with "Pilot plans from $79/mo — configured for you" (Epic B copy).
+- [ ] Landing header: `Get Started Free` → `Request a Demo`; `Sign In` stays (small, ghost). Pricing section says plans start at $49/month with up to 250 call minutes; full cards stay private during pilot.
 - [ ] Invitation flow becomes the *only* public path to an account: you approve interest → create org → send invitation → user signs up with token. This path already exists and is tested — we are just making it the default.
 
 **What we explicitly do NOT do:** delete `signup/page.tsx`, `oauth/callback`, `verify-email`, or backend routes. They are the reopen path.
@@ -70,8 +70,8 @@ Concrete plan (Epic A):
 | Layer | Today | Phase 1 (pilots) | Later (only if data demands) |
 |---|---|---|---|
 | Engine (metering, settle, RPCs, `voice_session_entitlement.py`) | `ceil(min) × 10cr`, plan→bonus→purchased | **Untouched.** Zero migration risk. | Per-call metering = new `billing_mode` + migration. Defer. |
-| Catalog (`plan_versions`, Stripe) | Only `free` seeded | Seed Trial/Starter/Growth/Scale as **minute bundles converted to credits** (400min=4000cr, 1200min=12000cr, 3200min=32000cr) | Add true per-call SKUs if `cost/booked-appointment` proves cleaner |
-| Marketing copy | Credits/minutes nowhere coherent | Sell **minutes ≈ calls** ("400 min ≈ 120 appointments"); credits invisible | Per-call headline only if avg-duration variance is low across pilots |
+| Catalog (`plan_versions`, Stripe) | Only `free` seeded | Configure Starter/Pro/Scale as **call-minute bundles converted to credits** (250min=2500cr, 1000min=10000cr, 2100min=21000cr) in the Plan Catalog | Revisit after actual pilot usage and provider-cost data |
+| Marketing copy | Credits/minutes nowhere coherent | Show **up to 250 / 1,000 / 2,100 call minutes**; billing remains metered in credits | Refine after actual call-duration and credit-use data |
 
 **Why this is safe:** no Alembic data migration on `credit_events`/grants, no change to the atomic settle RPCs, no change to 4403 pre-checks. The diff is: seed rows + Stripe Products/Prices + plan-card copy + entitlement numbers. Reviewable in one PR.
 
@@ -100,9 +100,9 @@ Three Stripe primitives, and which we use when:
 
 | Primitive | What it is | When we use it |
 |---|---|---|
-| **Payment Link** (no-code, created in Dashboard) | A URL for a fixed product/price; customer pays; Stripe fires `checkout.session.completed` webhook | **Default for pilots.** You create 3 links (Starter $79, Growth $179, Scale $399) once, then text/email the right one. |
-| **Invoice** (custom amount, send by email) | You type any amount + description, e.g. "$120 setup + $79 first month" | **Exceptions only** (custom scope, setup fee, multi-location deal). |
-| **Checkout Session via API** (what the platform builds) | Same as Payment Link but generated programmatically | **Epic E**, when self-serve reopens. Not now. |
+| **Platform checkout** (authenticated plan selector) | Creates a Checkout Session with the organization and immutable plan-version metadata used by webhooks | **Default for pilots.** Use the approved $49 Starter, $149 Pro, and $299 Scale versions configured in Plan Catalog. |
+| **Invoice** (custom amount, send by email) | A separate charge for a specific custom service, such as a setup fee | **Exceptions only** (custom scope, setup fee, multi-location deal). It does not replace the recurring platform subscription. |
+| **Stripe Payment Link** | A hosted URL for a fixed price | Avoid for pilots unless nested Subscription metadata is verified; public links stay unpublished. |
 
 ```mermaid
 sequenceDiagram
@@ -204,4 +204,4 @@ Per-call metering engine · real PSTN warm transfer · annual plans with prorati
 2. On approval I implement **Epic A** in `opencode-gated-entry` worktree: flag-gated auth, `/request-demo` + `leads` table, landing CTA swap, demo caps surfaced. Small diff, staging-verified, then PR.
 3. Nothing here is committed yet (per repo rules) — worktree files + this plan await your go-ahead to commit/PR.
 
-**Open questions I need from you (max 3):** (a) PostHog vs Plausible preference for traffic analytics? (b) Keep plan names Starter/Growth/Scale or SMB-friendlier (Essential/Plus/Premium)? (c) Owner notifications for soft escalation via SMS, email, or both on day one?
+**Open questions I need from you (max 3):** (a) PostHog vs Plausible preference for traffic analytics? (b) Plan display names are Starter / Pro / Scale as documented in the approved publish spec. (c) Owner notifications for soft escalation via SMS, email, or both on day one?

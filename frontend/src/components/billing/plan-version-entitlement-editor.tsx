@@ -267,6 +267,40 @@ export function PlanVersionEntitlementEditor({
                       Unlimited
                     </Label>
                   </div>
+                ) : def.unit === "count" ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id={`ent-unlimited-${item.key}`}
+                        checked={item.unlimited === true}
+                        onCheckedChange={(unlimited) =>
+                          updateItem(item.key, { unlimited })
+                        }
+                      />
+                      <Label htmlFor={`ent-unlimited-${item.key}`}>
+                        Unlimited
+                      </Label>
+                    </div>
+                    {item.unlimited ? null : (
+                      <div className="space-y-1">
+                        <Label htmlFor={`ent-int-${item.key}`}>
+                          Limit value
+                        </Label>
+                        <Input
+                          id={`ent-int-${item.key}`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={item.integerValue ?? 0}
+                          onChange={(e) =>
+                            updateItem(item.key, {
+                              integerValue: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="space-y-1">
                     <Label htmlFor={`ent-int-${item.key}`}>Limit value</Label>

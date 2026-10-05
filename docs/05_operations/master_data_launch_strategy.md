@@ -4,6 +4,12 @@ Research snapshot: 2026-08-13. This is a decision aid, not a final pricing
 approval. Prices and plan limits must be recalculated from observed provider
 costs and validated with pilot customers before paid catalog rows are seeded.
 
+> **Superseded pricing hypothesis.** The Launch/Growth/Pro prices and minutes
+> below are historical research only. Use the approved Starter/Pro/Scale
+> catalog, number policy, and current runtime rates in
+> [the pilot billing runbook](../09_launch_strategy/05-pilot-billing-runbook.md)
+> and [plan publish spec](../09_launch_strategy/06-plan-publish-spec.md).
+
 ## Recommended initial market
 
 The repository already has 15 well-structured platform skills in three
@@ -135,32 +141,36 @@ These public prices are directional benchmarks. Vendor rates, provider mix,
 prompt/audio tokenization, call duration distribution, recording policy,
 support, and concurrency can materially change actual contribution cost.
 
-## Proposed commercial hypothesis
+## Current pilot catalog proposal (not yet published)
 
-Do not seed paid plan versions yet. Use this table as the draft to review with
-finance, engineering, and pilot customers:
+Do not seed paid plan versions from a worktree fixture. Configure and review
+them through the authenticated Plan Catalog admin following the
+[plan publish spec](../09_launch_strategy/06-plan-publish-spec.md):
 
-| Tier | Monthly price hypothesis | Included voice minutes | Internal credits at current 10 credits/min | Purpose |
-| --- | ---: | ---: | ---: | --- |
-| Free | $0 | 10 | 100 | Product trial; current migration already provides 100 credits and one agent |
-| Launch | $49 | 200 | 2,000 | One location, low-volume inbound coverage |
-| Growth | $149 | 800 | 8,000 | Multi-shift or multi-location SMB |
-| Pro | $399 | 2,500 | 25,000 | Higher concurrency, richer support, and more agents |
+| Tier | Monthly price | Annual price | Included call minutes/month | Included credits/month |
+| --- | ---: | ---: | ---: | ---: |
+| Free | $0 | — | 10 | 100 |
+| Starter | $49 | $490 | 250 | 2,500 |
+| Pro | $149 | $1,490 | 1,000 | 10,000 |
+| Scale | $299 | $2,990 | 2,100 | 21,000 |
 
-The current application charges 10 internal credits per connected voice minute
-and 200/200/500 credits per active local/mobile/toll-free phone number per
-month. Those values are runtime defaults, not a claim that one credit should be
-marketed as a currency unit.
+Current runtime pricing is 10 credits per connected voice minute, 80 credits
+per additional US local number-month, 200 credits per existing legacy non-US
+local or mobile number-month, and 120 credits per toll-free number-month. New
+platform number search and purchase are US-only and mobile inventory is
+disabled in v1; imported customer-owned Twilio numbers have no platform rental
+fee. These values are internal meters, not a claim that one credit should be
+marketed as currency. Credit top-ups are $5/200, $10/400, and $25/1,000.
 
 Recommended commercial presentation:
 
 - Show included minutes and estimated remaining minutes to customers; keep
   credits as an internal metering mechanism.
-- Set overage only after measuring the blended COGS distribution. A starting
-  experiment is $0.20/min for Launch, $0.16/min for Growth, and $0.13/min for
-  Pro, with a hard stop if measured gross margin misses the approved floor.
-- Offer annual billing only after monthly retention and usage distributions are
-  known; do not use an annual discount to hide poor utilization economics.
+- Annual billing charges 10 monthly payments for 12 months of service. Grant
+  12 times the monthly credits so the annual call-minute allowance remains
+  consistent.
+- Do not enable or advertise a separate overage price until pilot COGS and the
+  pricing decision are reviewed.
 - Treat phone-number rental as a separate transparent line item or include a
   small allocation in the bundle and disclose it clearly.
 

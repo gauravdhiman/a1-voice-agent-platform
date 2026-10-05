@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import logging
+
 import pytest
 from src.phone_numbers.twilio_service import TwilioService
 
@@ -43,20 +45,23 @@ def twilio_service_not_configured() -> TwilioService:
 class TestTwilioServiceInitialization:
     """Initialization and provider-configuration behavior."""
 
-    def test_initializes_client_when_credentials_exist(self):
+    def test_initializes_client_without_logging_credentials(self, caplog):
         """Credentials create a Twilio client with the configured values."""
         configured_settings = SimpleNamespace(
             twilio_account_sid="AC_test",
             twilio_auth_token="secret",
         )
-        with patch(
-            "src.phone_numbers.twilio_service.settings",
-            configured_settings,
-        ), patch("src.phone_numbers.twilio_service.Client") as client_cls:
-            service = TwilioService()
+        with caplog.at_level(logging.INFO):
+            with patch(
+                "src.phone_numbers.twilio_service.settings",
+                configured_settings,
+            ), patch("src.phone_numbers.twilio_service.Client") as client_cls:
+                service = TwilioService()
 
         client_cls.assert_called_once_with("AC_test", "secret")
         assert service.is_configured() is True
+        assert "AC_test" not in caplog.text
+        assert "secret" not in caplog.text
 
     def test_stays_unconfigured_without_credentials(self):
         """Missing credentials leave the provider adapter disabled."""
@@ -133,13 +138,20 @@ class TestTwilioServiceSearch:
         with pytest.raises(ValueError, match="Twilio is not configured"):
             twilio_service_not_configured.search_available_numbers()
 
-    def test_search_propagates_provider_errors(self, twilio_service: TwilioService):
+    def test_search_propagates_provider_errors_without_logging_details(
+        self, twilio_service: TwilioService, caplog
+    ):
         """Provider failures remain visible to the service-layer compensator."""
         resource = twilio_service.client.available_phone_numbers.return_value.local
-        resource.list.side_effect = RuntimeError("provider unavailable")
+        provider_diagnostic = "provider unavailable; account AC123456"
+        resource.list.side_effect = RuntimeError(provider_diagnostic)
 
-        with pytest.raises(RuntimeError, match="provider unavailable"):
-            twilio_service.search_available_numbers()
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(RuntimeError, match="provider unavailable"):
+                twilio_service.search_available_numbers()
+
+        assert provider_diagnostic not in caplog.text
+        assert "AC123456" not in caplog.text
 
 
 class TestTwilioServicePurchase:

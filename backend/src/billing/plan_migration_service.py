@@ -51,7 +51,7 @@ class PlanMigrationService:
             return None
 
         publish_event = row.get("plan_version_publish_events") or {}
-        target_label = await self._get_plan_version_label(
+        target_label, target_slug = await self._get_plan_version_display(
             UUID(str(row["to_plan_version_id"]))
         )
 
@@ -62,6 +62,7 @@ class PlanMigrationService:
             status=PlanMigrationStatus(row["status"]),
             grace_period_ends_at=row.get("grace_period_ends_at"),
             target_plan_version_label=target_label,
+            target_plan_product_slug=target_slug,
             allow_indefinite_legacy=bool(
                 publish_event.get("allow_indefinite_legacy", True)
             ),
@@ -145,7 +146,8 @@ class PlanMigrationService:
             self.supabase.table("organization_subscription_migrations")
             .select(
                 "*, organization_subscriptions!inner(id, organization_id, "
-                "stripe_subscription_id, plan_version_id, status), "
+                "stripe_subscription_id, plan_version_id, status, metadata, "
+                "pending_plan_transition), "
                 "plan_version_publish_events(*)"
             )
             .eq("organization_subscriptions.organization_id", str(organization_id))
@@ -165,7 +167,8 @@ class PlanMigrationService:
             self.supabase.table("organization_subscription_migrations")
             .select(
                 "*, organization_subscriptions(id, organization_id, "
-                "stripe_subscription_id, plan_version_id, status), "
+                "stripe_subscription_id, plan_version_id, status, metadata, "
+                "pending_plan_transition), "
                 "plan_version_publish_events(*)"
             )
             .eq("status", PlanMigrationStatus.GRACE_ACTIVE.value)
@@ -181,6 +184,13 @@ class PlanMigrationService:
         migration_type: str,
     ) -> None:
         """Apply a migration: update subscription plan_version_id and Stripe."""
+        # Lazy import avoids the billing service -> entitlement service -> plan
+        # migration import cycle during application startup.
+        from .versioned_subscription_service import (
+            PlanChangeInProgressError,
+            versioned_subscription_service,
+        )
+
         subscription = migration_row.get("organization_subscriptions") or {}
         publish_event = migration_row.get("plan_version_publish_events") or {}
         to_version_id = UUID(str(migration_row["to_plan_version_id"]))
@@ -188,25 +198,54 @@ class PlanMigrationService:
         migration_id = migration_row["id"]
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        to_version = await self._get_plan_version(to_version_id)
-        legacy_plan_id = to_version.get("legacy_subscription_plan_id")
-        stripe_price_id = to_version.get("stripe_price_id")
-
-        update_fields: dict[str, Any] = {
-            "plan_version_id": str(to_version_id),
-            "updated_at": now_iso,
-        }
-        if legacy_plan_id:
-            update_fields["subscription_plan_id"] = str(legacy_plan_id)
-
         sub_id = subscription.get("id")
         if not sub_id:
             raise ValueError(f"Migration {migration_id} missing subscription reference")
 
-        self.supabase.table("organization_subscriptions").update(update_fields).eq(
-            "id", sub_id
-        ).execute()
+        scheduled_marker = (subscription.get("metadata") or {}).get(
+            "pending_plan_change"
+        ) or {}
+        if scheduled_marker.get("status") == "scheduled":
+            if str(scheduled_marker.get("target_plan_version_id")) == str(
+                to_version_id
+            ):
+                self._mark_migration_complete(migration_id, migration_type, now_iso)
+                return
+            raise PlanChangeInProgressError(
+                "A different plan change is already scheduled. Retry migration "
+                "after it takes effect."
+            )
 
+        if subscription.get("pending_plan_transition"):
+            reconciled = (
+                await versioned_subscription_service.reconcile_pending_plan_transition(
+                    subscription
+                )
+            )
+            if not reconciled:
+                raise PlanChangeInProgressError(
+                    "A plan change is still being processed. Retry migration after "
+                    "its payment is confirmed."
+                )
+            refreshed = (
+                self.supabase.table("organization_subscriptions")
+                .select("*")
+                .eq("id", str(sub_id))
+                .execute()
+            )
+            rows = refreshed.data or []
+            if rows and str(rows[0].get("plan_version_id")) == str(to_version_id):
+                self._mark_migration_complete(migration_id, migration_type, now_iso)
+                return
+
+        if str(subscription.get("plan_version_id")) == str(to_version_id):
+            self._mark_migration_complete(migration_id, migration_type, now_iso)
+            return
+
+        to_version = await self._get_plan_version(to_version_id)
+        from_version = await self._get_plan_version(from_version_id)
+        legacy_plan_id = to_version.get("legacy_subscription_plan_id")
+        stripe_price_id = to_version.get("stripe_price_id")
         stripe_sub_id = subscription.get("stripe_subscription_id")
         stripe_timing = publish_event.get("stripe_migration_timing", "immediate")
         should_update_stripe = (
@@ -217,20 +256,74 @@ class PlanMigrationService:
                 or stripe_timing in ("immediate", "at_grace_end")
             )
         )
-        if should_update_stripe:
-            await stripe_service.change_subscription_price(
-                stripe_sub_id,
-                str(stripe_price_id),
-                at_period_end=(stripe_timing == "at_period_end"),
+        at_period_end = stripe_timing == "at_period_end"
+        interval_changed = (
+            bool(should_update_stripe)
+            and not at_period_end
+            and from_version.get("billing_interval")
+            != to_version.get("billing_interval")
+        )
+        transition = {
+            "transition_id": str(migration_id),
+            "source_plan_version_id": str(from_version_id),
+            "target_plan_version_id": str(to_version_id),
+            "target_billing_mode": to_version.get("billing_mode"),
+            "source_price_id": from_version.get("stripe_price_id"),
+            "target_price_id": stripe_price_id,
+            "billing_interval_changed": interval_changed,
+            "effective_mode": "scheduled" if at_period_end else "immediate",
+            "effective_at": publish_event.get("effective_at")
+            or subscription.get("current_period_end"),
+            "operation": "migration",
+            "status": "awaiting_invoice" if interval_changed else "applying",
+        }
+        if not versioned_subscription_service.claim_plan_transition(sub_id, transition):
+            raise PlanChangeInProgressError(
+                "A plan change is already being processed. Retry migration after "
+                "it completes."
             )
 
-        self.supabase.table("organization_subscription_migrations").update(
-            {
-                "status": PlanMigrationStatus.MIGRATED.value,
-                "migrated_at": now_iso,
-                "migration_type": migration_type,
+        try:
+            if should_update_stripe:
+                await stripe_service.change_subscription_price(
+                    stripe_sub_id,
+                    str(stripe_price_id),
+                    at_period_end=at_period_end,
+                )
+
+            update_fields: dict[str, Any] = {
+                "plan_version_id": str(to_version_id),
+                "updated_at": now_iso,
             }
-        ).eq("id", migration_id).execute()
+            if at_period_end:
+                metadata = dict(subscription.get("metadata") or {})
+                metadata["pending_plan_change"] = {
+                    "transition_id": str(migration_id),
+                    "target_plan_version_id": str(to_version_id),
+                    "target_billing_mode": to_version.get("billing_mode"),
+                    "effective_at": transition["effective_at"],
+                    "status": "scheduled",
+                }
+                update_fields["metadata"] = metadata
+            if legacy_plan_id:
+                update_fields["subscription_plan_id"] = str(legacy_plan_id)
+            self.supabase.table("organization_subscriptions").update(update_fields).eq(
+                "id", sub_id
+            ).execute()
+
+            self._mark_migration_complete(migration_id, migration_type, now_iso)
+            if not interval_changed:
+                versioned_subscription_service.clear_plan_transition(
+                    sub_id, migration_id
+                )
+        except Exception:
+            await versioned_subscription_service.reconcile_pending_plan_transition(
+                {
+                    **subscription,
+                    "pending_plan_transition": transition,
+                }
+            )
+            raise
 
         logger.info(
             "Migrated subscription %s from version %s to %s (%s)",
@@ -239,6 +332,18 @@ class PlanMigrationService:
             to_version_id,
             migration_type,
         )
+
+    def _mark_migration_complete(
+        self, migration_id: str, migration_type: str, timestamp: str
+    ) -> None:
+        """Mark a migration complete after its Stripe/local state is reconciled."""
+        self.supabase.table("organization_subscription_migrations").update(
+            {
+                "status": PlanMigrationStatus.MIGRATED.value,
+                "migrated_at": timestamp,
+                "migration_type": migration_type,
+            }
+        ).eq("id", migration_id).execute()
 
     async def _get_plan_version(self, plan_version_id: UUID) -> dict[str, Any]:
         """Fetch plan version row."""
@@ -253,23 +358,26 @@ class PlanMigrationService:
             raise ValueError(f"Plan version {plan_version_id} not found")
         return result.data
 
-    async def _get_plan_version_label(self, plan_version_id: UUID) -> Optional[str]:
-        """Build display label like 'Growth v3' for UI."""
+    async def _get_plan_version_display(
+        self, plan_version_id: UUID
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Return a customer-facing label and stable product slug."""
         result = (
             self.supabase.table("plan_versions")
-            .select("version_number, display_label, plan_products(display_name)")
+            .select("version_number, display_label, plan_products(display_name, slug)")
             .eq("id", str(plan_version_id))
             .single()
             .execute()
         )
         if not result.data:
-            return None
+            return None, None
         row = result.data
-        if row.get("display_label"):
-            return row["display_label"]
         product = row.get("plan_products") or {}
+        slug = product.get("slug")
+        if row.get("display_label"):
+            return row["display_label"], slug
         name = product.get("display_name", "Plan")
-        return f"{name} v{row.get('version_number', 1)}"
+        return f"{name} v{row.get('version_number', 1)}", slug
 
 
 plan_migration_service = PlanMigrationService()

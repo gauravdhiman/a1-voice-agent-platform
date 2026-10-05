@@ -18,6 +18,7 @@ describe('PhoneNumberService', () => {
   describe('searchAvailable', () => {
     it('searches available phone numbers with default params', async () => {
       const result = await phoneNumberService.searchAvailable({
+        organization_id: 'org-1',
         country_code: 'US',
         phone_number_type: 'local',
       })
@@ -32,6 +33,7 @@ describe('PhoneNumberService', () => {
 
     it('searches with area code filter', async () => {
       const result = await phoneNumberService.searchAvailable({
+        organization_id: 'org-1',
         country_code: 'US',
         phone_number_type: 'local',
         area_code: '415',
@@ -41,6 +43,7 @@ describe('PhoneNumberService', () => {
 
     it('searches with contains filter', async () => {
       const result = await phoneNumberService.searchAvailable({
+        organization_id: 'org-1',
         country_code: 'US',
         contains: '555',
       })
@@ -49,6 +52,7 @@ describe('PhoneNumberService', () => {
 
     it('searches with pagination', async () => {
       const result = await phoneNumberService.searchAvailable({
+        organization_id: 'org-1',
         country_code: 'US',
         page: 2,
         page_size: 10,
@@ -74,6 +78,31 @@ describe('PhoneNumberService', () => {
         credit_balance_after: expect.any(Number),
       })
     })
+  })
+
+  it('sends the organization scope with available-number searches', async () => {
+    let requestedOrganizationId: string | null = null
+    server.use(
+      http.get(`${API_BASE_URL}/api/v1/phone-numbers/available`, ({ request }) => {
+        requestedOrganizationId = new URL(request.url).searchParams.get(
+          'organization_id'
+        )
+        return HttpResponse.json({
+          success: true,
+          data: {
+            items: [],
+            total_count: 0,
+            page: 1,
+            page_size: 50,
+            total_pages: 0,
+          },
+        })
+      })
+    )
+
+    await phoneNumberService.searchAvailable({ organization_id: 'org-1' })
+
+    expect(requestedOrganizationId).toBe('org-1')
   })
 
   describe('getOrganizationNumbers', () => {
@@ -148,7 +177,10 @@ describe('PhoneNumberService', () => {
       )
 
       await expect(
-        phoneNumberService.searchAvailable({ country_code: 'US' })
+        phoneNumberService.searchAvailable({
+          organization_id: 'org-1',
+          country_code: 'US',
+        })
       ).rejects.toThrow()
     })
 

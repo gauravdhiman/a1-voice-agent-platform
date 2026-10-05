@@ -34,6 +34,7 @@ describe("phoneNumberService API contracts", () => {
     apiClient.get.mockResolvedValueOnce({ data: { items: [] } });
 
     await phoneNumberService.searchAvailable({
+      organization_id: "org/1",
       country_code: "US",
       phone_number_type: "local",
       contains: "480",
@@ -43,7 +44,7 @@ describe("phoneNumberService API contracts", () => {
     });
 
     expect(apiClient.get).toHaveBeenCalledWith(
-      "/api/v1/phone-numbers/available?country_code=US&phone_number_type=local&contains=480&search_mode=begins_with&page=1&page_size=50",
+      "/api/v1/phone-numbers/available?organization_id=org%2F1&country_code=US&phone_number_type=local&contains=480&search_mode=begins_with&page=1&page_size=50",
     );
   });
 

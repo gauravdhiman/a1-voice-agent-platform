@@ -492,10 +492,14 @@ class NotificationService:
                 # Use sanitized validated variables (with defaults applied) for built-in template
                 template_data = TEMPLATE_REGISTRY[request.event_key]
                 subject = template_data["subject"].format(**sanitized_builtin_vars)
-                # Use sanitized validated variables (with defaults applied) for built-in template
-                html_content = get_template_html(
-                    request.event_key, sanitized_builtin_vars
+                # The lead renderer owns escaping public fields so they are
+                # escaped once; other built-ins use the shared sanitizer.
+                html_template_vars = (
+                    validated_builtin_vars
+                    if request.event_key == "lead.interest_submitted"
+                    else sanitized_builtin_vars
                 )
+                html_content = get_template_html(request.event_key, html_template_vars)
 
             if not html_content:
                 raise ValueError(f"No template found for event: {request.event_key}")

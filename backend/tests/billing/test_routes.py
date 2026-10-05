@@ -32,7 +32,7 @@ These tests pin the contract:
 """
 
 from unittest.mock import AsyncMock, Mock, patch
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -42,7 +42,6 @@ TEST_OTHER_ORG_ID = UUID("00000000-0000-0000-0000-0000000009b1")
 TEST_USER_ID = UUID("00000000-0000-0000-0000-0000000000b2")
 TEST_PLAN_ID = UUID("00000000-0000-0000-0000-0000000000b3")
 TEST_PRODUCT_ID = UUID("00000000-0000-0000-0000-0000000000b4")
-
 
 
 def _make_profile(
@@ -178,7 +177,6 @@ class TestConsumeCreditsPermission:
                 )
             assert exc_info.value.status_code == 403
             mock_svc.consume_credits.assert_not_called()
-
 
     @pytest.mark.asyncio
     async def test_org_admin_on_target_org_passes(self):
@@ -428,6 +426,64 @@ class TestReactivateSubscriptionPermission:
             )
             assert "reactivated" in result["message"]
             mock_stripe.reactivate_subscription.assert_called_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("local_cancel_flag", "target_billing_mode", "stripe_schedule", "cleared"),
+        [
+            (True, None, None, True),
+            (False, "free", "sched_free", True),
+            (False, None, None, True),
+            (False, "paid", "sched_paid", False),
+            (True, "paid", "sched_paid", False),
+            (True, None, "sched_legacy", False),
+        ],
+    )
+    async def test_reactivation_clears_scheduled_free_cancellation_marker(
+        self, local_cancel_flag, target_billing_mode, stripe_schedule, cleared
+    ):
+        """Reactivation clears Free markers without deleting paid downgrades."""
+        from src.billing.routes import reactivate_subscription
+
+        profile = _make_profile(has_billing_manage_on=str(TEST_ORG_ID))
+        request = {"organization_id": str(TEST_ORG_ID)}
+        subscription = _subscription_mock()
+        subscription.cancel_at_period_end = local_cancel_flag
+        pending_change = {
+            "transition_id": "cancel_to_free",
+            "target_plan_version_id": str(uuid4()),
+            "status": "scheduled",
+        }
+        if target_billing_mode:
+            pending_change["target_billing_mode"] = target_billing_mode
+        subscription.metadata = {
+            "billing_mode": "paid",
+            "pending_plan_change": pending_change,
+        }
+
+        with (
+            patch("src.billing.routes.billing_service") as mock_svc,
+            patch("src.billing.routes.stripe_service") as mock_stripe,
+        ):
+            mock_svc.get_organization_subscription = AsyncMock(
+                return_value=subscription
+            )
+            mock_svc.update_organization_subscription = AsyncMock()
+            mock_stripe.reactivate_subscription = AsyncMock(
+                return_value=Mock(schedule=stripe_schedule)
+            )
+
+            result = await reactivate_subscription(
+                request=request, user_auth=(TEST_USER_ID, profile)
+            )
+
+        assert "reactivated" in result["message"]
+        update_data = mock_svc.update_organization_subscription.await_args.args[1]
+        assert update_data.cancel_at_period_end is False
+        if cleared:
+            assert update_data.metadata == {"billing_mode": "paid"}
+        else:
+            assert update_data.metadata is None
 
 
 class TestCustomerPortalSessionPermission:
@@ -818,7 +874,13 @@ class TestCreditCheckoutTopupGate:
             patch("src.billing.routes.entitlement_service") as mock_ent,
         ):
             mock_svc.get_credit_products = AsyncMock(
-                return_value=[Mock(id=TEST_PRODUCT_ID, stripe_price_id="price_x")]
+                return_value=[
+                    Mock(
+                        id=TEST_PRODUCT_ID,
+                        stripe_price_id="price_x",
+                        credit_amount=200,
+                    )
+                ]
             )
             mock_ent.check_feature = AsyncMock(return_value=False)
 
@@ -920,7 +982,13 @@ class TestCreditCheckoutTopupGate:
             patch("src.billing.routes.stripe_service") as mock_stripe,
         ):
             mock_svc.get_credit_products = AsyncMock(
-                return_value=[Mock(id=TEST_PRODUCT_ID, stripe_price_id="price_x")]
+                return_value=[
+                    Mock(
+                        id=TEST_PRODUCT_ID,
+                        stripe_price_id="price_x",
+                        credit_amount=200,
+                    )
+                ]
             )
             mock_ent.check_feature = AsyncMock(return_value=True)
             mock_svc.supabase = Mock()
@@ -949,7 +1017,13 @@ class TestCreditCheckoutTopupGate:
             mock_ent.check_feature.assert_awaited_once_with(
                 TEST_ORG_ID, "credit_topup_enabled"
             )
-            mock_stripe.create_credits_checkout_session.assert_awaited_once()
+            mock_stripe.create_credits_checkout_session.assert_awaited_once_with(
+                price_id="price_x",
+                customer_id="cus_123",
+                organization_id=str(TEST_ORG_ID),
+                product_id=str(TEST_PRODUCT_ID),
+                credit_amount=200,
+            )
 
     @pytest.mark.asyncio
     async def test_credits_checkout_uses_authenticated_email_when_creating_customer(
@@ -971,7 +1045,13 @@ class TestCreditCheckoutTopupGate:
             patch("src.billing.routes.stripe_service") as mock_stripe,
         ):
             mock_svc.get_credit_products = AsyncMock(
-                return_value=[Mock(id=TEST_PRODUCT_ID, stripe_price_id="price_credit")]
+                return_value=[
+                    Mock(
+                        id=TEST_PRODUCT_ID,
+                        stripe_price_id="price_credit",
+                        credit_amount=200,
+                    )
+                ]
             )
             mock_ent.check_feature = AsyncMock(return_value=True)
             mock_svc.supabase = Mock()

@@ -2,6 +2,9 @@
 Email template definitions with beautiful HTML layouts.
 """
 
+from html import escape as escape_html
+
+
 # Base HTML template with modern styling
 BASE_TEMPLATE = """
 <!DOCTYPE html>
@@ -523,15 +526,36 @@ def get_template_html(event_key: str, variables: dict) -> str:
     if not template_data:
         raise ValueError(f"Template not found for event_key: {event_key}")
 
-    # Render content
-    content = template_data["html_content"].format(**variables)
+    # Lead submissions are public input. Escape their values at this HTML
+    # rendering boundary; other built-in templates are escaped by the service.
+    html_variables = variables
+    if event_key == "lead.interest_submitted":
+        html_variables = variables.copy()
+        for key in (
+            "lead_name",
+            "business_name",
+            "lead_email",
+            "lead_phone",
+            "vertical",
+            "message",
+            "source",
+            "demo_slug",
+            "submitted_at",
+            "interests_url",
+            "app_name",
+        ):
+            value = html_variables.get(key)
+            if value is not None:
+                html_variables[key] = escape_html(str(value), quote=True)
+
+    content = template_data["html_content"].format(**html_variables)
 
     # Prepare subject with variables
-    subject = template_data["subject"].format(**variables)
+    subject = template_data["subject"].format(**html_variables)
 
     # Prepare variables for base template, ensuring required variables are present
     # These should already be included via validate_template_variables in the service
-    base_template_vars = {"subject": subject, "content": content, **variables}
+    base_template_vars = {"subject": subject, "content": content, **html_variables}
 
     # Wrap in base template
     html = BASE_TEMPLATE.format(**base_template_vars)

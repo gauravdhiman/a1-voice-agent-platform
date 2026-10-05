@@ -160,7 +160,7 @@ describe("ThemeSwitch", () => {
 });
 
 describe("Public chrome", () => {
-  it("links the homepage sections, sign-in, and conversation CTA", () => {
+  it("links the homepage sections, sign-in, and request-demo CTA", () => {
     render(
       <ThemeProvider>
         <PublicThemeRoot>
@@ -185,10 +185,8 @@ describe("Public chrome", () => {
         .every((link) => link.getAttribute("href") === "/how-it-works"),
     ).toBe(true);
     expect(
-      screen
-        .getAllByRole("link", { name: /let's talk/i })
-        .every((link) => link.getAttribute("href") === "/request-demo"),
-    ).toBe(true);
+      screen.getByRole("link", { name: /request demo/i }).getAttribute("href"),
+    ).toBe("/request-demo");
     expect(
       screen
         .getAllByRole("link", { name: /sign in/i })

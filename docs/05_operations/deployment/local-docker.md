@@ -17,10 +17,10 @@ deploys use GCP Cloud Run + OCI — see [deployment/README.md](README.md).
 
 ```bash
 # Create .env.local once from .env.local.example and edit it with credentials.
-# For staging instead, use: ./start.sh start dev --env staging
+# For staging release validation, use: ./scripts/validate-staging.sh
 
 ./start.sh start dev                   # app services; uses an already-running local Supabase
-./start.sh start dev --env staging     # app services, cloud staging Supabase
+./start.sh start dev --env staging     # only after the release catalog sync
 ./start.sh logs dev
 ./start.sh stop dev
 ```

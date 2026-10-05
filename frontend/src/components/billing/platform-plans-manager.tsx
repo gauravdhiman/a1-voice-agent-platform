@@ -297,7 +297,7 @@ export function PlatformPlansManager() {
       const updated = await adminPlanService.updateDraftVersion(
         selectedVersion.id,
         {
-          display_label: displayLabel || undefined,
+          display_label: displayLabel.trim() || null,
           billing_mode: billingMode,
           credit_grant_policy: creditGrantPolicy,
           price_amount_cents: Number(priceCents) || 0,

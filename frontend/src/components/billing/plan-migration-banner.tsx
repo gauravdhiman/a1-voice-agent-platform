@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { billingService } from "@/services/billing-service";
 import type { OrgEntitlements } from "@/types/billing";
+import { friendlyPlanLabel } from "@/components/billing/plan-card";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ArrowUpCircle, Clock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +37,14 @@ export function PlanMigrationBanner({
   const [migrating, setMigrating] = useState(false);
 
   const migration = entitlements.migration;
+  const currentPlanLabel = friendlyPlanLabel(
+    entitlements.plan_version_label,
+    entitlements.plan_product_slug,
+  );
+  const targetPlanLabel = friendlyPlanLabel(
+    migration?.target_plan_version_label,
+    migration?.target_plan_product_slug,
+  );
   const showLegacyBadge =
     entitlements.is_legacy_version && !migration && entitlements.plan_version_label;
 
@@ -76,7 +85,7 @@ export function PlanMigrationBanner({
           <div className="flex flex-wrap items-center gap-2">
             {entitlements.plan_version_label ? (
               <Badge variant="outline" className="border-amber-300 bg-white">
-                {entitlements.plan_version_label}
+                {currentPlanLabel}
                 {entitlements.is_legacy_version ? " — legacy" : ""}
               </Badge>
             ) : null}
@@ -93,7 +102,7 @@ export function PlanMigrationBanner({
               <p>
                 A newer plan version
                 {migration.target_plan_version_label
-                  ? ` (${migration.target_plan_version_label})`
+                  ? ` (${targetPlanLabel})`
                   : ""}{" "}
                 is available.
                 {graceDaysRemaining !== null ? (
@@ -119,7 +128,9 @@ export function PlanMigrationBanner({
                 >
                   <ArrowUpCircle className="w-4 h-4 mr-2" />
                   Upgrade to{" "}
-                  {migration.target_plan_version_label ?? "latest version"}
+                  {migration.target_plan_version_label
+                    ? targetPlanLabel
+                    : "latest version"}
                 </Button>
               ) : null}
             </div>
@@ -133,7 +144,9 @@ export function PlanMigrationBanner({
             <DialogTitle>Upgrade plan version</DialogTitle>
             <DialogDescription>
               You will move to{" "}
-              {migration?.target_plan_version_label ?? "the latest plan version"}.
+              {migration?.target_plan_version_label
+                ? targetPlanLabel
+                : "the latest plan version"}.
               Your billing may change according to the new plan price.
             </DialogDescription>
           </DialogHeader>

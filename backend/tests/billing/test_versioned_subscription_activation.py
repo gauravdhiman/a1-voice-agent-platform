@@ -95,6 +95,20 @@ def _paid_version():
 class TestVersionedSubscriptionService:
     """Unit tests for the versioned activation service."""
 
+    def test_catalog_tier_rank_orders_scale_above_pro(self):
+        assert (
+            VersionedSubscriptionService._catalog_tier_rank(
+                {"slug": "scale", "sort_order": 10}
+            )
+            == 30
+        )
+        assert (
+            VersionedSubscriptionService._catalog_tier_rank(
+                {"slug": "pro", "sort_order": 10}
+            )
+            == 20
+        )
+
     @pytest.mark.asyncio
     async def test_activate_default_free_plan_selects_current_free_version(self):
         """Platform provisioning resolves and activates the published free plan."""
@@ -493,6 +507,105 @@ class TestVersionedSubscriptionService:
                 customer_email="owner@erp-cosmos.com",
             )
 
+    @pytest.mark.asyncio
+    async def test_paid_checkout_reconciles_and_blocks_a_pending_transition(self):
+        """An expired row cannot start a second checkout during a transition."""
+        from src.billing.versioned_subscription_service import (
+            PlanChangeInProgressError,
+        )
+
+        service = VersionedSubscriptionService()
+        service._get_signup_plan_version = AsyncMock(return_value=_paid_version())
+        service._get_existing_subscription = AsyncMock(
+            return_value={
+                "id": str(SUBSCRIPTION_ID),
+                "status": "expired",
+                "pending_plan_transition": {"transition_id": "transition_unpaid"},
+                "metadata": {"billing_mode": "paid"},
+            }
+        )
+        service.reconcile_pending_plan_transition = AsyncMock(return_value=False)
+
+        with pytest.raises(PlanChangeInProgressError, match="still being processed"):
+            await service.create_paid_checkout(
+                VersionedSubscriptionCheckoutRequest(
+                    organization_id=ORG_ID,
+                    plan_version_id=PAID_VERSION_ID,
+                    success_url="https://app.test/success",
+                    cancel_url="https://app.test/cancel",
+                ),
+                customer_email="owner@example.com",
+            )
+
+        service.reconcile_pending_plan_transition.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_confirm_reconciles_pending_transition_before_preview(self):
+        """Terminal subscriptions release their stale transition before preview."""
+        service = VersionedSubscriptionService()
+        terminal_subscription = {
+            "id": str(SUBSCRIPTION_ID),
+            "plan_version_id": str(PAID_VERSION_ID),
+            "status": "expired",
+            "pending_plan_transition": {"transition_id": "transition_unpaid"},
+        }
+        service._get_existing_subscription = AsyncMock(
+            return_value=terminal_subscription
+        )
+        service.reconcile_pending_plan_transition = AsyncMock(return_value=True)
+        service.preview_plan_change = AsyncMock()
+
+        with pytest.raises(ValueError, match="does not have an active subscription"):
+            await service.confirm_plan_change(
+                PlanChangeConfirmRequest(
+                    organization_id=ORG_ID,
+                    transition_id=UUID("00000000-0000-0000-0000-000000000108"),
+                    target_plan_version_id=UUID("00000000-0000-0000-0000-000000000107"),
+                ),
+                customer_email="owner@example.com",
+            )
+
+        service.reconcile_pending_plan_transition.assert_awaited_once()
+        service.preview_plan_change.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_version_only_stripe_trial_maps_to_application_trial_status(self):
+        """Stripe's trialing status maps to the platform's trial enum value."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service._get_existing_subscription = AsyncMock(return_value=None)
+        service.credit_grant_service.grant_for_subscription = AsyncMock()
+        row = {
+            "id": str(SUBSCRIPTION_ID),
+            "organization_id": str(ORG_ID),
+            "subscription_plan_id": None,
+            "plan_version_id": str(PAID_VERSION_ID),
+            "stripe_subscription_id": "sub_trial",
+            "stripe_customer_id": "cus_trial",
+            "status": "trial",
+            "current_period_start": "2026-09-01T00:00:00+00:00",
+            "current_period_end": "2026-10-01T00:00:00+00:00",
+            "metadata": {"billing_mode": "paid"},
+        }
+        query = _query([row])
+        service.supabase.table.return_value = query
+        stripe_subscription = {
+            "id": "sub_trial",
+            "customer": "cus_trial",
+            "status": "trialing",
+            "current_period_start": 1_788_220_800,
+            "current_period_end": 1_790_812_800,
+            "metadata": {"organization_id": str(ORG_ID)},
+        }
+        resolved_plan = SimpleNamespace(plan_version_id=PAID_VERSION_ID)
+
+        result = await service.record_paid_subscription_from_stripe(
+            ORG_ID, resolved_plan, stripe_subscription
+        )
+
+        assert result.status.value == "trial"
+        assert query.insert.call_args.args[0]["status"] == "trial"
+
 
 class TestStripePlanChanges:
     """Tests for Stripe-backed subscription plan transitions."""
@@ -581,7 +694,10 @@ class TestStripePlanChanges:
         assert result.proration_behavior == "create_prorations"
 
     @pytest.mark.asyncio
-    async def test_confirm_plan_change_updates_local_version_after_stripe_success(self):
+    @pytest.mark.parametrize("target_interval", ["monthly", "annual"])
+    async def test_confirm_plan_change_updates_local_version_after_stripe_success(
+        self, target_interval
+    ):
         """An immediate paid change updates local state only after Stripe succeeds."""
         service = VersionedSubscriptionService()
         current = service._to_customer_plan_version(_paid_version(), {})
@@ -589,6 +705,7 @@ class TestStripePlanChanges:
             **_paid_version(),
             "id": str(UUID("00000000-0000-0000-0000-000000000107")),
             "price_amount_cents": 9900,
+            "billing_interval": target_interval,
             "stripe_price_id": "price_pro",
             "plan_products": {
                 "slug": "pro",
@@ -609,13 +726,23 @@ class TestStripePlanChanges:
         service._get_existing_subscription = AsyncMock(return_value=existing)
         service._get_customer_plan_version = AsyncMock(side_effect=[current, target])
         service.supabase = MagicMock()
+        service.supabase.rpc.return_value.execute.return_value = _result(True)
         updates = _query([])
         service.supabase.table.return_value = updates
 
         with patch(
             "src.billing.versioned_subscription_service.stripe_service"
         ) as stripe:
-            stripe.change_subscription_price = AsyncMock()
+
+            async def assert_interval_change_marker(*args, **kwargs):
+                if target_interval == "annual":
+                    rpc_name, rpc_args = service.supabase.rpc.call_args_list[0].args
+                    assert rpc_name == "claim_subscription_plan_transition"
+                    assert rpc_args["p_transition"]["billing_interval_changed"] is True
+
+            stripe.change_subscription_price = AsyncMock(
+                side_effect=assert_interval_change_marker
+            )
             result = await service.confirm_plan_change(
                 PlanChangeConfirmRequest(
                     organization_id=ORG_ID,
@@ -633,6 +760,313 @@ class TestStripePlanChanges:
         )
         assert updates.update.call_args.args[0]["plan_version_id"] == str(
             UUID("00000000-0000-0000-0000-000000000107")
+        )
+        if target_interval == "annual":
+            assert len(updates.update.call_args_list) == 1
+            assert [call.args[0] for call in service.supabase.rpc.call_args_list] == [
+                "claim_subscription_plan_transition"
+            ]
+        else:
+            assert len(updates.update.call_args_list) == 1
+            assert [call.args[0] for call in service.supabase.rpc.call_args_list] == [
+                "claim_subscription_plan_transition",
+                "clear_subscription_plan_transition",
+            ]
+
+    @pytest.mark.asyncio
+    async def test_plan_change_is_blocked_until_interval_invoice_is_confirmed(self):
+        """A follow-up action cannot replace the transition awaiting its invoice."""
+        from src.billing.versioned_subscription_service import (
+            PlanChangeInProgressError,
+        )
+
+        service = VersionedSubscriptionService()
+        current = service._to_customer_plan_version(_paid_version(), {})
+        target = service._to_customer_plan_version(
+            {
+                **_paid_version(),
+                "id": "00000000-0000-0000-0000-000000000107",
+                "price_amount_cents": 9900,
+                "stripe_price_id": "price_pro",
+                "plan_products": {
+                    "slug": "pro",
+                    "display_name": "Pro",
+                    "description": "For larger teams",
+                    "sort_order": 20,
+                },
+            },
+            {},
+        )
+        existing = {
+            "id": str(SUBSCRIPTION_ID),
+            "organization_id": str(ORG_ID),
+            "plan_version_id": str(PAID_VERSION_ID),
+            "stripe_subscription_id": "sub_acme",
+            "status": "active",
+            "metadata": {"billing_mode": "paid"},
+            "pending_plan_transition": {
+                "transition_id": "transition_waiting_for_invoice",
+                "target_plan_version_id": str(target.id),
+                "billing_interval_changed": True,
+                "status": "awaiting_invoice",
+            },
+        }
+        service._get_existing_subscription = AsyncMock(side_effect=[existing, existing])
+        service._get_customer_plan_version = AsyncMock(side_effect=[current, target])
+        service.supabase = MagicMock()
+
+        with patch(
+            "src.billing.versioned_subscription_service.stripe_service"
+        ) as stripe:
+            stripe.change_subscription_price = AsyncMock()
+            with pytest.raises(
+                PlanChangeInProgressError, match="still being processed"
+            ):
+                await service.confirm_plan_change(
+                    PlanChangeConfirmRequest(
+                        organization_id=ORG_ID,
+                        transition_id=UUID("00000000-0000-0000-0000-000000000108"),
+                        target_plan_version_id=target.id,
+                    ),
+                    customer_email="owner@example.com",
+                )
+
+        stripe.change_subscription_price.assert_not_awaited()
+        service.supabase.rpc.assert_not_called()
+
+    def test_plan_transition_release_is_guarded_by_transition_id(self):
+        """A stale completion cannot clear a newer transition's lock."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service.supabase.rpc.return_value.execute.return_value = _result(False)
+
+        cleared = service.clear_plan_transition(
+            SUBSCRIPTION_ID,
+            UUID("00000000-0000-0000-0000-000000000108"),
+        )
+
+        assert cleared is False
+        service.supabase.rpc.assert_called_once_with(
+            "clear_subscription_plan_transition",
+            {
+                "p_subscription_id": str(SUBSCRIPTION_ID),
+                "p_transition_id": "00000000-0000-0000-0000-000000000108",
+            },
+        )
+
+    def test_competing_plan_transition_claim_fails_closed(self):
+        """The database's atomic claim result blocks a concurrent Stripe call."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service.supabase.rpc.return_value.execute.return_value = _result(False)
+        transition = {
+            "transition_id": "transition_competing",
+            "target_plan_version_id": str(PAID_VERSION_ID),
+            "billing_interval_changed": True,
+            "status": "awaiting_invoice",
+        }
+
+        claimed = service.claim_plan_transition(SUBSCRIPTION_ID, transition)
+
+        assert claimed is False
+        service.supabase.rpc.assert_called_once_with(
+            "claim_subscription_plan_transition",
+            {
+                "p_subscription_id": str(SUBSCRIPTION_ID),
+                "p_transition": transition,
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_reconcile_releases_transition_when_stripe_kept_source_price(self):
+        """A failed Stripe request can be retried after source state is verified."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service.supabase.rpc.return_value.execute.return_value = _result(True)
+        subscription = {
+            "id": str(SUBSCRIPTION_ID),
+            "organization_id": str(ORG_ID),
+            "stripe_subscription_id": "sub_acme",
+            "metadata": {},
+            "pending_plan_transition": {
+                "transition_id": "transition_failed_before_mutation",
+                "source_price_id": "price_source",
+                "target_price_id": "price_target",
+                "source_plan_version_id": str(PAID_VERSION_ID),
+                "target_plan_version_id": "00000000-0000-0000-0000-000000000107",
+                "billing_interval_changed": True,
+                "effective_mode": "immediate",
+            },
+        }
+
+        with patch(
+            "src.billing.versioned_subscription_service.stripe_service.get_subscription",
+            new_callable=AsyncMock,
+            return_value={
+                "status": "active",
+                "items": {"data": [{"price": {"id": "price_source"}}]},
+            },
+        ):
+            reconciled = await service.reconcile_pending_plan_transition(subscription)
+
+        assert reconciled is True
+        service.supabase.rpc.assert_called_once_with(
+            "clear_subscription_plan_transition",
+            {
+                "p_subscription_id": str(SUBSCRIPTION_ID),
+                "p_transition_id": "transition_failed_before_mutation",
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_reconcile_clears_unpaid_terminal_transition(self):
+        """An unpaid Stripe subscription releases its lock and local marker."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service.supabase.rpc.return_value.execute.return_value = _result(True)
+        service.supabase.table.return_value.update.return_value.eq.return_value.execute.return_value = _result(
+            []
+        )
+        subscription = {
+            "id": str(SUBSCRIPTION_ID),
+            "stripe_subscription_id": "sub_acme",
+            "metadata": {
+                "billing_mode": "paid",
+                "pending_plan_change": {
+                    "transition_id": "transition_unpaid",
+                    "status": "scheduled",
+                },
+            },
+            "pending_plan_transition": {
+                "transition_id": "transition_unpaid",
+                "source_price_id": "price_source",
+                "target_price_id": "price_target",
+                "billing_interval_changed": True,
+            },
+        }
+
+        with patch(
+            "src.billing.versioned_subscription_service.stripe_service.get_subscription",
+            new_callable=AsyncMock,
+            return_value={"status": "unpaid"},
+        ):
+            reconciled = await service.reconcile_pending_plan_transition(subscription)
+
+        assert reconciled is True
+        update_fields = service.supabase.table.return_value.update.call_args.args[0]
+        assert update_fields["status"] == "expired"
+        assert "pending_plan_change" not in update_fields["metadata"]
+        service.supabase.rpc.assert_called_once_with(
+            "clear_subscription_plan_transition",
+            {
+                "p_subscription_id": str(SUBSCRIPTION_ID),
+                "p_transition_id": "transition_unpaid",
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_reconcile_keeps_interval_transition_until_invoice_credit_grant(self):
+        """An applied interval reset stays claimed until its invoice is granted."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service.supabase.table.return_value.update.return_value.eq.return_value.execute.return_value = _result(
+            []
+        )
+        subscription = {
+            "id": str(SUBSCRIPTION_ID),
+            "organization_id": str(ORG_ID),
+            "stripe_subscription_id": "sub_acme",
+            "metadata": {},
+            "pending_plan_transition": {
+                "transition_id": "transition_waiting_for_invoice",
+                "source_price_id": "price_source",
+                "target_price_id": "price_target",
+                "source_plan_version_id": str(PAID_VERSION_ID),
+                "target_plan_version_id": "00000000-0000-0000-0000-000000000107",
+                "billing_interval_changed": True,
+                "effective_mode": "immediate",
+            },
+        }
+
+        with patch(
+            "src.billing.versioned_subscription_service.stripe_service.get_subscription",
+            new_callable=AsyncMock,
+            return_value={
+                "status": "active",
+                "items": {"data": [{"price": {"id": "price_target"}}]},
+            },
+        ):
+            reconciled = await service.reconcile_pending_plan_transition(subscription)
+
+        assert reconciled is False
+        service.supabase.table.assert_called_once_with("organization_subscriptions")
+        service.supabase.rpc.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_reconcile_recovers_scheduled_change_and_preserves_schedule_marker(
+        self,
+    ):
+        """A scheduled Stripe change is restored locally after a lost response."""
+        service = VersionedSubscriptionService()
+        service.supabase = MagicMock()
+        service.supabase.table.return_value.update.return_value.eq.return_value.execute.return_value = _result(
+            []
+        )
+        service.supabase.rpc.return_value.execute.return_value = _result(True)
+        subscription = {
+            "id": str(SUBSCRIPTION_ID),
+            "organization_id": str(ORG_ID),
+            "stripe_subscription_id": "sub_acme",
+            "metadata": {},
+            "pending_plan_transition": {
+                "transition_id": "transition_scheduled",
+                "source_price_id": "price_source",
+                "target_price_id": "price_target",
+                "source_plan_version_id": str(PAID_VERSION_ID),
+                "target_plan_version_id": "00000000-0000-0000-0000-000000000107",
+                "billing_interval_changed": False,
+                "effective_mode": "period_end",
+                "effective_at": "2026-11-01T00:00:00+00:00",
+            },
+        }
+
+        with (
+            patch(
+                "src.billing.versioned_subscription_service.stripe_service.get_subscription",
+                new_callable=AsyncMock,
+                return_value={
+                    "status": "active",
+                    "schedule": "sched_123",
+                    "items": {"data": [{"price": {"id": "price_source"}}]},
+                },
+            ),
+            patch(
+                "src.billing.versioned_subscription_service.stripe_service.get_subscription_schedule",
+                new_callable=AsyncMock,
+                return_value={
+                    "phases": [
+                        {"items": [{"price": "price_source"}]},
+                        {"items": [{"price": "price_target"}]},
+                    ]
+                },
+            ),
+        ):
+            reconciled = await service.reconcile_pending_plan_transition(subscription)
+
+        assert reconciled is False
+        update = service.supabase.table.return_value.update.call_args.args[0]
+        assert update["metadata"]["pending_plan_change"] == {
+            "transition_id": "transition_scheduled",
+            "target_plan_version_id": "00000000-0000-0000-0000-000000000107",
+            "effective_at": "2026-11-01T00:00:00+00:00",
+            "status": "scheduled",
+        }
+        service.supabase.rpc.assert_called_once_with(
+            "clear_subscription_plan_transition",
+            {
+                "p_subscription_id": str(SUBSCRIPTION_ID),
+                "p_transition_id": "transition_scheduled",
+            },
         )
 
     @pytest.mark.asyncio
@@ -705,6 +1139,37 @@ class TestVersionedSubscriptionRoutes:
         )
 
     @pytest.mark.asyncio
+    async def test_paid_checkout_maps_pending_transition_to_conflict(self):
+        """A duplicate checkout during plan transition returns HTTP 409."""
+        from fastapi import HTTPException
+        from src.billing.routes import create_versioned_subscription_checkout
+        from src.billing.versioned_subscription_service import (
+            PlanChangeInProgressError,
+        )
+
+        request = VersionedSubscriptionCheckoutRequest(
+            organization_id=ORG_ID,
+            plan_version_id=PAID_VERSION_ID,
+            success_url="https://app.test/onboarding/complete",
+            cancel_url="https://app.test/onboarding/plan",
+        )
+        profile = MagicMock(email="owner@erp-cosmos.com")
+        with (
+            patch("src.billing.routes.assert_billing_access"),
+            patch("src.billing.routes.versioned_subscription_service") as service,
+        ):
+            service.create_paid_checkout = AsyncMock(
+                side_effect=PlanChangeInProgressError("plan change is processing")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await create_versioned_subscription_checkout(
+                    request, (UUID(int=1), profile)
+                )
+
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail == "plan change is processing"
+
+    @pytest.mark.asyncio
     async def test_plan_change_preview_requires_billing_access(self):
         """Plan previews cannot disclose billing details without org access."""
         from fastapi import HTTPException
@@ -752,3 +1217,31 @@ class TestVersionedSubscriptionRoutes:
         service.confirm_plan_change.assert_awaited_once_with(
             request, customer_email="owner@erp-cosmos.com"
         )
+
+    @pytest.mark.asyncio
+    async def test_plan_change_conflict_returns_http_409(self):
+        """A pending Stripe transition is surfaced as a retryable conflict."""
+        from fastapi import HTTPException
+        from src.billing.routes import confirm_plan_change
+        from src.billing.versioned_subscription_service import (
+            PlanChangeInProgressError,
+        )
+
+        request = PlanChangeConfirmRequest(
+            organization_id=ORG_ID,
+            transition_id=UUID("00000000-0000-0000-0000-000000000108"),
+            target_plan_version_id=PAID_VERSION_ID,
+        )
+        profile = MagicMock(email="owner@erp-cosmos.com")
+        with (
+            patch("src.billing.routes.assert_billing_access"),
+            patch("src.billing.routes.versioned_subscription_service") as service,
+        ):
+            service.confirm_plan_change = AsyncMock(
+                side_effect=PlanChangeInProgressError("transition is processing")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await confirm_plan_change(request, (UUID(int=1), profile))
+
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail == "transition is processing"

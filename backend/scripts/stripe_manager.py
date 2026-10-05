@@ -13,7 +13,8 @@ Usage:
     python scripts/stripe_manager.py cleanup --dry-run
     python scripts/stripe_manager.py setup-credits --dry-run
     python scripts/stripe_manager.py seed --dry-run
-    python scripts/stripe_manager.py seed --verbose
+    python scripts/stripe_manager.py seed
+    python scripts/stripe_manager.py seed --include-legacy-billing-data --skip-credit-products --dry-run
 """
 
 import argparse
@@ -28,15 +29,15 @@ if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
 import stripe
+
 from shared.config.settings import settings
 from shared.config.supabase import supabase_config
+from src.billing.credit_catalog import CREDIT_PACKS
 
-# Initialize Stripe
-if not settings.stripe_secret_key:
-    print("❌ STRIPE_SECRET_KEY not found in environment variables")
-    sys.exit(1)
+if settings.stripe_secret_key:
+    stripe.api_key = settings.stripe_secret_key
 
-stripe.api_key = settings.stripe_secret_key
+CREDIT_CATALOG_OWNER = "24x7-ai-credit-catalog-v1"
 
 
 class StripeManager:
@@ -116,8 +117,13 @@ class StripeManager:
 
                     # Check for credit-related metadata
                     if "credit_amount" in product_metadata:
+                        managed = (
+                            product_metadata.get("catalog_owner")
+                            == CREDIT_CATALOG_OWNER
+                        )
                         print(
-                            f"   ✅ Has credit metadata (credit_amount: {product_metadata['credit_amount']})"
+                            f"   {'✅ Managed' if managed else 'ℹ️  Unmanaged'} credit product "
+                            f"(credit_amount: {product_metadata['credit_amount']})"
                         )
                 else:
                     print(f"   ⚠️  No metadata")
@@ -150,10 +156,9 @@ class StripeManager:
   * trial_period_days: "14" (optional free trial)
 
 💳 FOR CREDIT PRODUCTS (Pay-as-you-go):
-- Create Products for credit bundles (100 Credits, 500 Credits, etc.)
-- Create ONE-TIME Prices for each bundle
-- Add metadata to Products:
-  * credit_amount: "100" (number of credits this purchase gives)
+- Run setup-credits to create the approved credit bundles
+- Managed Products and one-time Prices use catalog_owner: "24x7-ai-credit-catalog-v1"
+- The Product carries credit_amount; unmarked Stripe products are left untouched
 
 📝 Example Product Metadata for "Pro Plan":
 {
@@ -166,37 +171,21 @@ class StripeManager:
         )
 
     def cleanup_old_products(self, dry_run=False):
-        """Deactivate old 'All Credit Packages' products."""
+        """Deactivate only owned legacy aggregate credit products."""
         print("🧹 Cleaning up old 'All Credit Packages' products...")
 
         if dry_run:
             print("🔍 DRY RUN MODE - No changes will be made to Stripe")
 
         try:
-            # Fetch all products (including the one that might be hidden)
             products = self.stripe.Product.list(limit=100, active=True)
-
-            # Also check for the specific product by fetching all prices and finding unique products
-            all_prices = self.stripe.Price.list(
-                limit=100, active=True, expand=["data.product"]
-            )
-            product_names = {}
-            for price in all_prices.data:
-                if price.product.name not in product_names:
-                    product_names[price.product.name] = price.product
-
-            old_products = []
-            # Check both sources for "All Credit Packages"
-            for product in products.data:
-                if product.name == "All Credit Packages":
-                    old_products.append(product)
-
-            # Also check from price-derived products
-            if (
-                "All Credit Packages" in product_names
-                and product_names["All Credit Packages"] not in old_products
-            ):
-                old_products.append(product_names["All Credit Packages"])
+            old_products = [
+                product
+                for product in products.data
+                if product.name == "All Credit Packages"
+                and (product.metadata or {}).get("catalog_owner")
+                == CREDIT_CATALOG_OWNER
+            ]
 
             if not old_products:
                 print("✅ No old 'All Credit Packages' products found")
@@ -209,10 +198,16 @@ class StripeManager:
 
                 # Get prices for this product
                 prices = self.stripe.Price.list(product=product.id, active=True)
+                unmanaged_price_found = False
                 print(f"   Has {len(prices.data)} active prices:")
 
                 for price in prices.data:
                     print(f"     - ${price.unit_amount / 100:.2f} ({price.id})")
+                    if (price.metadata or {}).get(
+                        "catalog_owner"
+                    ) != CREDIT_CATALOG_OWNER:
+                        unmanaged_price_found = True
+                        continue
 
                     if not dry_run:
                         # Deactivate price
@@ -221,16 +216,24 @@ class StripeManager:
                     else:
                         print(f"       [DRY RUN] Would deactivate price")
 
-                if not dry_run:
+                if not dry_run and not unmanaged_price_found:
                     # Deactivate product
                     self.stripe.Product.modify(product.id, active=False)
                     print(f"   ✅ Deactivated product")
-                else:
+                elif not dry_run:
+                    print(
+                        "   ⚠️  Leaving product active because it has an unmanaged price"
+                    )
+                elif not unmanaged_price_found:
                     print(f"   [DRY RUN] Would deactivate product")
+                else:
+                    print(
+                        "   [DRY RUN] Would leave product active because of an unmanaged price"
+                    )
 
             if dry_run:
                 print(f"\n🔍 DRY RUN COMPLETED")
-                print(f"Would deactivate {len(old_products)} products and their prices")
+                print("Only marked products and prices above are eligible for cleanup")
             else:
                 print(f"\n✅ CLEANUP COMPLETED")
                 print(f"Deactivated {len(old_products)} old products")
@@ -239,88 +242,144 @@ class StripeManager:
             print(f"❌ Error during cleanup: {e}")
 
     def setup_credit_products(self, dry_run=False):
-        """Create proper individual credit products in Stripe."""
-        credit_packs = [
-            {
-                "name": "100 Credits Pack",
-                "description": "100 credits for small usage",
-                "credit_amount": 100,
-                "price_usd": 15.00,
-            },
-            {
-                "name": "1000 Credits Pack",
-                "description": "1000 credits for regular usage",
-                "credit_amount": 1000,
-                "price_usd": 25.00,
-            },
-            {
-                "name": "2500 Credits Pack",
-                "description": "2500 credits for heavy usage",
-                "credit_amount": 2500,
-                "price_usd": 50.00,
-            },
-            {
-                "name": "5000 Credits Pack",
-                "description": "5000 credits for enterprise usage",
-                "credit_amount": 5000,
-                "price_usd": 90.00,
-            },
-        ]
+        """Reconcile active Stripe credit products with the launch catalog."""
+        credit_packs = [dict(pack) for pack in CREDIT_PACKS]
 
         if dry_run:
             print("🔍 DRY RUN MODE - No changes will be made to Stripe")
 
-        print("🏗️  Creating individual credit products in Stripe...")
+        print("🏗️  Reconciling individual credit products in Stripe...")
         print("=" * 50)
+
+        try:
+            products = []
+            starting_after = None
+            while True:
+                params = {"active": True, "limit": 100}
+                if starting_after:
+                    params["starting_after"] = starting_after
+                page = self.stripe.Product.list(**params)
+                products.extend(page.data)
+                if not page.has_more:
+                    break
+                starting_after = page.data[-1].id
+        except Exception as exc:
+            print(f"❌ Could not read active Stripe products: {exc}")
+            return False
+
+        credit_products = [
+            product
+            for product in products
+            if self._credit_amount_from_product(product) is not None
+        ]
+        reconciliation_errors: list[str] = []
+        claimed_product_ids: set[str] = set()
 
         for pack in credit_packs:
             try:
+                candidates = [
+                    product
+                    for product in credit_products
+                    if self._credit_amount_from_product(product)
+                    == pack["credit_amount"]
+                    and product.id not in claimed_product_ids
+                ]
+                product = next(
+                    (item for item in candidates if item.name == pack["name"]),
+                    candidates[0] if candidates else None,
+                )
+                price_cents = int(pack["price_usd"] * 100)
+                action = "reuse" if product else "create"
                 print(
-                    f"\n📦 {'[DRY RUN] Would create' if dry_run else 'Creating'}: {pack['name']}"
+                    f"\n📦 {'[DRY RUN] Would' if dry_run else 'Will'} {action} "
+                    f"{pack['name']}: {pack['credit_amount']} credits for "
+                    f"${pack['price_usd']:.2f}"
                 )
 
-                if dry_run:
-                    print(f"   📋 Product details:")
-                    print(f"      - Name: {pack['name']}")
-                    print(f"      - Description: {pack['description']}")
-                    print(f"      - Price: ${pack['price_usd']:.2f}")
-                    print(f"      - Metadata: credit_amount = {pack['credit_amount']}")
-                    continue
-
-                # Create product
-                product = self.stripe.Product.create(
-                    name=pack["name"],
-                    description=pack["description"],
-                    type="service",
-                    metadata={"credit_amount": str(pack["credit_amount"])},
-                )
-
-                print(f"   ✅ Product created: {product.id}")
-
-                # Create price
-                price = self.stripe.Price.create(
-                    product=product.id,
-                    unit_amount=int(pack["price_usd"] * 100),  # Convert to cents
-                    currency="usd",
-                    metadata={"credit_amount": str(pack["credit_amount"])},
-                )
-
-                print(f"   ✅ Price created: {price.id} (${pack['price_usd']:.2f})")
-                print(f"   📊 Metadata: credit_amount = {pack['credit_amount']}")
-
-            except stripe.error.StripeError as e:
-                if "already exists" in str(e):
-                    print(f"   ⚠️  Product '{pack['name']}' already exists, skipping...")
+                if product is None:
+                    if dry_run:
+                        continue
+                    product = self.stripe.Product.create(
+                        name=pack["name"],
+                        description=pack["description"],
+                        metadata={
+                            "catalog_owner": CREDIT_CATALOG_OWNER,
+                            "credit_amount": str(pack["credit_amount"]),
+                        },
+                    )
+                elif not dry_run:
+                    self.stripe.Product.modify(
+                        product.id,
+                        name=pack["name"],
+                        description=pack["description"],
+                        metadata={
+                            "catalog_owner": CREDIT_CATALOG_OWNER,
+                            "credit_amount": str(pack["credit_amount"]),
+                        },
+                    )
+                claimed_product_ids.add(str(product.id))
+                active_prices = self.stripe.Price.list(
+                    product=product.id, active=True, limit=100
+                ).data
+                matching_prices = [
+                    price
+                    for price in active_prices
+                    if price.type == "one_time"
+                    and price.currency.lower() == "usd"
+                    and price.unit_amount == price_cents
+                    and (price.metadata or {}).get("catalog_owner")
+                    == CREDIT_CATALOG_OWNER
+                ]
+                keep_price = matching_prices[0] if matching_prices else None
+                if keep_price:
+                    print(f"   Active launch price: {keep_price.id}")
+                elif dry_run:
+                    print("   [DRY RUN] Would create the matching one-time USD price")
                 else:
-                    print(f"   ❌ Error creating {pack['name']}: {e}")
-            except Exception as e:
-                print(f"   ❌ Unexpected error with {pack['name']}: {e}")
+                    new_price = self.stripe.Price.create(
+                        product=product.id,
+                        unit_amount=price_cents,
+                        currency="usd",
+                        metadata={
+                            "catalog_owner": CREDIT_CATALOG_OWNER,
+                            "credit_amount": str(pack["credit_amount"]),
+                        },
+                    )
+                    print(f"   ✅ Created price: {new_price.id}")
 
-        print(f"\n✅ Credit products setup completed!")
-        print(f"\n💡 Next steps:")
-        print(f"1. Go to your Stripe Dashboard to verify the products")
-        print(f"2. Deactivate or delete the old 'All Credit Packages' products")
-        print(f"3. Run the seed command: python scripts/stripe_manager.py seed")
+            except Exception as e:
+                print(f"   ❌ Could not reconcile {pack['name']}: {e}")
+                reconciliation_errors.append(pack["name"])
+
+        if reconciliation_errors:
+            print(
+                "\n❌ Credit catalog reconciliation was incomplete; "
+                "retired products were left unchanged."
+            )
+            return False
+
+        print("\n✅ Credit products prepared in Stripe")
+        print("\n💡 Next steps:")
+        print("1. Review the Stripe products and prices")
+        print("2. Run: python scripts/stripe_manager.py seed --dry-run")
+        print("3. Run seed to atomically switch the active database catalog")
+        print(
+            "   Existing Stripe Prices stay active; the billing UI exposes only "
+            "the approved active database catalog"
+        )
+        return True
+
+    @staticmethod
+    def _credit_amount_from_product(product):
+        """Identify only products explicitly owned by this credit catalog."""
+        metadata = product.metadata or {}
+        if metadata.get("catalog_owner") != CREDIT_CATALOG_OWNER:
+            return None
+        try:
+            amount = int(metadata.get("credit_amount", ""))
+        except (TypeError, ValueError):
+            amount = 0
+        return amount if amount > 0 else None
 
     def fetch_all_stripe_prices(self):
         """Fetch ALL prices from Stripe with pagination."""
@@ -355,7 +414,9 @@ class StripeManager:
             print(f"❌ Error fetching prices: {e}")
             return []
 
-    def analyze_stripe_data(self, prices, verbose=False):
+    def analyze_stripe_data(
+        self, prices, verbose=False, include_subscriptions=True
+    ):
         """Analyze Stripe data and categorize products with intelligent detection."""
         print("🔍 Analyzing Stripe data with intelligent detection...")
 
@@ -380,9 +441,17 @@ class StripeManager:
                 print(f"  Metadata: {dict(metadata) if metadata else 'None'}")
 
             if price.type == "recurring":
+                if not include_subscriptions:
+                    if verbose:
+                        print(
+                            f"  Skipping legacy subscription price {price.id}; "
+                            "legacy billing import is disabled"
+                        )
+                    continue
+
                 # This is a subscription plan
                 plan_data = {
-                    "name": f"{product.name}:{price.recurring.interval.title()}",
+                    "name": product.name,
                     "description": product.description or "",
                     "stripe_price_id": price.id,
                     "stripe_product_id": product.id,
@@ -415,53 +484,62 @@ class StripeManager:
                     print(f"  ✅ Categorized as: Subscription Plan")
 
             elif price.type == "one_time":
-                # This could be a credit product
-                if "credit_amount" in metadata:
-                    # Has credit metadata - definitely a credit product
-                    product_data = {
-                        "name": product.name,
-                        "description": product.description or "",
-                        "stripe_price_id": price.id,
-                        "stripe_product_id": product.id,
-                        "credit_amount": int(metadata["credit_amount"]),
-                        "price_amount": price.unit_amount,
-                        "currency": price.currency.upper(),
-                    }
-                    credit_products.append(product_data)
-                    if verbose:
-                        print(f"  ✅ Categorized as: Credit Product")
-                else:
-                    # Try to infer credit product from name and pricing patterns
-                    credit_amount = self._extract_credits_from_name(
-                        product.name, price.unit_amount
+                # Only seed top-ups managed by this catalog. Other products
+                # may also contain credit-like metadata and remain untouched.
+                if (
+                    metadata.get("catalog_owner") == CREDIT_CATALOG_OWNER
+                    and (price.metadata or {}).get("catalog_owner")
+                    == CREDIT_CATALOG_OWNER
+                    and price.currency.lower() == "usd"
+                ):
+                    try:
+                        amount = int(metadata.get("credit_amount", ""))
+                    except (TypeError, ValueError):
+                        amount = 0
+                    pack = next(
+                        (
+                            item
+                            for item in CREDIT_PACKS
+                            if item["credit_amount"] == amount
+                        ),
+                        None,
                     )
-                    if credit_amount:
-                        product_data = {
-                            "name": product.name,
-                            "description": product.description
-                            or f"{credit_amount} credits for ${price.unit_amount / 100:.2f}",
-                            "stripe_price_id": price.id,
-                            "stripe_product_id": product.id,
-                            "credit_amount": credit_amount,
-                            "price_amount": price.unit_amount,
-                            "currency": price.currency.upper(),
-                        }
-                        credit_products.append(product_data)
-                        if verbose:
-                            print(
-                                f"  ✅ Categorized as: Credit Product (inferred {credit_amount} credits)"
-                            )
-                    else:
+                    expected_price = (
+                        int(pack["price_usd"] * 100) if pack is not None else None
+                    )
+                    if amount <= 0 or price.unit_amount != expected_price:
                         uncategorized.append(
                             {
                                 "name": product.name,
                                 "price_id": price.id,
                                 "type": price.type,
-                                "reason": "One-time price with no credit_amount metadata and name doesn't contain credit info",
+                                "reason": "Managed credit product price does not match the approved USD catalog",
                             }
                         )
-                        if verbose:
-                            print(f"  ⚠️  Uncategorized: Cannot determine credit amount")
+                        continue
+                    product_data = {
+                        "name": product.name,
+                        "description": product.description or "",
+                        "stripe_price_id": price.id,
+                        "stripe_product_id": product.id,
+                        "credit_amount": amount,
+                        "price_amount": price.unit_amount,
+                        "currency": price.currency.upper(),
+                    }
+                    credit_products.append(product_data)
+                    if verbose:
+                        print(f"  ✅ Categorized as: Managed Credit Product")
+                else:
+                    uncategorized.append(
+                        {
+                            "name": product.name,
+                            "price_id": price.id,
+                            "type": price.type,
+                            "reason": "One-time product is not owned by the managed credit catalog",
+                        }
+                    )
+                    if verbose:
+                        print("  ⚠️  Ignored: not owned by managed credit catalog")
             else:
                 uncategorized.append(
                     {
@@ -486,39 +564,13 @@ class StripeManager:
 
         return subscription_plans, credit_products
 
-    def _extract_credits_from_name(self, name: str, price_amount: int) -> int:
-        """Try to extract credit amount from product name or infer from price."""
-        name_lower = name.lower()
-
-        # Look for numbers in the name
-        import re
-
-        numbers = re.findall(r"\d+", name)
-
-        if numbers and ("credit" in name_lower or "credits" in name_lower):
-            # Use the largest number found (likely the credit amount)
-            return int(max(numbers, key=int))
-
-        # If no clear credit amount in name, try to infer from common pricing
-        price_dollars = price_amount / 100
-        if price_dollars == 15:
-            return 100  # $15 for 100 credits
-        elif price_dollars == 25:
-            return 1000  # $25 for 1000 credits
-        elif price_dollars == 50:
-            return 2500  # $50 for 2500 credits
-        elif price_dollars == 90:
-            return 5000  # $90 for 5000 credits
-
-        return 0  # Cannot determine
-
     def seed_subscription_plans(
         self, plans_data: List[Dict[str, Any]], dry_run: bool = False
-    ):
-        """Seed subscription plans with enhanced error handling."""
+    ) -> bool:
+        """Seed legacy subscription plans and report whether every row succeeded."""
         if not plans_data:
             print("⚠️ No subscription plans to seed")
-            return
+            return False
 
         print(f"🌱 Seeding {len(plans_data)} subscription plans...")
 
@@ -528,7 +580,7 @@ class StripeManager:
                 print(
                     f"  - {plan['name']}: ${plan['price_amount'] / 100:.2f}/{plan['interval']} ({plan['included_credits']} credits)"
                 )
-            return
+            return True
 
         success_count = 0
         for plan in plans_data:
@@ -577,14 +629,70 @@ class StripeManager:
         print(
             f"✓ Subscription plans seeded: {success_count}/{len(plans_data)} successful"
         )
+        return success_count == len(plans_data)
 
     def seed_credit_products(
         self, products_data: List[Dict[str, Any]], dry_run: bool = False
-    ):
-        """Seed credit products with enhanced error handling."""
-        if not products_data:
-            print("⚠️ No credit products to seed")
-            return
+    ) -> bool:
+        """Atomically reconcile the full approved credit product catalog."""
+        expected_by_amount = {pack["credit_amount"]: pack for pack in CREDIT_PACKS}
+        if len(products_data) != len(CREDIT_PACKS) or not all(
+            isinstance(product, dict) for product in products_data
+        ):
+            print(
+                "❌ Credit catalog is incomplete or malformed; expected exactly "
+                "one product for each approved pack."
+            )
+            return False
+
+        received_amounts = [product.get("credit_amount") for product in products_data]
+        valid_amounts = all(
+            isinstance(amount, int) and not isinstance(amount, bool)
+            for amount in received_amounts
+        )
+        valid_products = valid_amounts
+        if valid_products:
+            valid_products = set(received_amounts) == set(expected_by_amount) and len(
+                set(received_amounts)
+            ) == len(expected_by_amount)
+        if valid_products:
+            valid_products = all(
+                isinstance(product.get(field), str) and bool(product[field])
+                for product in products_data
+                for field in ("stripe_price_id", "stripe_product_id")
+            )
+        if valid_products:
+            valid_products = len(
+                {product["stripe_price_id"] for product in products_data}
+            ) == len(CREDIT_PACKS) and len(
+                {product["stripe_product_id"] for product in products_data}
+            ) == len(
+                CREDIT_PACKS
+            )
+        if not valid_products:
+            print(
+                "❌ Credit catalog is incomplete or contains duplicate packs; "
+                "expected exactly one correctly priced active Stripe Price for "
+                "each approved pack."
+            )
+            return False
+
+        for product in products_data:
+            pack = expected_by_amount[product["credit_amount"]]
+            valid_products = valid_products and (
+                product.get("name") == pack["name"]
+                and product.get("price_amount") == int(pack["price_usd"] * 100)
+                and str(product.get("currency", "")).upper() == "USD"
+                and bool(product.get("stripe_price_id"))
+                and bool(product.get("stripe_product_id"))
+            )
+        if not valid_products:
+            print(
+                "❌ Credit catalog is incomplete or contains duplicate packs; "
+                "expected exactly one correctly priced active Stripe Price for "
+                "each approved pack."
+            )
+            return False
 
         print(f"🌱 Seeding {len(products_data)} credit products...")
 
@@ -594,40 +702,23 @@ class StripeManager:
                 print(
                     f"  - {product['name']}: {product['credit_amount']} credits for ${product['price_amount'] / 100:.2f}"
                 )
-            return
+            return True
 
-        success_count = 0
-        for product in products_data:
-            try:
-                # Check if product already exists
-                existing = (
-                    supabase_config.client.table("credit_products")
-                    .select("id")
-                    .eq("stripe_price_id", product["stripe_price_id"])
-                    .execute()
-                )
+        try:
+            client = getattr(supabase_config, "service_client", None) or (
+                supabase_config.client
+            )
+            result = client.rpc(
+                "sync_credit_product_catalog", {"p_products": products_data}
+            ).execute()
+            if result.data != len(products_data):
+                raise RuntimeError("database did not confirm a complete catalog sync")
+        except Exception as exc:
+            print(f"❌ Credit product catalog sync failed atomically: {exc}")
+            return False
 
-                if existing.data:
-                    # Update existing product
-                    supabase_config.client.table("credit_products").update(product).eq(
-                        "stripe_price_id", product["stripe_price_id"]
-                    ).execute()
-                    print(f"  ✅ Updated: {product['name']}")
-                else:
-                    # Insert new product
-                    supabase_config.client.table("credit_products").insert(
-                        product
-                    ).execute()
-                    print(f"  ✅ Created: {product['name']}")
-
-                success_count += 1
-
-            except Exception as e:
-                print(f"  ❌ Error with {product['name']}: {e}")
-
-        print(
-            f"✓ Credit products seeded: {success_count}/{len(products_data)} successful"
-        )
+        print(f"✅ Atomically activated all {len(products_data)} approved credit packs")
+        return True
 
     def seed_credit_events(self, dry_run: bool = False):
         """Seed the finite system usage-pricing catalog."""
@@ -642,15 +733,32 @@ class StripeManager:
             },
             {
                 "name": "phone_number_local_month",
-                "description": "An active local phone number is charged once for each rental month.",
+                "description": (
+                    "Existing non-US local platform rentals retain their legacy "
+                    "monthly rate."
+                ),
                 "credit_cost": 200,
                 "category": "phone_number",
                 "meter_type": "count",
                 "billing_unit": "month",
             },
             {
+                "name": "phone_number_us_local_month",
+                "description": (
+                    "Each additional platform-provided US local phone number "
+                    "uses 80 credits per rental month."
+                ),
+                "credit_cost": 80,
+                "category": "phone_number",
+                "meter_type": "count",
+                "billing_unit": "month",
+            },
+            {
                 "name": "phone_number_mobile_month",
-                "description": "An active mobile phone number is charged once for each rental month.",
+                "description": (
+                    "Legacy active mobile rentals retain their monthly rate; "
+                    "new mobile-number purchases are unavailable in v1."
+                ),
                 "credit_cost": 200,
                 "category": "phone_number",
                 "meter_type": "count",
@@ -658,8 +766,11 @@ class StripeManager:
             },
             {
                 "name": "phone_number_toll_free_month",
-                "description": "An active toll-free phone number is charged once for each rental month.",
-                "credit_cost": 500,
+                "description": (
+                    "An active toll-free phone number uses 120 credits ($3 at 40 "
+                    "credits per dollar) for each rental month."
+                ),
+                "credit_cost": 120,
                 "category": "phone_number",
                 "meter_type": "count",
                 "billing_unit": "month",
@@ -682,17 +793,19 @@ class StripeManager:
                 # Check if event already exists
                 existing = (
                     supabase_config.client.table("credit_events")
-                    .select("id")
+                    .select("id,credit_cost")
                     .eq("name", event["name"])
                     .execute()
                 )
 
                 if existing.data:
-                    # Update existing event
-                    supabase_config.client.table("credit_events").update(event).eq(
-                        "name", event["name"]
-                    ).execute()
-                    print(f"  ✅ Updated: {event['name']}")
+                    # These rates are editable by platform admins. A catalog
+                    # seed may create missing known events, but must not reset
+                    # a reviewed rate on every Stripe sync.
+                    print(
+                        f"  ⏭️  Preserved admin rate for {event['name']}: "
+                        f"{existing.data[0].get('credit_cost')} credits"
+                    )
                 else:
                     # Insert new event
                     supabase_config.client.table("credit_events").insert(
@@ -709,9 +822,13 @@ class StripeManager:
             f"✓ Credit events seeded: {success_count}/{len(credit_events)} successful"
         )
 
-    def check_tables_exist(self):
-        """Check if required tables exist."""
-        required_tables = ["subscription_plans", "credit_events", "credit_products"]
+    def check_tables_exist(self, required_tables=None):
+        """Check whether the requested billing tables exist."""
+        required_tables = required_tables or [
+            "subscription_plans",
+            "credit_events",
+            "credit_products",
+        ]
 
         for table in required_tables:
             try:
@@ -722,8 +839,24 @@ class StripeManager:
 
         return True
 
-    def seed_database(self, dry_run=False, verbose=False):
-        """Seed database with Stripe data using intelligent detection."""
+    def seed_database(
+        self,
+        dry_run=False,
+        verbose=False,
+        include_legacy_billing_data=False,
+        include_credit_products=True,
+    ):
+        """Sync approved credit packs or import legacy subscription rows."""
+        if not include_legacy_billing_data and not include_credit_products:
+            print("❌ Nothing to sync; select a billing catalog operation")
+            return False
+        if include_legacy_billing_data and include_credit_products:
+            print(
+                "❌ Legacy plan import is a pre-migration step; run it separately "
+                "with --skip-credit-products, then sync packs after Alembic head."
+            )
+            return False
+
         if dry_run:
             print("🔍 DRY RUN MODE - No data will be written to database")
 
@@ -737,10 +870,32 @@ class StripeManager:
             return False
 
         subscription_plans, credit_products = self.analyze_stripe_data(
-            all_prices, verbose=verbose
+            all_prices,
+            verbose=verbose,
+            include_subscriptions=include_legacy_billing_data,
         )
 
-        if not subscription_plans and not credit_products:
+        if not include_legacy_billing_data and subscription_plans:
+            print(
+                f"ℹ️ Detected {len(subscription_plans)} legacy subscription plans; "
+                "they will not be imported. Use --include-legacy-billing-data "
+                "only for a reviewed legacy backfill."
+            )
+
+        if include_credit_products:
+            expected_credit_amounts = {pack["credit_amount"] for pack in CREDIT_PACKS}
+            observed_credit_amounts = [
+                product.get("credit_amount") for product in credit_products
+            ]
+            if set(observed_credit_amounts) != expected_credit_amounts or len(
+                observed_credit_amounts
+            ) != len(expected_credit_amounts):
+                print(
+                    "❌ Stripe does not contain exactly one active price for each "
+                    "approved credit pack; run setup-credits and review its result first."
+                )
+                return False
+        elif not subscription_plans:
             print("❌ No valid subscription plans or credit products found")
             print(
                 "💡 Consider adding metadata to your Stripe products or check the diagnostic output"
@@ -749,28 +904,44 @@ class StripeManager:
 
         try:
             if not dry_run:
-                if not self.check_tables_exist():
+                required_tables = []
+                if include_legacy_billing_data:
+                    required_tables.append("subscription_plans")
+                if include_credit_products:
+                    required_tables.append("credit_products")
+                if not self.check_tables_exist(required_tables):
                     print("❌ Required database tables are missing")
                     return False
 
             print(f"\n🌱 SEEDING DATA:")
             print("=" * 30)
 
-            # Seed all data
-            self.seed_subscription_plans(subscription_plans, dry_run)
-            self.seed_credit_events(dry_run)
-            self.seed_credit_products(credit_products, dry_run)
+            # Legacy plan imports are a pre-migration step. Current plan
+            # versions and system usage rates remain admin-managed catalogs.
+            if include_legacy_billing_data:
+                if not self.seed_subscription_plans(subscription_plans, dry_run):
+                    print("❌ Legacy subscription plan import was incomplete")
+                    return False
+            if include_credit_products and not self.seed_credit_products(
+                credit_products, dry_run
+            ):
+                print("❌ Credit product synchronization failed")
+                return False
 
             if dry_run:
                 print(f"\n🔍 DRY RUN COMPLETED")
-                print(
-                    f"Found {len(subscription_plans)} subscription plans and {len(credit_products)} credit products"
-                )
+                if include_legacy_billing_data:
+                    print(
+                        f"Found {len(subscription_plans)} legacy subscription plans"
+                    )
+                elif include_credit_products:
+                    print(f"Found {len(credit_products)} approved credit products")
             else:
                 print(f"\n🎉 SEEDING COMPLETED!")
-                print(f"✅ {len(subscription_plans)} subscription plans")
-                print(f"✅ {len(credit_products)} credit products")
-                print(f"✅ 7 credit events")
+                if include_legacy_billing_data:
+                    print(f"✅ {len(subscription_plans)} subscription plans")
+                if include_credit_products:
+                    print(f"✅ {len(credit_products)} credit products")
 
             return True
 
@@ -790,6 +961,8 @@ Examples:
   python scripts/stripe_manager.py cleanup --dry-run
   python scripts/stripe_manager.py setup-credits --dry-run
   python scripts/stripe_manager.py seed --dry-run
+  python scripts/stripe_manager.py seed
+  python scripts/stripe_manager.py seed --include-legacy-billing-data --skip-credit-products --dry-run
   python scripts/stripe_manager.py seed --verbose
         """,
     )
@@ -803,7 +976,7 @@ Examples:
 
     # Cleanup command
     cleanup_parser = subparsers.add_parser(
-        "cleanup", help='Deactivate old "All Credit Packages" products'
+        "cleanup", help='Deactivate only marked old "All Credit Packages" products'
     )
     cleanup_parser.add_argument(
         "--dry-run",
@@ -813,7 +986,7 @@ Examples:
 
     # Setup credits command
     setup_parser = subparsers.add_parser(
-        "setup-credits", help="Create individual credit products with proper metadata"
+        "setup-credits", help="Reconcile only credit products marked as platform-owned"
     )
     setup_parser.add_argument(
         "--dry-run",
@@ -823,7 +996,7 @@ Examples:
 
     # Seed command
     seed_parser = subparsers.add_parser(
-        "seed", help="Seed database with Stripe data using intelligent detection"
+        "seed", help="Sync approved credit packs; legacy billing import is opt-in"
     )
     seed_parser.add_argument(
         "--dry-run",
@@ -834,6 +1007,21 @@ Examples:
         "--verbose",
         action="store_true",
         help="Show detailed analysis of each Stripe product during processing",
+    )
+    seed_parser.add_argument(
+        "--include-legacy-billing-data",
+        action="store_true",
+        help=(
+            "Import legacy subscription plans only as a deliberate pre-migration backfill"
+        ),
+    )
+    seed_parser.add_argument(
+        "--skip-credit-products",
+        action="store_true",
+        help=(
+            "For a reviewed legacy backfill only: import old subscription rows "
+            "before migration 20260807000002; sync approved credit packs after migrations"
+        ),
     )
 
     # Show metadata instructions command
@@ -889,6 +1077,10 @@ To optimize your existing subscription plans, add this metadata to each product 
 
 def main():
     """Main CLI entry point."""
+    if not settings.stripe_secret_key:
+        print("❌ STRIPE_SECRET_KEY not found in environment variables")
+        sys.exit(1)
+
     parser = create_parser()
     args = parser.parse_args()
 
@@ -910,10 +1102,16 @@ def main():
             manager.cleanup_old_products(dry_run=args.dry_run)
 
         elif args.command == "setup-credits":
-            manager.setup_credit_products(dry_run=args.dry_run)
+            if not manager.setup_credit_products(dry_run=args.dry_run):
+                sys.exit(1)
 
         elif args.command == "seed":
-            success = manager.seed_database(dry_run=args.dry_run, verbose=args.verbose)
+            success = manager.seed_database(
+                dry_run=args.dry_run,
+                verbose=args.verbose,
+                include_legacy_billing_data=args.include_legacy_billing_data,
+                include_credit_products=not args.skip_credit_products,
+            )
             if not success:
                 sys.exit(1)
 

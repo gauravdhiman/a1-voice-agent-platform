@@ -157,11 +157,23 @@ export function PhoneNumberDashboard({
           <UserX className="h-4 w-4" />
           <AlertDescription>
             You have {unusedCount} unused phone number
-            {unusedCount > 1 ? "s" : ""}. Assign them to agents or consider
-            releasing them to stop recurring charges.
+            {unusedCount > 1 ? "s" : ""}. Assign them to agents or release
+            numbers you no longer need. Only numbers without the Included label
+            use monthly credits.
           </AlertDescription>
         </Alert>
       )}
+
+      <Alert>
+        <Link2 className="h-4 w-4" />
+        <AlertDescription>
+          Already have a business number? Connect a Twilio number you own at no
+          platform rental cost. For a number with T-Mobile, Verizon, or another
+          carrier, set up call forwarding to a number connected here; your
+          carrier may charge for forwarded calls. Direct carrier connection is
+          not available.
+        </AlertDescription>
+      </Alert>
 
       {phoneNumbers.length === 0 ? (
         <Card>
@@ -267,7 +279,9 @@ export function PhoneNumberDashboard({
                       <div className="font-semibold break-words">
                         {number.management_mode === "customer_managed"
                           ? "No platform rental"
-                          : `${number.monthly_cost_credits} credits`}
+                          : number.is_included_in_plan
+                            ? "Included with plan"
+                            : `${number.monthly_cost_credits} credits ($${(number.monthly_cost_credits / 40).toFixed(2).replace(/\.00$/, "")} equivalent)`}
                       </div>
                     </div>
 
@@ -360,6 +374,7 @@ export function PhoneNumberDashboard({
           </SheetHeader>
           <div className="flex-1 overflow-y-auto px-6 py-5">
             <PhoneNumberSearch
+              organizationId={organizationId}
               creditBalance={creditBalance}
               onNumberSelected={handleNumberSelectedFromSearch}
             />

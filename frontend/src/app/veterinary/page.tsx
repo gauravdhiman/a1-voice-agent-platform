@@ -100,7 +100,7 @@ const content: IndustryPageContent = {
     {
       question: "What does it cost?",
       answer:
-        "Pilot plans start at $79/mo with concierge setup included. You only move to a monthly plan once the workflow proves itself on your real calls.",
+        "Plans start at $49/month and include up to 250 call minutes. Book a demo to see how an AI front desk fits your clinic.",
     },
   ],
 };

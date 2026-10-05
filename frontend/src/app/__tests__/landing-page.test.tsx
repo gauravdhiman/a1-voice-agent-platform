@@ -59,7 +59,7 @@ describe("Homepage experience", () => {
         .getAttribute("href"),
     ).toBe("/demo/verdi-table-restaurant");
     expect(screen.queryByText(/acme corp|techstart|sarah chen/i)).toBeNull();
-    expect(screen.getByText(/monthly plans from \$79/i)).toBeTruthy();
+    expect(screen.getByText(/monthly plans from \$49/i)).toBeTruthy();
     expect(screen.queryByText(/\$99|\$0/)).toBeNull();
   });
 
@@ -70,16 +70,13 @@ describe("Homepage experience", () => {
       </ThemeProvider>,
     );
     expect(
-      screen.getByRole("heading", { name: /see the whole front desk/i }),
-    ).toBeTruthy();
-    expect(
       screen.getByRole("link", { name: /take the guided tour/i }).getAttribute(
         "href",
       ),
     ).toBe("/how-it-works");
     expect(
       screen
-        .getByRole("link", { name: /teach skills.*rules, not code/i })
+        .getByRole("link", { name: /set instructions.*rules, not code/i })
         .getAttribute("href"),
     ).toBe("/how-it-works#tour-teach-skills");
   });

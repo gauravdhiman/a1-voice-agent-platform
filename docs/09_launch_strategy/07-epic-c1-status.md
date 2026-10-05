@@ -11,7 +11,7 @@ engine changes (real money requires founder approval — see `06`).
   duplicate-link + `metadata.organization_id` procedure, stay-on-call
   verification, failure table (delayed webhook, double charge, downgrade,
   custom invoice), never-do list.
-- `06-plan-publish-spec.md`: exact Starter/Growth/Scale v1 rows, margin
+- `06-plan-publish-spec.md`: exact Starter/Pro/Scale v1 rows, margin
   math (honest: misses the 70% floor at $0.10 COGS — publish review must
   raise prices, trim bundles, or prove pipeline COGS), publish checklist.
 - Plan selector shows minutes-equivalence

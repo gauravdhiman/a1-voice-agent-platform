@@ -2,8 +2,9 @@
 # Synchronize code-owned release data for a selected environment.
 #
 # This is an explicit bootstrap step, not an application-startup hook. It
-# publishes the native tool catalog and the three public demo agents together so
-# a release cannot expose demo pages whose required tools are missing.
+# synchronizes the fixed system-pricing meters and publishes the native tool
+# catalog and three public demo agents together. Existing system-pricing rates
+# are preserved; missing meters are created from the reviewed source defaults.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -97,7 +98,7 @@ echo "Synchronizing release fixtures in ${environment_name} from $(basename "$EN
 seed_command='set -eu
 plan="$(mktemp)"
 trap '\''rm -f "$plan"'\'' EXIT
-python -m src.master_data.cli preview --domain platform_tools --format json --output "$plan" >/dev/null
+python -m src.master_data.cli preview --domain platform_tools --domain system_pricing --format json --output "$plan" >/dev/null
 python -m src.master_data.cli apply --plan "$plan"
 python scripts/sync_demo_fixtures.py --allow-production'
 

@@ -49,11 +49,36 @@ Customer-managed rows do not consume the organization's
 `max_phone_numbers` entitlement. That entitlement limits only numbers the
 platform purchases and rents on the organization's behalf.
 
+### Launch plan allowance and rental price
+
+Each paid launch plan includes one US local number when the customer requests
+one; it is not purchased automatically. That line is marked
+`is_included_in_plan` and renews at zero credits while paid-plan access is
+active. If the customer keeps it after paid access ends, it converts to a
+regular rental at the current US local rate (80 credits/month, or $2 equivalent
+at 40 credits per dollar) on its next rental date. That debit comes from the
+shared balance used for calls. If the balance cannot cover renewal, inbound
+calls pause during the configured grace period and the number is released if
+the balance remains insufficient. The cancellation dialog explains this and
+the customer can release the number before renewal. Other additional
+platform-provided US local numbers use the same rate. Paid launch plans set the
+platform-purchased number count to unlimited, so the credit balance is the
+practical limit. Customer-owned Twilio numbers have no platform rental charge.
+
+Carrier numbers from providers such as T-Mobile and Verizon cannot be imported
+directly. Customers can forward calls from their existing carrier number to an
+attached platform-provided number; their carrier may charge for forwarding.
+They can connect an existing Twilio-owned number directly by adding the
+platform's verified webhook URLs in Twilio.
+
 ### Platform purchase
 
-The backend first checks the organization entitlement and consumes the current
-monthly rental price. It then inserts a `provisioning` row and calls Twilio's
-incoming-phone-number create API with both canonical callbacks:
+The backend first checks the organization entitlement. While an active paid
+plan has its allowance available, its first requested US local number is
+purchased at zero credits; other numbers use the current configured monthly
+rental price and consume the first month's credits immediately. It then inserts a
+`provisioning` row and calls Twilio's incoming-phone-number create API with
+both canonical callbacks:
 
 ```text
 https://api.247ai.live/api/v1/voice/twilio/incoming
@@ -65,9 +90,12 @@ If Twilio created a number but the local finalization fails, the service attempt
 to release the provider SID. A failed compensation is persisted as
 `release_pending` for the scheduler.
 
-The `Idempotency-Key` request header is accepted for retries. The key is stored
-on the provisioning row and also in the credit ledger metadata so a client
-retry does not debit twice or purchase a second number.
+The `Idempotency-Key` request header is accepted for retries and stored on the
+provisioning row. A completed retry returns the existing number; an in-progress
+retry does not start a second provider operation. Cancelled or disconnected
+attempts are terminal, so a new purchase requires a fresh key. The credit
+ledger uses a separate unique key for each provisioning attempt so a refunded
+or terminal debit cannot be replayed as an uncharged successful purchase.
 
 ### Customer-owned import
 
@@ -103,19 +131,31 @@ creates a new legacy-only mapping.
 
 ## Search
 
-The UI exposes US only. The backend is country-aware and passes the selected
-country to Twilio. Search accepts a `contains`, `begins_with`, or `ends_with`
-match mode. Punctuation is removed before the provider request, then the
-backend uses Twilio's documented `%pattern%`, `+pattern`, and `pattern$`
-expressions respectively. US national prefixes receive the `1` country code
-automatically. Patterns are limited to Twilio's 16-character provider limit.
-Callers searching other countries should include the calling code in a prefix
-until country-specific dialing metadata is introduced.
+Platform-provided number search and purchase are US-only in v1. The API rejects
+non-US inventory requests, while the lower-level Twilio adapter remains
+country-aware for provider operations. Customer-owned Twilio imports use a
+separate flow and do not incur platform rental charges. Search accepts a
+`contains`, `begins_with`, or `ends_with` match mode. Punctuation is removed
+before the provider request, then the backend uses Twilio's documented
+`%pattern%`, `+pattern`, and `pattern$` expressions respectively. US national
+prefixes receive the `1` country code automatically. Patterns are limited to
+Twilio's 16-character provider limit.
 
-The search form submits on Enter. It is disabled when the organization balance
-is below the minimum monthly rental for the selected number type, and the UI
-explains the required balance with a high-contrast warning. This check is only
-for platform-purchased inventory; customer-owned number imports remain free of
+If Twilio is unconfigured or its upstream availability lookup fails, the API
+returns a generic `502` response asking the customer to try again later rather
+than reporting an empty inventory. Provider response bodies and account
+identifiers are excluded from customer errors and application logs.
+
+If a phone-number purchase cannot be confirmed because the provider or local
+provisioning step fails, the API returns a generic `502` message. Customers
+should check their phone-number list and credit balance before retrying;
+provider diagnostics and phone numbers are excluded from application logs.
+
+The search form submits on Enter and remains available so customers can
+compare inventory regardless of balance. Selection is disabled for a paid
+number when the organization lacks enough credits for its monthly rental; an
+included number remains selectable at zero cost. This check applies only to
+platform-purchased inventory; customer-owned number imports remain free of
 platform rental charges and are not subject to the search screen's purchase
 eligibility check.
 

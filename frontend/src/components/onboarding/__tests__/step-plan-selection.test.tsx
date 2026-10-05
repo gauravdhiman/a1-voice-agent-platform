@@ -35,7 +35,7 @@ const freePlan: CustomerPlanVersion = {
   trial_period_days: null,
   stripe_price_id: null,
   entitlements: {
-    included_credits_monthly: { type: "integer", value: 100 },
+    included_credits_per_billing_period: { type: "integer", value: 100 },
   },
 };
 
@@ -44,20 +44,29 @@ const paidPlan: CustomerPlanVersion = {
   id: "version-paid",
   plan_product_id: "product-paid",
   tier_rank: 20,
-  product_slug: "growth",
-  product_name: "Growth",
-  display_label: "Growth",
+  product_slug: "pro-month-v1",
+  product_name: "Pro Plan:Month v1",
+  display_label: "Pro Plan:Month v1",
   billing_mode: "paid",
-  price_amount_cents: 2900,
-  stripe_price_id: "price_growth",
+  price_amount_cents: 14900,
+  stripe_price_id: "price_pro",
+  entitlements: {
+    included_credits_per_billing_period: { type: "integer", value: 10000 },
+  },
 };
 
 const annualPlan: CustomerPlanVersion = {
   ...paidPlan,
   id: "version-annual",
   billing_interval: "annual",
-  price_amount_cents: 29000,
-  stripe_price_id: "price_growth_annual",
+  price_amount_cents: 149000,
+  stripe_price_id: "price_pro_annual",
+  product_slug: "pro-annual-v1",
+  product_name: "Pro Plan:Annual v1",
+  display_label: "Pro Plan:Annual v1",
+  entitlements: {
+    included_credits_per_billing_period: { type: "integer", value: 120000 },
+  },
 };
 
 describe("StepPlanSelection", () => {
@@ -122,7 +131,7 @@ describe("StepPlanSelection", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Growth" }),
+      await screen.findByRole("heading", { name: "Pro" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("onboarding-plan-select-version-paid"));
 
@@ -151,7 +160,7 @@ describe("StepPlanSelection", () => {
     render(<StepPlanSelection organizationId="org-1" onActivated={vi.fn()} />);
 
     expect(
-      await screen.findByRole("heading", { name: "Growth" }),
+      await screen.findByRole("heading", { name: "Pro" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Monthly" })).toHaveAttribute(
       "aria-selected",
@@ -188,7 +197,9 @@ describe("StepPlanSelection", () => {
     render(<StepPlanSelection organizationId="org-1" onActivated={vi.fn()} />);
 
     expect(
-      await screen.findByText("400 call minutes included (≈114 calls)"),
+      await screen.findByText(
+        "Up to 400 call minutes per billing period",
+      ),
     ).not.toBeNull();
   });
 
@@ -202,6 +213,6 @@ describe("StepPlanSelection", () => {
     );
 
     expect(await screen.findByText("Choose a plan")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent(/cancelled/i);
+    expect(screen.getByText(/checkout was cancelled/i)).toBeTruthy();
   });
 });

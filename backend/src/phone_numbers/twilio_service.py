@@ -44,9 +44,7 @@ class TwilioService:
             self.client: Optional[Client] = None
         else:
             self.client = Client(self.account_sid, self.auth_token)
-            logger.info(
-                f"Twilio service initialized with account SID: {self.account_sid}"
-            )
+            logger.info("Twilio service initialized")
 
     def is_configured(self) -> bool:
         """Check if Twilio credentials are configured.
@@ -121,8 +119,7 @@ class TwilioService:
             raise ValueError("Twilio is not configured")
 
         logger.info(
-            f"Searching for {number_type} numbers in {country_code}, "
-            f"area_code={area_code}, contains={contains}, limit={limit}"
+            f"Searching for {number_type} numbers in {country_code}, " f"limit={limit}"
         )
 
         try:
@@ -146,7 +143,9 @@ class TwilioService:
             return results
 
         except Exception as e:
-            logger.error(f"Error searching for available numbers: {e}")
+            logger.error(
+                "Twilio number search failed (error_type=%s)", type(e).__name__
+            )
             raise
 
     def purchase_phone_number(
@@ -181,7 +180,7 @@ class TwilioService:
         if not self.client:
             raise ValueError("Twilio is not configured")
 
-        logger.info(f"Purchasing phone number: {phone_number}")
+        logger.info("Starting Twilio phone number purchase")
 
         try:
             purchased = self.client.incoming_phone_numbers.create(
@@ -194,15 +193,15 @@ class TwilioService:
                 sms_application_sid=sms_application_sid,
             )
 
-            logger.info(
-                f"Successfully purchased phone number: {purchased.phone_number}, "
-                f"SID: {purchased.sid}"
-            )
+            logger.info("Twilio phone number purchase completed")
 
             return purchased
 
         except Exception as e:
-            logger.error(f"Error purchasing phone number {phone_number}: {e}")
+            logger.error(
+                "Twilio phone number purchase failed (error_type=%s)",
+                type(e).__name__,
+            )
             raise
 
     def release_phone_number(self, phone_number_sid: str) -> bool:
@@ -221,15 +220,18 @@ class TwilioService:
         if not self.client:
             raise ValueError("Twilio is not configured")
 
-        logger.info(f"Releasing phone number with SID: {phone_number_sid}")
+        logger.info("Releasing Twilio phone number")
 
         try:
             self.client.incoming_phone_numbers(phone_number_sid).delete()
-            logger.info(f"Successfully released phone number: {phone_number_sid}")
+            logger.info("Twilio phone number release completed")
             return True
 
         except Exception as e:
-            logger.error(f"Error releasing phone number {phone_number_sid}: {e}")
+            logger.error(
+                "Twilio phone number release failed (error_type=%s)",
+                type(e).__name__,
+            )
             raise
 
     def get_phone_number(
@@ -253,7 +255,10 @@ class TwilioService:
         try:
             return self.client.incoming_phone_numbers(phone_number_sid).fetch()
         except Exception as e:
-            logger.error(f"Error fetching phone number {phone_number_sid}: {e}")
+            logger.error(
+                "Twilio phone number lookup failed (error_type=%s)",
+                type(e).__name__,
+            )
             return None
 
 

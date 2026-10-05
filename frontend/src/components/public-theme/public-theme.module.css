@@ -128,7 +128,7 @@
 .root a {
   text-decoration: none;
 }
-.root a:not([data-slot="button"]) {
+.root a:not([data-slot="button"], .headerCta) {
   color: inherit;
 }
 .root button {
@@ -281,9 +281,8 @@
   transform: translateY(-2px);
   box-shadow: 0 8px 35px var(--glow);
 }
-/* Doubled classes (0,2,0) so the header button colors win over page-level
- * generic link resets such as `.home a` / `.root a` (0,1,1), no matter
- * which page shell the shared header renders inside. */
+/* Keep the themed CTA out of generic link-color resets so its day/night
+ * foreground token stays paired with its background token. */
 .headerCta.headerCta {
   color: var(--button-ink);
 }
@@ -493,10 +492,7 @@
   transform: translateY(-2px);
   box-shadow: 0 8px 35px var(--glow);
 }
-/* Root-scoped so the button-ink and muted link colors win over the
- * generic `.root a { color: inherit }` reset (higher specificity wins;
- * without this the primary button text inherits page ink and vanishes
- * on the pale night-mode button). */
+/* Keep the primary action's themed ink above the generic link reset. */
 .root a.primary {
   color: var(--button-ink);
 }

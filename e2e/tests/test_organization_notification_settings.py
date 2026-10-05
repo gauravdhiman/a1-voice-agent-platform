@@ -122,11 +122,11 @@ def test_org_admin_can_save_oauth_notification_destinations(
     expect(page.get_by_role("tab", name="Notifications")).to_have_attribute(
         "aria-selected", "true"
     )
-    expect(page.get_by_text("Critical notifications")).to_be_visible()
+    expect(page.get_by_text("Critical notifications", exact=True)).to_be_visible()
     expect(
         page.get_by_text(re.compile("important updates about your organization"))
     ).to_be_visible()
-    expect(page.get_by_role("switch")).to_have_count(0)
+    expect(page.locator("form").get_by_role("switch")).to_have_count(0)
 
     step("Check settings navigation across supported viewport sizes")
     for viewport in (

@@ -63,12 +63,9 @@ export function PresetPicker({
   const defaultIsReady = true;
   const credentialsSelfService = catalog?.credentials_self_service ?? true;
 
-  const selectedIsReady = React.useMemo(() => {
-    if (value === null) return true;
-    const preset = presets.find((p) => p.id === value);
-    if (!preset) return false;
-    return preset.is_ready;
-  }, [value, presets]);
+  const selectedIsReady =
+    value === null ||
+    presets.find((preset) => preset.id === value)?.is_ready === true;
 
   const showSetupCallout = !selectedIsReady && !isLoading;
 
@@ -77,9 +74,11 @@ export function PresetPicker({
       <div className="space-y-1">
         <p className="text-sm font-medium">Voice profile</p>
         <p className="text-xs text-muted-foreground">
-          Pick a published voice profile for this agent, or use the system
-          default. Profiles marked Ready are fully configured for your
-          organization.
+          Optional provider voices use BYOK (bring your own keys). Connect your
+          provider key; that provider bills you directly for its voice service,
+          and 24x7 AI does not add a provider usage charge. Your platform call
+          minutes and applicable credits still follow your plan. Profiles marked
+          Ready are set up for your organization.
         </p>
       </div>
 
@@ -101,9 +100,11 @@ export function PresetPicker({
                 <div className="mt-3 flex items-start gap-2 border-t border-amber-200/80 pt-3 text-amber-950 dark:border-amber-800/80 dark:text-amber-100">
                   <Info className="mt-0.5 h-4 w-4 shrink-0" />
                   <p className="text-xs leading-relaxed">
-                    The System Default voice profile may use your plan call
-                    credits. To reduce plan-credit usage, choose a voice
-                    profile configured with your organization&apos;s own account.
+                    Optional provider voices use BYOK (bring your own keys).
+                    Connect your provider key; the provider bills you directly
+                    for that service, and 24x7 AI does not add a provider usage
+                    charge. Call minutes and applicable platform credits still
+                    follow your plan.
                   </p>
                 </div>
               ) : undefined

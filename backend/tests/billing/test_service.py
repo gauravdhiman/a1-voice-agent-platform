@@ -435,6 +435,46 @@ class TestAdminCreditGrant:
 class TestBillingServiceOrganizationSubscriptions:
     """Test cases for organization subscription management."""
 
+    @pytest.mark.asyncio
+    async def test_subscription_plan_update_does_not_replenish_credits(
+        self, billing_service, mock_supabase_client, sample_org_id, sample_plan_id
+    ):
+        """Subscription webhooks cannot replenish credits by replaying a plan."""
+        from src.billing.models import OrganizationSubscriptionUpdate
+
+        now = datetime.now(timezone.utc)
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[
+                {
+                    "id": str(uuid4()),
+                    "organization_id": str(sample_org_id),
+                    "subscription_plan_id": str(sample_plan_id),
+                    "stripe_subscription_id": "sub_test123",
+                    "stripe_customer_id": "cus_test123",
+                    "status": "active",
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                    "metadata": {"billing_mode": "paid"},
+                }
+            ]
+        )
+        billing_service.reset_subscription_credits = AsyncMock()
+
+        result = await billing_service.update_organization_subscription(
+            sample_org_id,
+            OrganizationSubscriptionUpdate(
+                subscription_plan_id=sample_plan_id,
+                stripe_subscription_id="sub_test123",
+                stripe_customer_id="cus_test123",
+                metadata={"billing_mode": "paid"},
+            ),
+        )
+
+        assert result is not None
+        assert result.stripe_subscription_id == "sub_test123"
+        assert result.stripe_customer_id == "cus_test123"
+        billing_service.reset_subscription_credits.assert_not_awaited()
+
     @pytest.mark.skip(
         reason="Complex mocking - requires chained Supabase + Stripe service interactions"
     )
@@ -944,6 +984,114 @@ class TestBillingServiceCreditGrantIdempotency:
                 "p_idempotency_key": "free-subscription:activation",
             },
         )
+
+    @pytest.mark.asyncio
+    async def test_purchased_credit_grant_uses_payment_intent_rpc(
+        self, billing_service, mock_supabase_client
+    ):
+        """Credit checkout retries return the original database ledger row."""
+        organization_id = uuid4()
+        transaction = {
+            "id": str(uuid4()),
+            "organization_id": str(organization_id),
+            "transaction_type": "purchased",
+            "amount": 200,
+            "balance_after": 200,
+            "source": "purchase",
+            "source_id": None,
+            "credit_event_id": None,
+            "expires_at": None,
+            "stripe_payment_intent_id": "pi_test_123",
+            "description": "Credit purchase",
+            "metadata": {"grant_key": "stripe-payment-intent:pi_test_123"},
+            "created_at": "2026-10-01T00:00:00+00:00",
+        }
+        mock_supabase_client.rpc.return_value.execute.return_value = MagicMock(
+            data={
+                "success": True,
+                "already_applied": True,
+                "transaction": transaction,
+            }
+        )
+
+        with patch.object(
+            billing_service, "_reset_low_credit_notification", new_callable=AsyncMock
+        ) as reset_notification:
+            result = await billing_service.add_purchased_credits(
+                organization_id,
+                200,
+                "pi_test_123",
+                "Credit purchase",
+            )
+
+        assert result.id == UUID(transaction["id"])
+        mock_supabase_client.rpc.assert_called_once_with(
+            "grant_purchased_credits",
+            {
+                "p_organization_id": str(organization_id),
+                "p_credits": 200,
+                "p_payment_intent_id": "pi_test_123",
+                "p_description": "Credit purchase",
+            },
+        )
+        reset_notification.assert_awaited_once_with(organization_id)
+
+    @pytest.mark.asyncio
+    async def test_purchased_credit_grant_requires_payment_intent(
+        self, billing_service, mock_supabase_client
+    ):
+        with pytest.raises(ValueError, match="payment intent is required"):
+            await billing_service.add_purchased_credits(uuid4(), 200, "")
+        mock_supabase_client.rpc.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_invoice_history_uses_invoice_id_upsert_for_webhook_retries(
+        self, billing_service, mock_supabase_client
+    ):
+        from src.billing.models import BillingHistoryCreate
+
+        organization_id = uuid4()
+        transaction_id = uuid4()
+        now = datetime.now(timezone.utc)
+        row = {
+            "id": str(transaction_id),
+            "organization_id": str(organization_id),
+            "stripe_invoice_id": "in_retry_safe",
+            "stripe_payment_intent_id": "pi_invoice",
+            "amount": 4900,
+            "currency": "usd",
+            "status": "paid",
+            "description": "Subscription invoice",
+            "invoice_url": None,
+            "receipt_url": None,
+            "billing_reason": "subscription_cycle",
+            "metadata": None,
+            "paid_at": now.isoformat(),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+        query = MagicMock()
+        query.upsert.return_value = query
+        query.execute.return_value = MagicMock(data=[row])
+        mock_supabase_client.table.return_value = query
+
+        result = await billing_service.create_billing_history(
+            BillingHistoryCreate(
+                organization_id=organization_id,
+                stripe_invoice_id="in_retry_safe",
+                stripe_payment_intent_id="pi_invoice",
+                amount=4900,
+                currency="usd",
+                status=BillingStatus.PAID,
+                description="Subscription invoice",
+                billing_reason="subscription_cycle",
+                paid_at=now,
+            )
+        )
+
+        assert result.id == transaction_id
+        query.upsert.assert_called_once()
+        assert query.upsert.call_args.kwargs["on_conflict"] == "stripe_invoice_id"
 
     @pytest.mark.asyncio
     async def test_subscription_credit_insert_payload_is_json_serializable(

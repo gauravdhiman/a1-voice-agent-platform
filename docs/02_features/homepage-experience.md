@@ -49,8 +49,9 @@ customer results.
   primary CTA plus deep links into each `/how-it-works` chapter, so
   post-demo curiosity has somewhere to go (see
   [platform tour](platform-tour.md)).
-- Pricing retains the existing concierge-pilot positioning and $79 starting
-  monthly-plan copy. There is no new checkout or independently maintained plan table.
+- Pricing shows the $49/month entry point and up to 250 call minutes, with
+  a demo CTA instead of public plan cards or public checkout links. The private
+  plan selector remains backed by the Plan Catalog.
 
 ## Appearance and motion
 

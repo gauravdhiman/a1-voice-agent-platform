@@ -25,6 +25,7 @@ class PhoneNumberService {
   ): Promise<PhoneNumberSearchResponse> {
     const params = new URLSearchParams();
 
+    params.append("organization_id", searchRequest.organization_id);
     if (searchRequest.country_code) {
       params.append("country_code", searchRequest.country_code);
     }

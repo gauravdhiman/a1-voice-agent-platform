@@ -10,7 +10,7 @@ import styles from "./public-theme.module.css";
 
 /**
  * Shared public-site header: voice-call brand, homepage anchors, the shared
- * day/night switch, sign-in, and the conversation CTA. The same component is
+ * day/night switch, sign-in, and the request-demo CTA. The same component is
  * used by the homepage, landing pages, and demo pages so public navigation
  * never drifts between routes.
  */
@@ -60,7 +60,7 @@ export function PublicHeader() {
           Sign in <ArrowUpRight size={13} />
         </Link>
         <Link className={styles.headerCta} href="/request-demo">
-          Let&apos;s talk <ArrowUpRight size={14} />
+          Request demo <ArrowUpRight size={14} />
         </Link>
         <button
           ref={menuButtonRef}

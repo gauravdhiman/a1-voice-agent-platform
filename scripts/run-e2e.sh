@@ -6,11 +6,22 @@ set -e
 
 # Determine video recording setting
 VIDEO_SETTING="retain-on-failure"
-for arg in "$@"; do
-    if [ "$arg" == "--video-on" ]; then
-        VIDEO_SETTING="on"
-        break
-    fi
+PYTEST_ARGS=()
+while (($#)); do
+    case "$1" in
+        --video-on)
+            VIDEO_SETTING="on"
+            ;;
+        --)
+            shift
+            PYTEST_ARGS+=("$@")
+            break
+            ;;
+        *)
+            PYTEST_ARGS+=("$1")
+            ;;
+    esac
+    shift
 done
 
 # Determine docker compose command
@@ -37,11 +48,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 2. Wait for Backend to be healthy
-echo "⏳ Waiting for Backend to be ready on port 8001..."
+# 2. Wait for the backend process to be live. The disposable E2E stack uses
+#    PostgreSQL directly and deliberately has no Supabase REST service, so the
+#    dependency-aware /health endpoint is not the right readiness probe here.
+echo "⏳ Waiting for Backend to be live on port 8001..."
 MAX_RETRIES=30
 COUNT=0
-while ! curl -s -f http://localhost:8001/health > /dev/null; do
+while ! curl -s -f http://localhost:8001/health/live > /dev/null; do
     printf '.'
     sleep 2
     COUNT=$((COUNT+1))
@@ -50,7 +63,7 @@ while ! curl -s -f http://localhost:8001/health > /dev/null; do
         exit 1
     fi
 done
-echo "✅ Backend is UP!"
+echo "✅ Backend process is live!"
 
 # 3. Initialize Database Schema (Supabase Mocks)
 echo "🔧 Initializing Database Schema..."
@@ -72,7 +85,7 @@ $DOCKER_COMPOSE exec -T db_e2e psql -U postgres -d test_db -c "INSERT INTO platf
 echo "🎭 Running Playwright E2E Tests..."
 # Set environment variables for the test runner
 export E2E_BASE_URL=http://localhost:3001
-export PYTHONPATH=$PYTHONPATH:.
+export PYTHONPATH="${PYTHONPATH:+${PYTHONPATH}:}${PWD}:${PWD}/e2e/tests"
 
 # Determine which pytest to use
 PYTEST_BIN="pytest"
@@ -83,7 +96,7 @@ fi
 # Create report directory if not exists (redundant but safe)
 mkdir -p e2e/reports
 
-$PYTEST_BIN e2e/tests/ -s \
+$PYTEST_BIN e2e/tests/ "${PYTEST_ARGS[@]}" -s \
     --html=e2e/reports/report.html \
     --self-contained-html \
     --tracing retain-on-failure \

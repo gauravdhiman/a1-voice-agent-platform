@@ -35,11 +35,11 @@ vi.mock("@/hooks/use-credit-products", () => ({
     data: [
       {
         id: "prod-1",
-        name: "Starter Pack",
+        name: "200 Credits Pack",
         description: "Extra credits",
-        credit_amount: 1000,
-        price_amount: 1000,
-        currency: "$",
+        credit_amount: 200,
+        price_amount: 500,
+        currency: "USD",
       },
     ],
     isLoading: false,
@@ -75,8 +75,9 @@ describe("CreditPurchase", () => {
 
     render(<CreditPurchase organizationId="org-1" />);
 
-    expect(await screen.findByText("Starter Pack")).toBeInTheDocument();
+    expect(await screen.findByText("200 Credits Pack")).toBeInTheDocument();
     expect(screen.getByText("Purchase Additional Credits")).toBeInTheDocument();
+    expect(screen.getByText("• All packs cost $0.025 per credit")).not.toBeNull();
   });
 
   it("shows an upgrade prompt when credit_topup_enabled is off", async () => {
@@ -90,7 +91,7 @@ describe("CreditPurchase", () => {
     expect(
       await screen.findByText("Credit top-ups not enabled"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Starter Pack")).not.toBeInTheDocument();
+    expect(screen.queryByText("200 Credits Pack")).not.toBeInTheDocument();
   });
 
   it("defaults to blocked while entitlements are loading", async () => {

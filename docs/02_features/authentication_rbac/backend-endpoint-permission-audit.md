@@ -91,7 +91,7 @@ wildcard). See the Epic C row in [`docs/SPRINT-BOARD.md`](../../SPRINT-BOARD.md)
 
 | Endpoint | Method | Required | Verdict | Notes |
 |----------|--------|----------|---------|-------|
-| `/api/v1/phone-numbers/available` | GET | authenticated | PASS | Provider catalog is not org-scoped. |
+| `/api/v1/phone-numbers/available` | GET | `phone_number:create` on `organization_id` (or `platform_admin`) | PASS | Search is organization-scoped so the API can return the correct included-number allowance and add-on price. |
 | `/api/v1/phone-numbers/purchase` | POST | `phone_number:create` on `organization_id` (or `platform_admin`) | FIXED | Previously gated on `check_billing_permissions`, which let a `billing:subscribe`-only holder purchase numbers while the frontend `canManagePhoneNumbers` gate hid the UI — an API/UI consistency gap. Now gates on `phone_number:create`. Credit deduction is a separate 402 in the service layer. |
 | `/api/v1/phone-numbers` (list) | GET | `phone_number:read` on `organization_id` | FIXED | Same §6 fix. |
 | `/api/v1/phone-numbers/{phone_number_id}/assign` | POST | `phone_number:update` on `organization_id` | FIXED | Same. |

@@ -422,6 +422,34 @@ class TestAdminPlanCatalogService:
         assert fields["stripe_price_id"] is None
 
     @pytest.mark.asyncio
+    async def test_explicit_null_clears_draft_display_label(
+        self, catalog_service, product_id, version_id
+    ):
+        from src.billing.admin_plan_models import PlanVersionDetail
+
+        current = _version_row(version_id, product_id)
+        updated = {**current, "display_label": None}
+        call_count = {"n": 0}
+
+        async def fake_get_plan_version(_vid):
+            call_count["n"] += 1
+            row = current if call_count["n"] == 1 else updated
+            return PlanVersionDetail(**row, entitlements=[])
+
+        with patch.object(
+            catalog_service, "get_plan_version", side_effect=fake_get_plan_version
+        ):
+            catalog_service.supabase.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[updated]
+            )
+            await catalog_service.update_draft_version(
+                version_id, PlanVersionDraftUpdate(display_label=None)
+            )
+
+        fields = catalog_service.supabase.table.return_value.update.call_args.args[0]
+        assert fields["display_label"] is None
+
+    @pytest.mark.asyncio
     async def test_clone_preserves_credit_grant_policy(
         self, catalog_service, product_id, version_id
     ):

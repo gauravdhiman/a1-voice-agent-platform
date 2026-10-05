@@ -27,7 +27,14 @@ import {
 import { billingService } from "@/services/billing-service";
 import { CancelSubscriptionDialog } from "@/components/billing/cancel-subscription-dialog";
 import { PlanMigrationBanner } from "@/components/billing/plan-migration-banner";
-import { OrganizationSubscriptionWithPlan } from "@/types/billing";
+import {
+  friendlyPlanLabel,
+  friendlyPlanName,
+} from "@/components/billing/plan-card";
+import type {
+  CustomerPlanVersion,
+  OrganizationSubscriptionWithPlan,
+} from "@/types/billing";
 import type { OrgEntitlements } from "@/types/billing";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -46,6 +53,14 @@ interface SubscriptionManagementProps {
   onChangePlan?: () => void;
   /** Opens the Credits tab at the purchase section. */
   onBuyCredits?: () => void;
+}
+
+function getPlanVersionNumber(
+  planVersion: CustomerPlanVersion | null | undefined,
+  key: string,
+): number | undefined {
+  const rawValue = planVersion?.entitlements[key]?.value;
+  return typeof rawValue === "number" ? rawValue : undefined;
 }
 
 export function SubscriptionManagement({
@@ -187,8 +202,34 @@ export function SubscriptionManagement({
     subscription.status,
   );
   const isFreePlan = subscription.metadata?.billing_mode === "free";
-  const planName =
-    subscription.plan?.name ?? (isFreePlan ? "Free plan" : "No plan");
+  const planVersion = subscription.plan_version;
+  const planName = planVersion
+    ? friendlyPlanName({
+        product_slug: planVersion.product_slug,
+        product_name: planVersion.product_name,
+        display_label: planVersion.display_label,
+      })
+    : subscription.plan?.name
+      ? friendlyPlanName({
+          product_name: subscription.plan.name,
+          display_label: null,
+        })
+    : isFreePlan
+      ? "Free"
+      : "No plan";
+  const includedCredits = planVersion
+    ? getPlanVersionNumber(
+        planVersion,
+        "included_credits_per_billing_period",
+      )
+    : subscription.plan?.included_credits;
+  const maxUsers = planVersion
+    ? getPlanVersionNumber(planVersion, "max_org_members")
+    : subscription.plan?.max_users;
+  const priceAmount =
+    planVersion?.price_amount_cents ?? subscription.plan?.price_amount;
+  const billingInterval =
+    planVersion?.billing_interval ?? subscription.plan?.interval;
   const canManageBilling =
     Boolean(subscription.stripe_customer_id) && !isFreePlan;
 
@@ -222,7 +263,10 @@ export function SubscriptionManagement({
                 </Badge>
                 {entitlements?.plan_version_label ? (
                   <Badge variant="outline" className="font-normal">
-                    {entitlements.plan_version_label}
+                    {friendlyPlanLabel(
+                      entitlements.plan_version_label,
+                      entitlements.plan_product_slug,
+                    )}
                     {entitlements.is_legacy_version ? " (legacy)" : ""}
                   </Badge>
                 ) : null}
@@ -275,46 +319,46 @@ export function SubscriptionManagement({
 
         <CardContent className="space-y-6">
           {/* Plan Details */}
-          {subscription.plan || isFreePlan ? (
+          {subscription.plan || planVersion || isFreePlan ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <div className="text-sm text-muted-foreground">Plan</div>
                 <div className="font-semibold">{planName}</div>
               </div>
 
-              {subscription.plan ? (
+              {planVersion?.billing_mode === "paid" || subscription.plan ? (
                 <div className="space-y-2">
                   <div className="text-sm text-muted-foreground">Price</div>
                   <div className="font-semibold">
-                    ${(subscription.plan.price_amount / 100).toFixed(2)}/
-                    {subscription.plan.interval}
+                    ${((priceAmount ?? 0) / 100).toFixed(2)}/
+                    {billingInterval}
                   </div>
                 </div>
               ) : null}
 
-              {subscription.plan ? (
+              {includedCredits !== undefined ? (
                 <div className="space-y-2">
                   <div className="text-sm text-muted-foreground flex items-center gap-1">
                     <Zap className="w-4 h-4" />
                     Credits Included
                   </div>
                   <div className="font-semibold">
-                    {subscription.plan.included_credits.toLocaleString()}
+                    {includedCredits.toLocaleString()}
                   </div>
                 </div>
               ) : null}
 
-              {subscription.plan?.max_users && (
+              {maxUsers ? (
                 <div className="space-y-2">
                   <div className="text-sm text-muted-foreground flex items-center gap-1">
                     <Users className="w-4 h-4" />
                     Max Users
                   </div>
                   <div className="font-semibold">
-                    {subscription.plan.max_users}
+                    {maxUsers}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           ) : null}
 

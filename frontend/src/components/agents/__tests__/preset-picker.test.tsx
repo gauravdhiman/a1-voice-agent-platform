@@ -68,11 +68,16 @@ describe("PresetPicker", () => {
 
     const systemDefaultOption = screen.getAllByRole("radio")[0];
     expect(
-      within(systemDefaultOption).getByText(/may use your plan call credits/i),
+      within(systemDefaultOption).getByText(
+        /voice profile will use your plan's call credits/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(systemDefaultOption).getByText(/provider bills you directly/i),
     ).toBeInTheDocument();
     expect(
       within(systemDefaultOption).getByText(
-        /choose a voice profile configured with your organization/i,
+        /24x7 AI does not add a provider usage charge/i,
       ),
     ).toBeInTheDocument();
   });

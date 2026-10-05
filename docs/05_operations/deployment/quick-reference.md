@@ -18,7 +18,7 @@ cp .env.staging.example .env.staging  # fill SUPABASE_SERVICE_KEY, DATABASE_URL,
 # see docs/05_operations/staging_environment.md
 
 # after every merge to main (or any release candidate)
-./scripts/validate-staging.sh  # migrates and synchronizes code-owned tools + public demos
+./scripts/validate-staging.sh  # migrates and synchronizes usage meters, tools + public demos
 # or without Docker:
 ./scripts/validate-staging.sh --migrate-only
 # then run browser + PSTN smoke tests at http://localhost:3000
