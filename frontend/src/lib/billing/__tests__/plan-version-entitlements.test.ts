@@ -31,7 +31,7 @@ const integerDef: EntitlementDefinition = {
   validation_schema: {},
   enforcement_handler: "limit.max_count",
   default_enforcement: "hard",
-  default_when_absent: { type: "integer", value: 0 },
+  default_when_absent: { type: "unlimited" },
   is_active: true,
   description: null,
 };
@@ -61,6 +61,23 @@ describe("plan-version-entitlements", () => {
     ]);
   });
 
+  it("parses a non-positive max_agents assignment as unlimited", () => {
+    const version = {
+      entitlements: [
+        {
+          id: "1",
+          entitlement_key: "max_agents",
+          value: { type: "integer", value: 0 },
+          display_order: 0,
+        },
+      ],
+    } as unknown as PlanVersionDetail;
+
+    expect(parseAssignedEntitlements(version)).toEqual([
+      { key: "max_agents", unlimited: true },
+    ]);
+  });
+
   it("buildEntitlementInputs produces sparse API payload", () => {
     const payload = buildEntitlementInputs(
       [
@@ -83,11 +100,20 @@ describe("plan-version-entitlements", () => {
     ]);
   });
 
-  it("buildEntitlementInputs rejects negative integers", () => {
-    expect(() =>
-      buildEntitlementInputs([{ key: "max_agents", integerValue: -1 }], [
-        integerDef,
-      ]),
-    ).toThrow(/non-negative integer/);
-  });
+  it.each([0, -1])(
+    "buildEntitlementInputs treats max_agents value %i as unlimited",
+    (integerValue) => {
+      expect(
+        buildEntitlementInputs([{ key: "max_agents", integerValue }], [
+          integerDef,
+        ]),
+      ).toEqual([
+        {
+          entitlement_key: "max_agents",
+          value: { type: "unlimited" },
+          display_order: 0,
+        },
+      ]);
+    },
+  );
 });

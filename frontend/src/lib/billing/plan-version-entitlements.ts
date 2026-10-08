@@ -33,6 +33,14 @@ export function parseAssignedEntitlements(
     if (value?.type === "unlimited") {
       return { key: ent.entitlement_key, unlimited: true };
     }
+    if (
+      ent.entitlement_key === "max_agents" &&
+      value?.type === "integer" &&
+      typeof value.value === "number" &&
+      value.value <= 0
+    ) {
+      return { key: ent.entitlement_key, unlimited: true };
+    }
     return {
       key: ent.entitlement_key,
       integerValue: Number(value?.value ?? 0),
@@ -61,7 +69,11 @@ export function buildEntitlementInputs(
         display_order: displayOrder,
       };
     }
-    if (item.unlimited || def.value_type === "unlimited") {
+    if (
+      item.unlimited ||
+      def.value_type === "unlimited" ||
+      (def.key === "max_agents" && (item.integerValue ?? 0) <= 0)
+    ) {
       return {
         entitlement_key: item.key,
         value: { type: "unlimited" },

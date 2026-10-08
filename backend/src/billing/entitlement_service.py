@@ -100,7 +100,9 @@ class EntitlementService:
             raw = assigned_by_key.get(definition.key)
             if raw is None and definition.default_when_absent is not None:
                 raw = definition.default_when_absent
-            effective, is_unlimited = parse_entitlement_value(raw)
+            effective, is_unlimited = parse_entitlement_value(
+                raw, entitlement_key=definition.key
+            )
             resolved = ResolvedEntitlement(
                 key=definition.key,
                 kind=definition.kind,
@@ -168,9 +170,7 @@ class EntitlementService:
         increment: int = 1,
     ) -> None:
         """Raise ``EntitlementDenied`` if the limit would be exceeded."""
-        result = await self.check_limit(
-            organization_id, limit_key, increment=increment
-        )
+        result = await self.check_limit(organization_id, limit_key, increment=increment)
         if not result.allowed:
             raise EntitlementDenied(
                 result.code,

@@ -110,7 +110,10 @@ export function PlanVersionEntitlementEditor({
     let next: AssignedPlanEntitlement = { key: addKey };
     if (def.value_type === "boolean") {
       next = { key: addKey, booleanValue: false };
-    } else if (def.value_type === "unlimited") {
+    } else if (
+      def.value_type === "unlimited" ||
+      (def.unit === "count" && def.default_when_absent?.type === "unlimited")
+    ) {
       next = { key: addKey, unlimited: true };
     } else {
       next = { key: addKey, integerValue: 0 };

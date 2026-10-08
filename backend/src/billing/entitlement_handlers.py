@@ -240,15 +240,29 @@ def _suggest_upgrade_slug(entitlements: OrgEntitlements) -> Optional[str]:
     return None
 
 
-def parse_entitlement_value(raw: Optional[dict[str, Any]]) -> tuple[Any, bool]:
-    """Parse JSONB value payload into effective Python value."""
+def parse_entitlement_value(
+    raw: Optional[dict[str, Any]], *, entitlement_key: Optional[str] = None
+) -> tuple[Any, bool]:
+    """Parse JSONB value payload into an effective value and unlimited flag.
+
+    For ``max_agents``, integer values at or below zero are the unlimited
+    sentinel. Other integer entitlements keep zero and negative values literal.
+    """
     if not raw:
         return None, False
     value_type = raw.get("type")
     if value_type == "unlimited":
         return None, True
     if value_type == "integer":
-        return raw.get("value"), False
+        value = raw.get("value")
+        if (
+            entitlement_key == "max_agents"
+            and isinstance(value, int)
+            and not isinstance(value, bool)
+            and value <= 0
+        ):
+            return None, True
+        return value, False
     if value_type == "boolean":
         return bool(raw.get("value")), False
     if value_type == "decimal":

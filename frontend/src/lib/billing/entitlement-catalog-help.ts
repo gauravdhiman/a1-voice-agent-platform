@@ -7,9 +7,9 @@ export const ENTITLEMENT_CATALOG_HELP: Record<
   { summary: string; enforcement: string }
 > = {
   max_agents: {
-    summary: "Caps how many voice agents an organization can create.",
+    summary: "Allows unlimited agents unless a positive cap is configured.",
     enforcement:
-      "Hard block on agent creation when the org is at the limit. Existing agents are kept.",
+      "Only a positive value limits creation. Zero, negative, or an absent value means unlimited.",
   },
   max_org_members: {
     summary: "Caps how many users can belong to the organization.",
