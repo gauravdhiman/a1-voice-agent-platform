@@ -93,7 +93,13 @@ export function toPlanCardData(plan: CustomerPlanVersion): PlanCardData {
         plan.entitlement_metadata?.[key]?.display_name ??
         key.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()),
       description: plan.entitlement_metadata?.[key]?.description?.trim() || null,
-      value,
+      value:
+        key === "max_agents" &&
+        value.type === "integer" &&
+        typeof value.value === "number" &&
+        value.value <= 0
+          ? { type: "unlimited" }
+          : value,
     })),
   };
 }

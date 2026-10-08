@@ -224,6 +224,15 @@ Example — two plans, different shapes:
 
 **Default when absent:** Defined per entitlement in catalog (`default_when_absent`: `false`, `0`, `unlimited`, or `deny`).
 
+For `max_agents`, the catalog default is unlimited. A positive integer explicitly
+sets the organization cap; an integer value of zero or less also means unlimited.
+The plan editor saves non-positive agent values as `{ "type": "unlimited" }`.
+Other integer entitlements continue to interpret zero and negative values
+literally. The rollout publishes a new Free version with unlimited agents;
+active Free subscriptions migrate to that version without a Stripe price
+change. Existing sparse paid versions inherit the updated catalog default
+without rewriting their immutable entitlement rows.
+
 ### 5.5 Optional entitlement snapshot (audit & dispute)
 
 Table `organization_subscription_entitlement_snapshots`:

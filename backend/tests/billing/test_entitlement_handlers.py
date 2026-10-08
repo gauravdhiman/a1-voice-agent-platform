@@ -36,6 +36,21 @@ class TestParseEntitlementValue:
         assert effective == 5
         assert is_unlimited is False
 
+    @pytest.mark.parametrize("value", [0, -1])
+    def test_non_positive_max_agents_are_unlimited(self, value):
+        effective, is_unlimited = parse_entitlement_value(
+            {"type": "integer", "value": value}, entitlement_key="max_agents"
+        )
+        assert effective is None
+        assert is_unlimited is True
+
+    def test_non_positive_other_integer_entitlement_stays_literal(self):
+        effective, is_unlimited = parse_entitlement_value(
+            {"type": "integer", "value": 0}, entitlement_key="max_phone_numbers"
+        )
+        assert effective == 0
+        assert is_unlimited is False
+
     def test_boolean(self):
         effective, is_unlimited = parse_entitlement_value(
             {"type": "boolean", "value": True}

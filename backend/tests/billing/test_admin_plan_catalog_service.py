@@ -209,7 +209,9 @@ class TestAdminPlanCatalogService:
     async def test_update_credit_event_rejects_non_system_activity(
         self, catalog_service
     ):
-        with pytest.raises(ValueError, match="must be a supported system pricing event"):
+        with pytest.raises(
+            ValueError, match="must be a supported system pricing event"
+        ):
             await catalog_service.update_credit_event(
                 "api_call_basic", CreditEventAdminUpdate(credit_cost=1)
             )
@@ -552,11 +554,39 @@ class TestAdminPlanCatalogService:
         assert [row["display_order"] for row in inserted_rows] == [0, 1]
 
     @pytest.mark.asyncio
+    async def test_replace_entitlements_normalizes_nonpositive_agent_caps(
+        self, catalog_service, version_id
+    ):
+        """Only non-positive max_agents values are serialized as unlimited."""
+        await catalog_service._replace_entitlements(
+            version_id,
+            [
+                PlanVersionEntitlementInput(
+                    entitlement_key="max_agents",
+                    value={"type": "integer", "value": 0},
+                ),
+                PlanVersionEntitlementInput(
+                    entitlement_key="max_phone_numbers",
+                    value={"type": "integer", "value": 0},
+                ),
+            ],
+        )
+
+        inserted_rows = (
+            catalog_service.supabase.table.return_value.insert.call_args.args[0]
+        )
+        assert inserted_rows[0]["value"] == {"type": "unlimited"}
+        assert inserted_rows[1]["value"] == {"type": "integer", "value": 0}
+
+    @pytest.mark.asyncio
     async def test_reorder_published_version_changes_order_only(
         self, catalog_service, product_id, version_id
     ):
         """Published reordering updates order columns without changing values."""
-        from src.billing.admin_plan_models import PlanVersionDetail, PlanVersionEntitlement
+        from src.billing.admin_plan_models import (
+            PlanVersionDetail,
+            PlanVersionEntitlement,
+        )
 
         first_id = uuid4()
         second_id = uuid4()

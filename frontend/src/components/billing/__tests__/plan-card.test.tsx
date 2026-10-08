@@ -217,5 +217,17 @@ describe("PlanCard", () => {
         "Up to 3,000 call minutes per year (250/month average; 30,000 annual credits)",
       ),
     ).toBeTruthy();
+    });
   });
-});
+
+  it.each([0, -1])(
+    "renders non-positive agent limits as unlimited (%i)",
+    (value) => {
+      const plan = toPlanCardData({
+        ...planWithEntitlementMetadata,
+        entitlements: { max_agents: { type: "integer", value } },
+      });
+
+      expect(plan.entitlements[0].value).toEqual({ type: "unlimited" });
+    },
+  );

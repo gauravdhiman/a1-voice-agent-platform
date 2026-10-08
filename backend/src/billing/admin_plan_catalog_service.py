@@ -374,13 +374,9 @@ class AdminPlanCatalogService:
                 f"Plan version {version_id} is not draft (status={current.status})"
             )
 
-        submitted_fields = data.model_dump(
-            exclude_unset=True, exclude={"entitlements"}
-        )
+        submitted_fields = data.model_dump(exclude_unset=True, exclude={"entitlements"})
         fields: dict[str, Any] = {
-            k: v
-            for k, v in submitted_fields.items()
-            if v is not None
+            k: v for k, v in submitted_fields.items() if v is not None
         }
         # An explicit null clears the optional customer-facing label. Other
         # nullable update fields use null to mean "leave unchanged".
@@ -548,7 +544,17 @@ class AdminPlanCatalogService:
             {
                 "plan_version_id": str(version_id),
                 "entitlement_key": item.entitlement_key,
-                "value": item.value,
+                "value": (
+                    {"type": "unlimited"}
+                    if (
+                        item.entitlement_key == "max_agents"
+                        and item.value.get("type") == "integer"
+                        and isinstance(item.value.get("value"), int)
+                        and not isinstance(item.value.get("value"), bool)
+                        and item.value.get("value") <= 0
+                    )
+                    else item.value
+                ),
                 "display_order": display_order,
             }
             for display_order, item in enumerate(entitlements)

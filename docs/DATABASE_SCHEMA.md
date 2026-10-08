@@ -1315,6 +1315,14 @@ only and do not schedule a renewal.
 
 **Entitlement ordering:** `plan_version_entitlements.display_order` is a zero-based sequence scoped to each plan version. Draft saves replace rows in editor order; published plan administration may update only this column so entitlement membership and values remain immutable. The customer plan API orders rows by this column before building the plan-card response.
 
+**Agent limit semantics:** `max_agents` defaults to unlimited. Only a positive
+integer value enforces an agent cap; zero and negative integer values are
+treated as unlimited. The 20261008000001 migration publishes a new Free plan
+version with unlimited agents while leaving the earlier published version
+immutable. Existing active and trial Free subscriptions migrate to the new
+version immediately without a Stripe price change; sparse paid versions inherit
+the unlimited catalog default.
+
 #### plan_version_entitlements
 
 Stores the sparse entitlement assignments for an immutable plan version. The
@@ -2237,6 +2245,7 @@ erDiagram
 105. `20261001000006` - Add an atomic subscription plan-transition claim and transition-ID-guarded clear RPC so overlapping plan changes cannot erase an interval-reset credit grant signal.
 106. `20261002000001` - Update the `premium_tools` entitlement label and description to identify the included premium integrations.
 107. `20261007000001` - Update the service-role-only credit catalog sync RPC to accept four discounted credit packs and restore the previous three-pack validation on downgrade.
+108. `20261008000001` - Default `max_agents` to unlimited and publish a new Free plan version with unlimited agent creation.
 
 ---
 

@@ -169,7 +169,9 @@ class TestEntitlementServiceResolve:
         _configure_supabase_chain(
             mock_supabase_client,
             {
-                "organization_subscriptions": [_subscription_row(org_id, plan_version_id)],
+                "organization_subscriptions": [
+                    _subscription_row(org_id, plan_version_id)
+                ],
                 "plan_versions": [_plan_version_row(plan_version_id)],
                 "plan_version_entitlements": [
                     _entitlement_row(
@@ -258,7 +260,9 @@ class TestEntitlementServiceResolve:
                     )
                 ],
                 "plan_versions": [
-                    _plan_version_row(free_plan_version_id, product_slug="free", version_number=1),
+                    _plan_version_row(
+                        free_plan_version_id, product_slug="free", version_number=1
+                    ),
                 ],
                 "plan_version_entitlements": [
                     _entitlement_row(
@@ -285,7 +289,8 @@ class TestEntitlementServiceResolve:
 
         assert result.is_entitled is False
         assert result.plan_product_slug == "free"
-        assert result.limits["max_agents"].effective_value == 0
+        assert result.limits["max_agents"].effective_value is None
+        assert result.limits["max_agents"].is_unlimited is True
 
     @pytest.mark.asyncio
     async def test_no_subscription_uses_free_plan(
@@ -301,21 +306,18 @@ class TestEntitlementServiceResolve:
             {
                 "organization_subscriptions": [],
                 "plan_versions": [
-                    _plan_version_row(free_plan_version_id, product_slug="free", version_number=1),
+                    _plan_version_row(
+                        free_plan_version_id, product_slug="free", version_number=1
+                    ),
                 ],
-                "plan_version_entitlements": [
-                    _entitlement_row(
-                        free_plan_version_id,
-                        "max_agents",
-                        {"type": "integer", "value": 0},
-                    )
-                ],
+                "plan_version_entitlements": [],
                 "entitlement_definitions": [
                     _definition_row(
                         "max_agents",
                         EntitlementKind.LIMIT.value,
                         EntitlementValueType.INTEGER.value,
                         "limit.max_count",
+                        default_absent={"type": "unlimited"},
                     )
                 ],
             },
@@ -327,6 +329,8 @@ class TestEntitlementServiceResolve:
 
         assert result.plan_product_slug == "free"
         assert result.is_entitled is False
+        assert result.limits["max_agents"].effective_value is None
+        assert result.limits["max_agents"].is_unlimited is True
 
 
 class TestEntitlementServiceCheckLimit:
@@ -340,7 +344,9 @@ class TestEntitlementServiceCheckLimit:
         _configure_supabase_chain(
             mock_supabase_client,
             {
-                "organization_subscriptions": [_subscription_row(org_id, plan_version_id)],
+                "organization_subscriptions": [
+                    _subscription_row(org_id, plan_version_id)
+                ],
                 "plan_versions": [_plan_version_row(plan_version_id)],
                 "plan_version_entitlements": [
                     _entitlement_row(
@@ -361,7 +367,9 @@ class TestEntitlementServiceCheckLimit:
             },
         )
 
-        result = await entitlement_service.check_limit(org_id, "max_agents", increment=1)
+        result = await entitlement_service.check_limit(
+            org_id, "max_agents", increment=1
+        )
 
         assert result.allowed is True
         assert result.current == 2
@@ -375,7 +383,9 @@ class TestEntitlementServiceCheckLimit:
         _configure_supabase_chain(
             mock_supabase_client,
             {
-                "organization_subscriptions": [_subscription_row(org_id, plan_version_id)],
+                "organization_subscriptions": [
+                    _subscription_row(org_id, plan_version_id)
+                ],
                 "plan_versions": [_plan_version_row(plan_version_id)],
                 "plan_version_entitlements": [
                     _entitlement_row(
@@ -396,7 +406,9 @@ class TestEntitlementServiceCheckLimit:
             },
         )
 
-        result = await entitlement_service.check_limit(org_id, "max_agents", increment=1)
+        result = await entitlement_service.check_limit(
+            org_id, "max_agents", increment=1
+        )
 
         assert result.allowed is False
         assert result.code == "MAX_AGENTS"
@@ -411,10 +423,14 @@ class TestEntitlementServiceCheckLimit:
         _configure_supabase_chain(
             mock_supabase_client,
             {
-                "organization_subscriptions": [_subscription_row(org_id, plan_version_id)],
+                "organization_subscriptions": [
+                    _subscription_row(org_id, plan_version_id)
+                ],
                 "plan_versions": [_plan_version_row(plan_version_id)],
                 "plan_version_entitlements": [
-                    _entitlement_row(plan_version_id, "max_agents", {"type": "unlimited"}),
+                    _entitlement_row(
+                        plan_version_id, "max_agents", {"type": "unlimited"}
+                    ),
                 ],
                 "entitlement_definitions": [
                     _definition_row(
@@ -428,7 +444,9 @@ class TestEntitlementServiceCheckLimit:
             },
         )
 
-        result = await entitlement_service.check_limit(org_id, "max_agents", increment=1)
+        result = await entitlement_service.check_limit(
+            org_id, "max_agents", increment=1
+        )
 
         assert result.allowed is True
         assert result.limit is None
@@ -441,7 +459,9 @@ class TestEntitlementServiceCheckLimit:
         _configure_supabase_chain(
             mock_supabase_client,
             {
-                "organization_subscriptions": [_subscription_row(org_id, plan_version_id)],
+                "organization_subscriptions": [
+                    _subscription_row(org_id, plan_version_id)
+                ],
                 "plan_versions": [_plan_version_row(plan_version_id)],
                 "plan_version_entitlements": [
                     _entitlement_row(
@@ -479,7 +499,9 @@ class TestEntitlementServiceFeatures:
         _configure_supabase_chain(
             mock_supabase_client,
             {
-                "organization_subscriptions": [_subscription_row(org_id, plan_version_id)],
+                "organization_subscriptions": [
+                    _subscription_row(org_id, plan_version_id)
+                ],
                 "plan_versions": [_plan_version_row(plan_version_id)],
                 "plan_version_entitlements": [
                     _entitlement_row(
@@ -510,7 +532,9 @@ class TestEntitlementServiceFeatures:
         _configure_supabase_chain(
             mock_supabase_client,
             {
-                "organization_subscriptions": [_subscription_row(org_id, plan_version_id)],
+                "organization_subscriptions": [
+                    _subscription_row(org_id, plan_version_id)
+                ],
                 "plan_versions": [_plan_version_row(plan_version_id)],
                 "plan_version_entitlements": [],
                 "entitlement_definitions": [

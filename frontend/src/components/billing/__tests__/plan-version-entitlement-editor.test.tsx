@@ -15,7 +15,7 @@ const definitions: EntitlementDefinition[] = [
     unit: "count",
     validation_schema: {},
     enforcement_handler: "limit.max_count",
-    default_when_absent: { type: "integer", value: 0 },
+    default_when_absent: { type: "unlimited" },
     is_active: true,
     description: "Maximum number of agents.",
   },
@@ -46,6 +46,36 @@ const definitions: EntitlementDefinition[] = [
 ];
 
 describe("PlanVersionEntitlementEditor ordering", () => {
+  it("adds max_agents as unlimited when the catalog default is unlimited", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    render(
+      <PlanVersionEntitlementEditor
+        definitions={definitions}
+        assigned={[]}
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.keyDown(
+      screen.getByRole("combobox", { name: "Add entitlement" }),
+      { key: "ArrowDown" },
+    );
+    await user.click(
+      await screen.findByRole("option", { name: "Maximum agents (limit)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(onChange).toHaveBeenCalledWith([
+      { key: "max_agents", unlimited: true },
+    ]);
+  });
+
   it("supports unlimited count limits and serializes them for the API", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
