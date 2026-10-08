@@ -8,11 +8,13 @@
 
 ## Design constraints (locked)
 
-- Metering engine untouched: `ceil(min) × 10 credits/min`, settle order
-  plan → bonus → purchased.
-- Minutes in marketing, credits inside: bundles convert at 10 cr/min.
-- 40 credits equal $1 of purchased-credit value. One extra US local number
-  consumes 80 credits/month ($2 equivalent) from the shared balance.
+- Metering engine untouched: `ceil(min) × configured credits/min`, default
+  10 credits/min; settle order plan → bonus → purchased.
+- Minutes in marketing, credits inside: the catalog examples use the default
+  10 cr/min; Billing's Credits tab derives estimates from the active meter.
+- At the $5/200 entry-pack rate, 40 credits equal $1. Larger packs lower the
+  effective credit price. One extra US local number consumes 80 credits/month
+  (about $2 at the entry-pack rate) from the shared balance.
 - Platform-provided number search and purchase are US-only in v1. Existing
   non-US local rentals retain the legacy 200-credit rate; customer-owned Twilio
   imports remain a separate, non-rental flow. Mobile numbers are not offered
@@ -24,7 +26,7 @@
 ## Proposed catalog (USD)
 
 | Tier | Monthly price | Annual price¹ | Included credits | Up to call minutes² |
-|---|---:|---:|---:|---:|
+| ------- | ------------: | ------------: | ---------------: | ------------------: |
 | Free | $0 | — | 100/month | 10/month |
 | Starter | $49/month | $490/year | 2,500/month | 250/month |
 | Pro | $149/month | $1,490/year | 10,000/month | 1,000/month |
@@ -33,7 +35,7 @@
 ¹ Annual plans charge the price of 10 monthly payments for 12 months of service
 (two months free) and grant 12 times the monthly credits.
 
-² 10 credits/minute, rounded up per connected call; numbers and other paid
+² Default 10 credits/minute, rounded up per connected call; numbers and other paid
 usage reduce the same available credit balance. Minutes are a maximum
 equivalent, not a promise of uninterrupted utilization.
 
@@ -57,7 +59,7 @@ Plan highlights for the published cards:
 Customer-facing plan-card descriptions:
 
 | Tier | Description |
-|---|---|
+| ------- | ------------------------------------------------------------------ |
 | Starter | For solo owners and small shops handling a steady flow of calls. |
 | Pro | For busy teams with higher call volumes and custom branding needs. |
 | Scale | For larger, multi-location teams handling high call volumes. |
@@ -99,7 +101,7 @@ $490 Starter, $1,490 Pro, and $2,990 Scale.
 - [ ] `plan_versions` drafted via Plan Catalog admin, `preview` reviewed
 - [ ] Only Free, Starter, Pro, and Scale are current for signup; retire older public signup versions such as Enterprise without changing existing subscriptions
 - [ ] Migration mode `new_signups_only`; grandfathering note for Trial
-- [ ] Top-up credit products match $5/200, $10/400, and $25/1,000
+- [ ] Top-up credit products match $5/200, $12/500, $23/1,000, and $44/2,000
 - [ ] System pricing shows 10 credits per call minute, 80 credits per extra US local number-month, and preserves the legacy non-US local rate at 200 credits/month
 - [ ] Existing mobile rental rate remains clearly marked legacy; new mobile inventory is disabled pending a vendor cost review
 - [ ] Onboarding + billing pages show minutes-equivalence (Epic C1 done)

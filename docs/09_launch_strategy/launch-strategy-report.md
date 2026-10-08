@@ -18,7 +18,7 @@
 ## 1. TL;DR — What to do and why
 
 | Decision | Recommendation | One-line reason |
-|---|---|---|
+| ------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Launch motion | **Controlled SaaS** (Option C below) | Tiny team can't support open-SaaS abuse + telephony misconfig; pure-custom doesn't scale |
 | Auth | **Good enough for gated launch, not for open signup** | Core flows solid; abuse/MFA/audit gaps make open signup risky |
 | Billing | **Do not publish paid plans yet** | Only `free` (100 credits = ~10 min) is seeded; paid tiers are still hypotheses, no overage/PAYG, async webhook gaps |
@@ -52,7 +52,7 @@ flowchart LR
 Verified from `backend/src`, `shared/`, `voice-ws/src`, `frontend/src`, Alembic migrations.
 
 | Capability | Status | Evidence |
-|---|---|---|
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Agent builder (persona, tone, instructions, presets, templates, clone) | ✅ Ready | `shared/voice_agents/service.py`, `frontend/src/app/(dashboard)/agents/` |
 | SMB skills: dental booking/FAQ/intake/recall, restaurant reservation/menu, HVAC dispatch/triage | ✅ Ready (skills-only, no order-cart/payment tool) | `backend/src/voice_agents/skill_seeds.py` (1651 lines) |
 | Twilio: US search, purchase, assign, release, BYO, transfer, outbound, signed webhooks | ✅ Ready | `backend/src/phone_numbers/service.py`, `voice-ws/src/twilio_session.py` |
@@ -81,7 +81,7 @@ Verified from `backend/src`, `shared/`, `voice-ws/src`, `frontend/src`, Alembic 
 ### 3.2 Gaps that block OPEN SaaS (but not gated launch)
 
 | Gap | Risk if open signup | Effort | Required for |
-|---|---|---|---|
+| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------ | ------------------- |
 | No CAPTCHA / Turnstile, no lockout/backoff, `check-email` enables enumeration | Bot signups, credential stuffing, Twilio/Stripe abuse | S (1–2 days) | Open SaaS |
 | Password reset is frontend-only (`resetPasswordForEmail`), weaker Zod `min(8)` vs backend regex, no backend rate-limit/audit | Account takeover support load | S | Open SaaS |
 | No MFA / TOTP / passkey, no session allowlist/revoke beyond Supabase `sign_out` | SMBs handling patient/client data will ask; no enterprise SSO either | M | Growth, not day one |
@@ -119,12 +119,12 @@ sequenceDiagram
 ## 4. Billing / Stripe audit — why paid self-serve isn't ready
 
 | Fact (code-grounded) | Implication |
-|---|---|
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Only `free` v1 seeded: `max_agents=1`, `max_members=1`, 100 credits/mo recurring, `billing_mode=free` (`20260808000011`) | Every new org gets ~10 min/mo. Enough for trial, not for production. |
 | Paid tiers ($49/2000cr, $149/8000cr, $399/25000cr @ 10cr/min) exist only in `master_data_launch_strategy.md` + `definitions.py` (`seedable=False, requires_review=True`) | Publishing them = manual Stripe Product/Price creation + admin publish + margin review. Not a flag flip. |
 | Metering: `ceil(sec/60, min 1) × 10cr/min`; settle order plan → admin bonus → purchased; admitted calls may go negative, next call blocked | Correct for pilots; no partial-credit proration on upgrades, no overage/PAYG (removed in `20260807000004`), no annual, no tax/invoice-download, manual refunds only |
 | Paid activation is async: browser return ≠ paid; must wait `customer.subscription.created + invoice.payment_succeeded` webhooks | Abandoned checkout leaves old plan; retryable but no auto-recovery UI beyond `payment=cancelled/failed` alert |
-| System pricing: voice calls 10 credits/minute, additional US local 80 credits/month, toll-free 120 credits/month, and existing legacy non-US local/mobile 200 credits/month; top-ups 200/$5, 400/$10, and 1,000/$25 are code-owned in `credit_catalog.py` and synced by the Stripe manager | Customer-facing phone rental and credit-pack terms must match the current pilot catalog; see the [plan publish spec](06-plan-publish-spec.md) |
+| System pricing: voice calls 10 credits/minute, additional US local 80 credits/month, toll-free 120 credits/month, and existing legacy non-US local/mobile 200 credits/month; top-ups 200/$5, 500/$12, 1,000/$23, and 2,000/$44 are code-owned in `credit_catalog.py` and synced by the Stripe manager | Customer-facing phone rental and credit-pack terms must match the current pilot catalog; see the [plan publish spec](06-plan-publish-spec.md)                       |
 | E2E billing is mocked; cloud Stripe + staging PSTN gate still required | Don't declare "billing done" from green CI |
 
 ```mermaid
@@ -151,7 +151,7 @@ All figures from vendor pages + independent breakdowns verified July–Sep 2026.
 ### 5.1 Developer / platform layer (you compete here on cost, win on simplicity)
 
 | Platform | Model (2026) | Headline | Realistic all-in | Catch |
-|---|---|---|---|---|
+| --------------------- | ---------------------------------------------------------------------------------------------- | --------------- | --------------------------- | -------------------------------------------------------------- |
 | **Vapi** | $0.05/min orchestration + STT/LLM/TTS/tele passes at cost; HIPAA +$2k/mo | $0.05/min | **$0.10–$0.30/min** | Cheapest floor, but you assemble + tune the stack |
 | **Retell AI** | Component bundles; 20 concurrent free | $0.07/min | **$0.13–$0.31/min** | Transparent, dev-friendly; premium voice pushes top end |
 | **Bland AI** | Bundled LLM/STT/TTS, telephony separate; Start $0/$0.14, Build $299/$0.12, Scale $499/$0.11 | $0.14/min | **$0.12–$0.16 + telephony** | Break-even on Build ≈ 14,950 min/mo; Start cheapest under that |
@@ -161,7 +161,7 @@ All figures from vendor pages + independent breakdowns verified July–Sep 2026.
 ### 5.2 SMB-finished layer (you position here — outcome, not components)
 
 | Product | Model (2026) | Entry | How they charge | Lesson for 24x7 AI |
-|---|---|---|---|---|
+| ---------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------ |
 | **Goodcall** | Bundled unlimited minutes; cap on unique callers + flows | **$79/mo** (100 callers, 1 flow) / $129 (250, 3 flows) / $249 (500) + $0.50/caller overage | Per-caller, not per-min | SMBs love "unlimited minutes"; hate caller-cap gotcha at busy weeks |
 | **Smith.ai AI Receptionist** | Per-call, human backup, month-to-month | **Free** 25 calls → **$150/mo** 75 calls ($2.00/call) → **$500/mo** 300 calls ($1.67/call) | Per-call | Proves SMBs pay **$1.67–$3.00 per handled call** when qualification + human fallback is included |
 | **Rosie (home services)** | Flat-rate | $49 / $149 / $299 | Flat | Cheapest flat anchor; bilingual included |
@@ -170,7 +170,7 @@ All figures from vendor pages + independent breakdowns verified July–Sep 2026.
 ### 5.3 Your COGS (so pricing holds margin)
 
 | Layer | US benchmark | Your stack |
-|---|---|---|
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | --------------------------------------------------------------------------------------------- |
 | Telephony (Twilio local inbound $0.0085/min, outbound $0.014/min, number $1.15/mo local / $2.15 toll-free, Media Streams $0.0044/min, recording $0.0025/min) | ~$0.015–0.025/min + $1–2/number | Same (you pass through Twilio) |
 | STT+LLM+TTS (Gemini 2.5 Flash $0.30/$2.50 per 1M; realtime audio tokens dominate) | ~$0.04–0.09/min tuned | Pipecat + Gemini Realtime — measure per-agent; assume **$0.06–0.10/min** until you meter live |
 | **All-in COGS target** | — | **$0.08–0.12/min** typical SMB call (3–4 min, standard voice, lean prompt) |
@@ -196,7 +196,7 @@ Don't fight Vapi/Retell on "lowest $/min for developers." Don't fight Smith.ai o
 **Win on: "Missed-call recovery for single-location US SMBs, live in 48h, with booking actually working."**
 
 | Segment (start here) | Pain | Your wedge |
-|---|---|---|
+| ---------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | **Dental (1–3 chairs, Peoria-style)** | 30–50% after-hours missed; no-show 15% | Appointment receptionist + Google Calendar double-book guard + SMS confirm (you already seed this) |
 | **HVAC / trades (dispatch)** | After-hours emergency triage, recall | Diagnosis-triage + escalation + transfer-after-hours (on `codex/human-call-transfer`) |
 | **Restaurant (reservations + takeout intent)** | Weekend rush, no-shows | Reservation skill + special-request handoff; do NOT promise cart/payment yet — skills-only today |
@@ -229,7 +229,7 @@ Keep `credits` internally (you already meter 10cr/min) but **sell minutes + outc
 ### 7.2 Paid tiers (monthly, USD, local numbers included as noted)
 
 | Tier | Price | Minutes incl. | Effective | Overage | Numbers | Best for |
-|---|---|---|---|---|---|---|
+| ----------- | ------------------------- | ------------------------------- | --------- | --------- | ---------------------------- | ---------------------------------------------------- |
 | **Starter** | **$79/mo** ($63 annual) | **400 min** (~100–130 calls) | $0.20/min | $0.19/min | 1 local incl. (+$5/extra) | Solo dental / salon / contractor missing after-hours |
 | **Growth** | **$179/mo** ($143 annual) | **1,200 min** (~300–400 calls) | $0.15/min | $0.15/min | 2 local incl. | Steady HVAC / multi-chair dental |
 | **Scale** | **$399/mo** ($319 annual) | **3,200 min** (~800–1000 calls) | $0.12/min | $0.12/min | 3 local incl., toll-free +$8 | Multi-location / high inbound |
@@ -324,7 +324,7 @@ gantt
 ## 10. Risks if you ignore this and open SaaS now
 
 | Risk | Likelihood | Impact | Mitigation in controlled plan |
-|---|---|---|---|
+| -------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------ |
 | Bot signup → Twilio toll fraud / Gemini burn | High (no CAPTCHA, enumeration) | $$ + number blacklisting | Turnstile + manual approve + 1-concurrent trial |
 | SMB misconfigures calendar/timezone → missed bookings → "AI doesn't work" review | High (calendar OAuth + tz edge cases) | Churn + bad G2 | You configure first 25; template the rest |
 | Async webhook confusion ("I paid, still free") | Medium | Support tickets, chargebacks | Manual links + status polling + recovery UI before self-serve |
@@ -367,4 +367,4 @@ gantt
 
 ---
 
-*Next step if you approve: I can draft the exact Trial/Starter/Growth/Scale `plan_versions` + Stripe mapping + onboarding copy as a follow-up change (code + docs), capped to gated launch — no open checkout until pilots validate COGS.*
+_Next step if you approve: I can draft the exact Trial/Starter/Growth/Scale `plan_versions` + Stripe mapping + onboarding copy as a follow-up change (code + docs), capped to gated launch — no open checkout until pilots validate COGS._

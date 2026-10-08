@@ -1,21 +1,23 @@
 """Helper functions for E2E test context setup."""
+
+import json
 import re
-import pytest
+
 from playwright.sync_api import Page, expect
 
 
 def signin_user(page: Page, base_url: str, wait_for_dashboard: bool = True):
     """Helper to sign in with test credentials.
-    
+
     This function handles the standard sign-in flow used across multiple tests,
     ensuring consistent authentication behavior and reducing code duplication.
-    
+
     Args:
         page: Playwright Page instance to perform sign-in on
         base_url: Base URL of the application (e.g., http://localhost:3001)
-        wait_for_dashboard: Whether to wait for Dashboard heading after sign-in (default: True)
+        wait_for_dashboard: Wait for Dashboard after sign-in (default: True).
             Set to False for tests that test the sign-in flow itself
-    
+
     Example:
         ```python
         signin_user(page, base_url)
@@ -23,24 +25,24 @@ def signin_user(page: Page, base_url: str, wait_for_dashboard: bool = True):
         ```
     """
     page.goto(f"{base_url}/auth/signin")
-    page.fill('input#email', "test@gmail.com")
-    page.fill('input#password', "Password123!")
+    page.fill("input#email", "test@gmail.com")
+    page.fill("input#password", "Password123!")
     page.click('button[type="submit"]')
-    
+
     if wait_for_dashboard:
         expect(page).to_have_url(re.compile(r".*/dashboard(?:\?.*)?$"), timeout=10000)
 
 
 def setup_billing_context(page, total_credits: int = 1250):
     """Setup billing context for tests requiring credit balance verification.
-    
+
     This function mocks the billing balance API to return a specific credit balance,
     ensuring that billing-related UI components are properly hydrated during tests.
-    
+
     Args:
         page: Playwright Page instance to apply mocks to
         total_credits: Total number of credits to mock (default: 1250)
-    
+
     Example:
         ```python
         setup_billing_context(page, total_credits=1250)
@@ -49,38 +51,43 @@ def setup_billing_context(page, total_credits: int = 1250):
     subscription_credits = max(1000, int(total_credits * 0.8))
     purchased_credits = max(250, total_credits - subscription_credits)
     expiring_soon = max(100, int(total_credits * 0.08))
-    
-    page.route(re.compile(r".*/api/v1/billing/balance"), lambda route: route.fulfill(
-        status=200,
-        content_type="application/json",
-        body=f'''{{
+
+    page.route(
+        re.compile(r".*/api/v1/billing/balance"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=f"""{{
             "total_credits": {total_credits},
             "subscription_credits": {subscription_credits},
             "purchased_credits": {purchased_credits},
             "expiring_soon": {expiring_soon},
             "expires_at": null
-        }}'''
-    ))
+        }}""",
+        ),
+    )
 
 
 def setup_billing_plans_context(page):
     """Setup billing plans context for tests requiring plan display verification.
-    
+
     This function mocks the billing plans API to return sample subscription plans,
     ensuring that plan selection UI components are properly hydrated during tests.
-    
+
     Args:
         page: Playwright Page instance to apply mocks to
-    
+
     Example:
         ```python
         setup_billing_plans_context(page)
         ```
     """
-    page.route(re.compile(r".*/api/v1/billing/plans.*"), lambda route: route.fulfill(
-        status=200,
-        content_type="application/json",
-        body='''[
+    page.route(
+        re.compile(r".*/api/v1/billing/plans.*"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body="""[
             {
                 "id": "plan-pro",
                 "name": "Professional Plan",
@@ -101,30 +108,90 @@ def setup_billing_plans_context(page):
                 "created_at": "2026-01-21T00:00:00Z",
                 "updated_at": "2026-01-21T00:00:00Z"
             }
-        ]'''
-    ))
+        ]""",
+        ),
+    )
+    page.route(
+        re.compile(r".*/api/v1/billing/plans/available.*"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                [
+                    {
+                        "id": "version-pro-month",
+                        "plan_product_id": "product-pro",
+                        "tier_rank": 20,
+                        "product_slug": "pro",
+                        "product_name": "Pro",
+                        "product_description": "For teams with steady call demand.",
+                        "version_number": 1,
+                        "display_label": "Pro",
+                        "billing_mode": "paid",
+                        "credit_grant_policy": "recurring",
+                        "price_amount_cents": 7900,
+                        "currency": "USD",
+                        "billing_interval": "monthly",
+                        "trial_period_days": None,
+                        "stripe_price_id": "price_test_pro",
+                        "entitlements": {
+                            "max_agents": {"type": "integer", "value": 5},
+                            "included_credits_per_billing_period": {
+                                "type": "integer",
+                                "value": 10000,
+                            },
+                        },
+                    }
+                ]
+            ),
+        ),
+    )
 
 
-def setup_credit_products_context(page, organization_id: str = "test-org-id"):
+def setup_credit_products_context(
+    page, organization_id: str = "test-org-id", voice_credit_cost: int = 10
+):
     """Setup credit products context for tests requiring credit purchase options.
-    
+
     This function mocks the credit products API to return sample credit packages,
     ensuring that credit purchase UI components are properly hydrated during tests.
-    
+
     Args:
         page: Playwright Page instance to apply mocks to
-    
+
     Example:
         ```python
         setup_credit_products_context(page)
         ```
     """
     page.route(
+        re.compile(r".*/api/v1/billing/credit-events.*"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                [
+                    {
+                        "id": "voice-rate-test",
+                        "name": "voice_call_minute",
+                        "description": "Per connected call minute, rounded up",
+                        "credit_cost": voice_credit_cost,
+                        "category": "voice",
+                        "is_active": True,
+                        "metadata": None,
+                        "created_at": "2026-10-07T00:00:00Z",
+                        "updated_at": "2026-10-07T00:00:00Z",
+                    }
+                ]
+            ),
+        ),
+    )
+    page.route(
         re.compile(r".*/api/v1/billing/entitlements/.*"),
         lambda route: route.fulfill(
             status=200,
             content_type="application/json",
-            body=f'''{{
+            body=f"""{{
                 "organization_id": "{organization_id}",
                 "plan_version_id": "test-plan-version",
                 "plan_product_slug": "pro",
@@ -146,13 +213,15 @@ def setup_credit_products_context(page, organization_id: str = "test-org-id"):
                     }}
                 }},
                 "migration": null
-            }}''',
+            }}""",
         ),
     )
-    page.route(re.compile(r".*/api/v1/billing/credit-products.*"), lambda route: route.fulfill(
-        status=200,
-        content_type="application/json",
-        body='''[
+    page.route(
+        re.compile(r".*/api/v1/billing/credit-products.*"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body="""[
             {
                 "name": "200 Credits Pack",
                 "description": "200 credits for small usage",
@@ -167,15 +236,15 @@ def setup_credit_products_context(page, organization_id: str = "test-org-id"):
                 "updated_at": "2026-10-02T00:00:00Z"
             },
             {
-                "name": "400 Credits Pack",
-                "description": "400 credits for regular usage",
-                "stripe_price_id": "price_test_400_credits",
-                "stripe_product_id": "prod_test_400_credits",
-                "credit_amount": 400,
-                "price_amount": 1000,
+                "name": "500 Credits Pack",
+                "description": "500 credits for regular usage",
+                "stripe_price_id": "price_test_500_credits",
+                "stripe_product_id": "prod_test_500_credits",
+                "credit_amount": 500,
+                "price_amount": 1200,
                 "currency": "USD",
                 "is_active": true,
-                "id": "40000000-0000-0000-0000-000000000001",
+                "id": "50000000-0000-0000-0000-000000000001",
                 "created_at": "2026-10-02T00:00:00Z",
                 "updated_at": "2026-10-02T00:00:00Z"
             },
@@ -185,12 +254,26 @@ def setup_credit_products_context(page, organization_id: str = "test-org-id"):
                 "stripe_price_id": "price_test_1000_credits",
                 "stripe_product_id": "prod_test_1000_credits",
                 "credit_amount": 1000,
-                "price_amount": 2500,
+                "price_amount": 2300,
                 "currency": "USD",
                 "is_active": true,
                 "id": "10000000-0000-0000-0000-000000000001",
                 "created_at": "2026-10-02T00:00:00Z",
                 "updated_at": "2026-10-02T00:00:00Z"
+            },
+            {
+                "name": "2000 Credits Pack",
+                "description": "2000 credits for sustained usage",
+                "stripe_price_id": "price_test_2000_credits",
+                "stripe_product_id": "prod_test_2000_credits",
+                "credit_amount": 2000,
+                "price_amount": 4400,
+                "currency": "USD",
+                "is_active": true,
+                "id": "20000000-0000-0000-0000-000000000002",
+                "created_at": "2026-10-02T00:00:00Z",
+                "updated_at": "2026-10-02T00:00:00Z"
             }
-        ]'''
-    ))
+        ]""",
+        ),
+    )

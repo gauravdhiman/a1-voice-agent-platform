@@ -94,8 +94,9 @@ python scripts/stripe_manager.py setup-credits
 This creates standardized credit products:
 
 - 200 Credits Pack ($5.00)
-- 400 Credits Pack ($10.00)
-- 1000 Credits Pack ($25.00)
+- 500 Credits Pack ($12.00)
+- 1000 Credits Pack ($23.00)
+- 2000 Credits Pack ($44.00)
 
 ### 3. Clean Up Old Products
 
@@ -115,7 +116,7 @@ This specifically targets old "All Credit Packages" products for deactivation.
 # Preview the approved credit-pack sync (recommended first)
 python scripts/stripe_manager.py seed --dry-run
 
-# Sync only the three approved credit packs to the database
+# Sync only the four approved credit packs to the database
 python scripts/stripe_manager.py seed
 ```
 
@@ -128,7 +129,7 @@ rows.
 The seed command:
 
 - Uses pagination to inspect Stripe prices
-- Syncs only the three approved credit products by default
+- Syncs only the four approved credit products by default
 - Parses and imports legacy subscriptions only when explicitly requested
 - Reports uncategorized items for manual review
 
@@ -137,6 +138,40 @@ head first, then syncs approved credit packs. It does not import legacy Stripe
 plans or publish paid plan versions; those remain an authenticated Plan Catalog
 task. See [staging_environment.md](./staging_environment.md) for the separate
 pre-migration legacy backfill sequence.
+
+#### Four-pack catalog rollout
+
+Use the exact release artifact and the intended environment's Stripe account.
+Test and Live objects have different identifiers; reconcile each account
+separately. Shared staging and production writes require release approval.
+
+1. Run the read-only migration compatibility check, then apply the reviewed
+   migration through the normal release procedure. Revision `20261007000001`
+   must be installed before the four-pack `seed`; the old RPC rejects four
+   packs, and an old three-pack CLI is incompatible with the new RPC.
+2. From `backend/`, preview `python scripts/stripe_manager.py setup-credits --dry-run`,
+   review 200/$5, 500/$12, 1,000/$23, and 2,000/$44, then run the same command
+   without `--dry-run`. Reconciliation reuses matching products and prices or
+   creates new one-time USD prices; it does not retire previous Stripe prices.
+3. Preview `python scripts/stripe_manager.py seed --dry-run` and confirm all
+   four matching prices exist in the selected account. Then run
+   `python scripts/stripe_manager.py seed`. This switches the database's active
+   catalog atomically; an incomplete or invalid payload leaves it unchanged.
+4. Verify that Billing shows exactly four packs and 4%/8%/12% savings on larger
+   packs. At the default 10-credit meter, minute estimates are 20/50/100/200;
+   estimates derive from the current active `voice_call_minute` event. Missing
+   pricing shows credits only, and zero-cost pricing shows included calls
+   without a finite minute estimate. Verify payment completion through the
+   selected account's webhook and check one credit grant even after repeated
+   delivery.
+
+Migration alone preserves the existing active catalog. Sync deactivates old
+database offers and does not delete products, purchased balances, or ledger
+entries. Keep prior Stripe prices available for already-created checkout
+sessions. Historical purchases retain their recorded amounts; the new rates
+apply to newly selected packs. Downgrade restores only the old RPC contract,
+not old catalog rows or prices, so any rollback needs a reviewed matching
+catalog sync rather than an automatic database downgrade.
 
 ### 5. View Metadata Setup Instructions
 
@@ -195,7 +230,7 @@ This displays detailed instructions for manually adding metadata to your Stripe 
 If you were using old individual scripts, here's the mapping:
 
 | Old Script                                                                 | New Command                                                 |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `python scripts/stripe_diagnostic.py`                                      | `python scripts/stripe_manager.py diagnostic`               |
 | `python scripts/cleanup_old_stripe_products.py --dry-run`                  | `python scripts/stripe_manager.py cleanup --dry-run`        |
 | `python scripts/setup_stripe_credit_products.py --setup-credits --dry-run` | `python scripts/stripe_manager.py setup-credits --dry-run`  |

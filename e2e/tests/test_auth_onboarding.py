@@ -20,7 +20,7 @@ def test_full_onboarding_journey(page: Page, base_url: str, step):
         6. Fill organization form with valid data (name, slug)
         7. Submit organization creation form
         8. Verify redirection to dashboard after successful creation
-        9. Verify Dashboard heading is visible
+        9. Verify the selected organization's workspace heading is visible
 
     Mocks Required:
         - /api/v1/organizations (initial: empty list, after creation: returns new org)
@@ -31,7 +31,7 @@ def test_full_onboarding_journey(page: Page, base_url: str, step):
         - Organization form displays correctly
         - Upon submission, organization is created successfully
         - User is redirected to /dashboard after creation
-        - Dashboard heading "Dashboard" is visible
+        - Workspace heading "Test Organization" is visible
 
     Dependencies:
         - User must have platform_admin role (mocked)
@@ -84,7 +84,10 @@ def test_full_onboarding_journey(page: Page, base_url: str, step):
     page.wait_for_timeout(3000)  # Give time for async operations
     step("Verify final redirection to Dashboard")
     expect(page).to_have_url(re.compile(r".*/dashboard"), timeout=15000)
-    expect(page.get_by_role("heading", name=re.compile(r"Dashboard", re.I))).to_be_visible(timeout=10000)
+    expect(
+        page.get_by_role("heading", name="Test Organization", exact=True)
+    ).to_be_visible(timeout=10000)
+    expect(page.get_by_text("Workspace overview", exact=True)).to_be_visible()
 
 def test_signin_validation_journey(page: Page, base_url: str, step):
     """
@@ -129,4 +132,3 @@ def test_signin_validation_journey(page: Page, base_url: str, step):
 
     step("Verify error alert is shown")
     expect(page.get_by_text(re.compile(r"invalid|failed|error|credentials|Incorrect|wrong", re.I)).first).to_be_visible()
-

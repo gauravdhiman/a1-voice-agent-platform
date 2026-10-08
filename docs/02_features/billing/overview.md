@@ -114,18 +114,19 @@ graph TB
 Plans define pricing and included resources. Each **plan product** can have
 multiple **immutable versions**. New signups receive the current published
 version; existing subscribers remain on their current version until they
-migrate (see [Plan Versioning](../03_implementation/plan_entitlements_and_limits.md)).
+migrate (see [Plan Versioning](../../03_implementation/plan_entitlements_and_limits.md)).
 The following is the approved pilot catalog to configure in the Plan Catalog;
 it is not a claim that live Stripe prices have already been created.
 
 | Plan | Monthly | Annual (12 months) | Included credits | Up to call minutes¹ | Highlights |
-|---|---:|---:|---:|---:|---|
+| ----------- | ---------: | -----------------: | ---------------: | ------------------: | ------------------------------------------------------------------------------------------------------------ |
 | **Free** | $0 | — | 100/month | 10/month | 1 agent, 1 member, standard voice profile; no platform-number purchase allowance |
 | **Starter** | $49/month | $490/year | 2,500/month | 250/month | Embed widget, credit top-ups, 1 US local number on request; extra US local numbers use 80 credits/month each |
 | **Pro** | $149/month | $1,490/year | 10,000/month | 1,000/month | Starter features plus custom branding |
 | **Scale** | $299/month | $2,990/year | 21,000/month | 2,100/month | Pro features plus premium tools; publish the exact tool list during launch review |
 
-¹ Calls consume 10 credits per connected minute, rounded up per call. The
+¹ At the default meter, calls consume 10 credits per connected minute,
+rounded up per call. The
 minutes shown are the maximum equivalent when all included credits go to calls;
 other paid usage, including extra numbers, uses the same balance. Each annual
 plan charges the price of 10 monthly payments for 12 months of service and
@@ -135,8 +136,21 @@ platform rental charge. A mobile-carrier number cannot connect directly; it can
 forward calls to a connected number, subject to the carrier's charges. If the
 customer keeps the included line after paid access ends, it converts to the
 80-credit rental on its next renewal date; the cancellation dialog discloses
-this. One-time credit top-ups are $5/200, $10/400, and $25/1,000 credits, equal
-to up to 20, 40, and 100 additional call minutes respectively.
+this. One-time credit top-ups are $5/200, $12/500, $23/1,000, and $44/2,000
+credits, equal to up to 20, 50, 100, and 200 additional call minutes
+respectively at the default meter. At the default 10 credits per connected
+call minute, the effective rate steps down from $0.25 to $0.24, $0.23, and
+$0.22 per minute. The larger packs save
+4%, 8%, and 12% respectively against the entry pack. These estimates assume
+all credits go to calls; phone-number rentals use the same credit balance.
+The Credits tab derives estimates from the current active `voice_call_minute`
+event, so an administrator's rate change changes the displayed minute counts
+and per-minute prices. Missing, inactive, or invalid pricing shows credits-only
+details; a zero-cost meter shows calls as included without a finite minute
+estimate. Neither fallback blocks otherwise permitted credit top-ups.
+Existing purchased credits retain their balance and do not expire when the
+catalog changes. See the [credit catalog rollout procedure](../../05_operations/stripe_management.md#four-pack-catalog-rollout)
+for migration and Stripe synchronization order.
 
 One standard voice profile is included. Optional voice profiles may require
 the customer to connect a provider account, with any provider charges billed
@@ -218,7 +232,8 @@ it twice.
 
 **Credit Consumption**:
 
-- Connected voice calls: 10 credits per whole connected minute, rounded up per call.
+- Connected voice calls: the configured active `voice_call_minute` rate per whole
+  connected minute, rounded up per call; the default is 10 credits.
 - Additional US local platform numbers: 80 credits per rental month.
 - Toll-free platform numbers: 120 credits per rental month.
 - Existing legacy non-US local and mobile rentals: 200 credits per rental month.
@@ -386,7 +401,7 @@ sequenceDiagram
 ### Credit Pricing
 
 | Meter | Default credit cost | Billing basis |
-| --- | ---: | --- |
+| -------------------------------------------- | ------------------: | ----------------------------------------------- |
 | Voice calls | 10 credits | Per whole connected minute, rounded up per call |
 | Additional US local phone numbers | 80 credits | Per rental month |
 | Toll-free phone numbers | 120 credits | Per rental month |

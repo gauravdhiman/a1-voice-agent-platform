@@ -1,3 +1,4 @@
+import json
 import re
 from playwright.sync_api import Page, expect
 from helpers import signin_user
@@ -64,7 +65,7 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
     test_agent_id = "00000000-0000-0000-0000-000000000002"
 
     # Track "connected" state in the test scope
-    state = {"is_connected": False}
+    state = {"is_connected": False, "unselected_functions": []}
 
     # 1. Setup Stateful Mocks
     step("Setup: Configure stateful mocks for tool connection")
@@ -76,12 +77,35 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
         body=f'[{{"id": "{test_org_id}", "name": "Mock Org", "slug": "mock-org"}}]'
     ))
 
-    # Mock organization-visible tools (required for tool selection)
-    page.route(re.compile(f".*/api/v1/organizations/{test_org_id}/tools.*"), lambda route: route.fulfill(
-        status=200,
-        content_type="application/json",
-        body=f'[{{"id": "gmail-tool-id", "name": "Gmail", "description": "Send and read emails", "is_active": true, "requires_auth": true, "auth_type": "oauth2", "tool_functions_schema": {{"functions": [{{"name": "send_email", "description": "Send an email", "parameters": {{"type": "object", "properties": {{}}}}}}]}}}}]'
-    ))
+    # The agent tools page consumes the platform-visible catalog.
+    page.route(
+        re.compile(r".*/api/v1/tools/platform(?:\?.*)?$"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                [
+                    {
+                        "id": "gmail-tool-id",
+                        "name": "Gmail",
+                        "description": "Send and read emails",
+                        "is_active": True,
+                        "requires_auth": True,
+                        "auth_type": "oauth2",
+                        "tool_functions_schema": {
+                            "functions": [
+                                {
+                                    "name": "send_email",
+                                    "description": "Send an email",
+                                    "parameters": {"type": "object", "properties": {}},
+                                }
+                            ]
+                        },
+                    }
+                ]
+            ),
+        ),
+    )
 
     # Mock Agent detail
     page.route(re.compile(f".*/api/v1/agents/{test_agent_id}"), lambda route: route.fulfill(
@@ -93,20 +117,23 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
     # Stateful GET Agent Tools
     def handle_get_agent_tools(route):
         if state["is_connected"]:
+            unselected = state["unselected_functions"]
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body=f'''[
-                    {{
-                        "id": "mapping-id",
-                        "agent_id": "{test_agent_id}",
-                        "tool_id": "gmail-tool-id",
-                        "is_enabled": true,
-                        "auth_status": "not_authenticated",
-                        "connection_status": "connected_no_auth",
-                        "unselected_functions": []
-                    }}
-                ]'''
+                body=json.dumps(
+                    [
+                        {
+                            "id": "mapping-id",
+                            "agent_id": test_agent_id,
+                            "tool_id": "gmail-tool-id",
+                            "is_enabled": True,
+                            "auth_status": "not_authenticated",
+                            "connection_status": "connected_no_auth",
+                            "unselected_functions": unselected,
+                        }
+                    ]
+                ),
             )
         else:
             route.fulfill(status=200, content_type="application/json", body="[]")
@@ -115,7 +142,26 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
     # Mock POST Connect
     def handle_post_connect(route):
         state["is_connected"] = True
-        route.fulfill(status=201, content_type="application/json", body='{"success": true}')
+        assert route.request.post_data_json == {
+            "agent_id": test_agent_id,
+            "tool_id": "gmail-tool-id",
+            "is_enabled": True,
+        }
+        route.fulfill(
+            status=201,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "id": "mapping-id",
+                    "agent_id": test_agent_id,
+                    "tool_id": "gmail-tool-id",
+                    "is_enabled": True,
+                    "auth_status": "not_authenticated",
+                    "connection_status": "connected_no_auth",
+                    "unselected_functions": [],
+                }
+            ),
+        )
     page.route(re.compile(r".*/api/v1/tools/agent$"), handle_post_connect, times=1)
 
     # Mock PUT Toggle
@@ -124,10 +170,24 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
         if route.request.method == "GET":
             handle_get_agent_tools(route)
             return
+        assert route.request.method == "PUT"
+        state["unselected_functions"] = route.request.post_data_json[
+            "unselected_functions"
+        ]
         route.fulfill(
             status=200,
             content_type="application/json",
-            body='{"success": true}',
+            body=json.dumps(
+                {
+                    "id": "mapping-id",
+                    "agent_id": test_agent_id,
+                    "tool_id": "gmail-tool-id",
+                    "is_enabled": True,
+                    "auth_status": "not_authenticated",
+                    "connection_status": "connected_no_auth",
+                    "unselected_functions": state["unselected_functions"],
+                }
+            ),
         )
 
     page.route(re.compile(r".*/api/v1/tools/agent/.*"), handle_agent_tool_mutation)
@@ -160,35 +220,17 @@ def test_full_agent_and_tool_journey(page: Page, base_url: str, step):
     page.get_by_role("button", name="Connect", exact=True).click()
 
     step("Wait for Tool Configuration drawer to open")
-    # Drawer may show Available Functions or Tool Configuration or Gmail detail; verify drawer opened
-    drawer_opened = False
-    try:
-        expect(page.get_by_text("Available Functions")).to_be_visible(timeout=8000)
-        drawer_opened = True
-    except Exception:
-        pass
-    if not drawer_opened:
-        try:
-            expect(page.get_by_text(re.compile(r"Tool Configuration|Gmail", re.I)).first).to_be_visible(timeout=8000)
-            drawer_opened = True
-        except Exception:
-            pass
-    if not drawer_opened:
-        # Drawer content may vary with auth state; verify Gmail card still present (basic coverage)
-        expect(page.get_by_text("Gmail").first).to_be_visible(timeout=5000)
-    else:
-        # Only test function toggle if drawer actually showed functions
-        try:
-            expect(page.get_by_text("send_email")).to_be_visible(timeout=3000)
-        except Exception:
-            pass
-        try:
-            toggle = page.locator('button[role="switch"]').first
-            if toggle.count() > 0 and toggle.is_visible():
-                toggle.click()
-                expect(toggle).to_be_visible(timeout=3000)
-        except Exception:
-            pass
+    drawer = page.get_by_role("dialog")
+    expect(drawer.get_by_text("Available Functions", exact=True)).to_be_visible()
+    expect(drawer.get_by_text("send_email", exact=True)).to_be_visible()
+    toggle = drawer.get_by_role("switch", name="Disable send_email", exact=True)
+    expect(toggle).to_be_checked()
+    toggle.click()
+    expect(
+        drawer.get_by_role("switch", name="Enable send_email", exact=True)
+    ).not_to_be_checked()
+    assert state["is_connected"] is True
+    assert state["unselected_functions"] == ["send_email"]
     step("Verification Complete: Tool journey verified with stateful mocks")
 
 def test_agent_properties_update(page: Page, base_url: str, step):
@@ -254,7 +296,8 @@ def test_agent_properties_update(page: Page, base_url: str, step):
     page.goto(f"{base_url}/agents/{agent_id}")
     page.wait_for_load_state("networkidle")
 
-    step("Update agent instructions markdown")
+    step("Open the instructions editor and update the markdown")
+    page.get_by_role("button", name="Edit instructions", exact=True).click()
     page.fill('textarea#instructions_markdown', "# Support Agent\n\nAlways verify user identity before making changes.")
 
     # Mock the PUT update response
@@ -385,13 +428,13 @@ Always verify customer identity before accessing accounts. Escalate billing issu
 
     step("Go to agent detail page")
     page.goto(f"{base_url}/agents/{agent_id}")
-    
+
     # Wait for agent page to fully load
     page.wait_for_load_state("networkidle")
-    
+
     step("Wait for agent page to load and verify markdown editor")
 
-    # Wait for the markdown editor to be fully loaded
+    page.get_by_role("button", name="Edit instructions", exact=True).click()
     expect(page.locator("textarea#instructions_markdown")).to_be_visible(timeout=10000)
 
     step("Click 'Preview System Prompt' button to expand")
@@ -404,14 +447,17 @@ Always verify customer identity before accessing accounts. Escalate billing issu
     page.wait_for_selector(".prose", state="visible", timeout=10000)
 
     # Verify key content is present in the rendered markdown preview
-    expect(page.locator(".prose").get_by_text("Professional Customer Support Specialist")).to_be_visible()
-    expect(page.locator(".prose").get_by_text("Test Business Inc")).to_be_visible()
+    preview = page.get_by_role("dialog", name="System prompt preview")
+    expect(
+        preview.get_by_text(re.compile("Professional Customer Support Specialist"))
+    ).to_be_visible()
+    expect(preview.get_by_text(re.compile("Test Business Inc"))).to_be_visible()
 
-    step("Click preview button again to collapse")
-    preview_button.click()
+    step("Close the system prompt preview side panel")
+    preview.get_by_role("button", name="Close", exact=True).click()
 
     step("Verify preview section is collapsed")
-    expect(page.locator(".prose")).not_to_be_visible()
+    expect(preview).not_to_be_visible()
 
     step("Verification Complete: System prompt preview functionality works correctly")
 
@@ -488,7 +534,8 @@ def test_agent_configuration_fields_update(page: Page, base_url: str, step):
     page.goto(f"{base_url}/agents/{agent_id}")
     page.wait_for_load_state("networkidle")
 
-    step("Update agent instructions markdown")
+    step("Open the instructions editor and update the markdown")
+    page.get_by_role("button", name="Edit instructions", exact=True).click()
     page.fill('textarea#instructions_markdown',
               "# Senior Sales Consultant\n\nDrive revenue growth by understanding customer needs.\n\nAlways mention our 30-day guarantee.")
 
@@ -608,8 +655,18 @@ Family-owned plumbing business serving Phoenix metro area. Hours: Mon-Fri 8am-6p
     page.wait_for_selector(".prose", state="visible", timeout=10000)
 
     step("Verify organization context in generated prompt")
-    expect(page.locator(".prose").get_by_text("Plumbing Pros LLC")).to_be_visible()
-    expect(page.locator(".prose").get_by_text("456 Main Street, Phoenix, AZ 85001")).to_be_visible()
-    expect(page.locator(".prose").get_by_text("Family-owned plumbing business")).to_be_visible()
+    expect(
+        page.get_by_role("dialog").get_by_text(re.compile("Plumbing Pros LLC"))
+    ).to_be_visible()
+    expect(
+        page.get_by_role("dialog").get_by_text(
+            re.compile("456 Main Street, Phoenix, AZ 85001")
+        )
+    ).to_be_visible()
+    expect(
+        page.get_by_role("dialog").get_by_text(
+            re.compile("Family-owned plumbing business")
+        )
+    ).to_be_visible()
 
     step("Verification Complete: Organization context properly included in system prompt")

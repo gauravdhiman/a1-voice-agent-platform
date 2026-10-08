@@ -41,7 +41,7 @@ routing never uses that fallback.
 ## Two ownership modes
 
 | Mode | How it enters the platform | Platform billing | Twilio API authority | Release action |
-| --- | --- | --- | --- | --- |
+| ------------------ | -------------------------- | ---------------- | ---------------------------- | ----------------------------- |
 | `platform_managed` | Search and purchase | Monthly credits | Purchase, configure, release | Release the provider number |
 | `customer_managed` | Connect existing number | None | No purchase or release | Disconnect local routing only |
 
@@ -55,8 +55,9 @@ Each paid launch plan includes one US local number when the customer requests
 one; it is not purchased automatically. That line is marked
 `is_included_in_plan` and renews at zero credits while paid-plan access is
 active. If the customer keeps it after paid access ends, it converts to a
-regular rental at the current US local rate (80 credits/month, or $2 equivalent
-at 40 credits per dollar) on its next rental date. That debit comes from the
+regular rental at the current US local rate (80 credits/month, about $2 at
+the entry-pack rate) on its next rental date. Larger credit packs lower the
+effective USD equivalent. That debit comes from the
 shared balance used for calls. If the balance cannot cover renewal, inbound
 calls pause during the configured grace period and the number is released if
 the balance remains insufficient. The cancellation dialog explains this and

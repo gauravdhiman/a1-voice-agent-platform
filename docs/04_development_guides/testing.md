@@ -77,7 +77,7 @@ Before running the integrated trace, map the requested use case to every
 selected tool. For each tool, include:
 
 | Required mapping | Evidence to record |
-| ---------------- | ------------------ |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Purpose | What real user need this tool satisfies and why this tool is the intended one |
 | Inputs | Realistic values, required/optional fields, accepted values, and the source of each value |
 | Outputs | The result shape and how the runtime/user will use it |
@@ -131,7 +131,7 @@ behavior that the acceptance criteria require.
 Evidence must be reproducible by another agent and contain:
 
 | Field | Required content |
-| ----- | ---------------- |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | Scope | Use case, changed boundary, selected tool(s), acceptance criteria, and semantic-fit map |
 | Environment | Branch/commit, environment/config, entrypoint/runtime, tenant, and fixture/seed identifier |
 | Commands and trace | Exact commands or user steps; selection, arguments, provider/fake interactions, read-back, and results |
@@ -310,6 +310,47 @@ Extend existing
 durable E2E coverage instead of writing a throwaway Playwright script for each
 task. Smoke-created rows, roles, files, screenshots, videos, downloads, and
 temporary scripts must be removed before handoff.
+
+Browser fixtures must mirror current API contracts, including dashboard
+analytics arrays, tool definitions, and skill file summaries. Open edit controls
+before asserting editable fields, and assert actual rendered content instead of
+allowing loading, denied, or fallback states to pass.
+
+Run the separate real-auth role suite against the isolated worktree URL printed
+by its launcher; these five tests deliberately skip in the mocked E2E stack:
+
+```bash
+E2E_REAL_AUTH=1 E2E_BASE_URL=http://localhost:WORKTREE_PORT PYTHONPATH=e2e/tests \
+  pytest e2e/tests/test_role_dashboard.py -q
+```
+
+For credit-catalog changes, cover the approved amounts/prices, reconciliation
+failures, and atomic RPC validation and rollback. Component and billing-flow
+tests must verify all four cards, call-minute rates, savings, unavailable
+top-up states, and checkout failure recovery. A mocked browser checkout does
+not prove Stripe settlement: separately verify a test-mode payment and signed
+webhook handling, including duplicate-event delivery and unchanged historical
+credit balances. Report changed-module coverage explicitly; a focused suite's
+percentage is not repository-wide coverage.
+
+The real PostgreSQL regression suite is
+`backend/tests/integration/test_credit_product_catalog_database.py`. Set
+`CREDIT_CATALOG_TEST_DATABASE_URL` privately to the selected worktree's isolated
+loopback database URL, then run from the worktree root:
+
+```bash
+pytest backend/tests/integration/test_credit_product_catalog_database.py -q
+```
+
+The suite rejects remote hosts and skips when the variable is unset. A loopback
+host alone does not prove isolation: confirm the database belongs to the
+selected worktree before running. Each test rolls back catalog fixture rows,
+RPC replacement, and role changes without changing Alembic revision state.
+It exercises invalid payloads, upsert failure rollback, role denial, repeated
+sync, and the downgrade contract against PostgreSQL. Report skipped SQL tests
+as unverified. Credit-card component coverage must also include changed,
+missing, inactive, invalid, and zero-cost voice pricing; a default-rate-only
+test does not establish accurate minute estimates.
 
 ## Agent evaluation
 

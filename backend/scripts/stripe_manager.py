@@ -414,9 +414,7 @@ class StripeManager:
             print(f"❌ Error fetching prices: {e}")
             return []
 
-    def analyze_stripe_data(
-        self, prices, verbose=False, include_subscriptions=True
-    ):
+    def analyze_stripe_data(self, prices, verbose=False, include_subscriptions=True):
         """Analyze Stripe data and categorize products with intelligent detection."""
         print("🔍 Analyzing Stripe data with intelligent detection...")
 
@@ -767,8 +765,9 @@ class StripeManager:
             {
                 "name": "phone_number_toll_free_month",
                 "description": (
-                    "An active toll-free phone number uses 120 credits ($3 at 40 "
-                    "credits per dollar) for each rental month."
+                    "An active toll-free phone number uses 120 credits for each "
+                    "rental month. Its approximate USD equivalent depends on "
+                    "the credit pack."
                 ),
                 "credit_cost": 120,
                 "category": "phone_number",
@@ -931,9 +930,7 @@ class StripeManager:
             if dry_run:
                 print(f"\n🔍 DRY RUN COMPLETED")
                 if include_legacy_billing_data:
-                    print(
-                        f"Found {len(subscription_plans)} legacy subscription plans"
-                    )
+                    print(f"Found {len(subscription_plans)} legacy subscription plans")
                 elif include_credit_products:
                     print(f"Found {len(credit_products)} approved credit products")
             else:

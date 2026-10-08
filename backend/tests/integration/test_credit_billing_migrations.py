@@ -1,5 +1,6 @@
 """Contract tests for the database-backed credit settlement migrations."""
 
+import importlib.util
 from pathlib import Path
 
 MIGRATIONS = Path(__file__).parents[2] / "alembic" / "versions"
@@ -56,3 +57,25 @@ def test_regular_debit_rpc_handles_negative_plan_pool_after_voice_overdraft():
     assert "debit_organization_credits" in source
     assert "GREATEST(v_plan, 0)" in source
     assert "v_total < p_credits_needed" in source
+
+
+def test_credit_catalog_sync_migration_accepts_four_discounted_packs():
+    """The database RPC contract matches all current catalog amounts and prices."""
+    migration = MIGRATIONS / "20261007000001_four_tier_credit_product_catalog.py"
+    spec = importlib.util.spec_from_file_location("four_tier_credit_catalog", migration)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    upgrade_sql = module._credit_catalog_sync_function(module._CURRENT_PACKS)
+    downgrade_sql = module._credit_catalog_sync_function(module._PREVIOUS_PACKS)
+
+    assert (
+        'down_revision: Union[str, Sequence[str], None] = "20261002000001"'
+        in migration.read_text()
+    )
+    assert "product_count <> 4" in upgrade_sql
+    assert "ARRAY[200, 500, 1000, 2000]" in upgrade_sql
+    assert "(200, 500), (500, 1200), (1000, 2300), (2000, 4400)" in upgrade_sql
+    assert "product_count <> 3" in downgrade_sql
+    assert "ARRAY[200, 400, 1000]" in downgrade_sql

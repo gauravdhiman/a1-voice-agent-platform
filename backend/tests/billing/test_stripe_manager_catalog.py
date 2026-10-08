@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from scripts import stripe_manager
 
 
@@ -162,7 +164,9 @@ def test_credit_product_seed_switches_complete_catalog_with_one_atomic_rpc(
 ):
     manager = stripe_manager.StripeManager()
     client = MagicMock()
-    client.rpc.return_value.execute.return_value = MagicMock(data=3)
+    client.rpc.return_value.execute.return_value = MagicMock(
+        data=len(stripe_manager.CREDIT_PACKS)
+    )
     monkeypatch.setattr(
         stripe_manager,
         "supabase_config",
@@ -227,7 +231,8 @@ def test_seed_database_rejects_empty_credit_catalog_even_with_plans(monkeypatch)
         manager,
         "analyze_stripe_data",
         lambda _prices, verbose=False, include_subscriptions=True: (
-            [{"name": "Starter"}], []
+            [{"name": "Starter"}],
+            [],
         ),
     )
     monkeypatch.setattr(manager, "seed_subscription_plans", MagicMock())
@@ -244,12 +249,11 @@ def test_seed_database_only_syncs_credit_catalog_by_default(monkeypatch):
         manager,
         "analyze_stripe_data",
         lambda _prices, verbose=False, include_subscriptions=True: (
-            [{"name": "Legacy Starter"}], products
+            [{"name": "Legacy Starter"}],
+            products,
         ),
     )
-    monkeypatch.setattr(
-        manager, "check_tables_exist", MagicMock(return_value=True)
-    )
+    monkeypatch.setattr(manager, "check_tables_exist", MagicMock(return_value=True))
     monkeypatch.setattr(manager, "seed_subscription_plans", MagicMock())
     monkeypatch.setattr(manager, "seed_credit_events", MagicMock())
     seed_products = MagicMock(return_value=True)
@@ -273,9 +277,7 @@ def test_seed_database_rejects_combining_legacy_and_credit_pack_import(monkeypat
         "analyze_stripe_data",
         lambda _prices, verbose=False, include_subscriptions=True: (plans, products),
     )
-    monkeypatch.setattr(
-        manager, "check_tables_exist", MagicMock(return_value=True)
-    )
+    monkeypatch.setattr(manager, "check_tables_exist", MagicMock(return_value=True))
     seed_plans = MagicMock()
     seed_events = MagicMock()
     seed_products = MagicMock(return_value=True)
@@ -328,9 +330,7 @@ def test_default_seed_ignores_malformed_legacy_subscription_metadata(monkeypatch
     prices = [malformed_legacy_price, *_stripe_credit_prices()]
     products = _approved_credit_products()
     monkeypatch.setattr(manager, "fetch_all_stripe_prices", lambda: prices)
-    monkeypatch.setattr(
-        manager, "check_tables_exist", MagicMock(return_value=True)
-    )
+    monkeypatch.setattr(manager, "check_tables_exist", MagicMock(return_value=True))
     monkeypatch.setattr(manager, "seed_subscription_plans", MagicMock())
     monkeypatch.setattr(manager, "seed_credit_events", MagicMock())
     seed_products = MagicMock(return_value=True)
@@ -353,9 +353,7 @@ def test_legacy_backfill_can_run_before_plan_version_migration(monkeypatch):
         "analyze_stripe_data",
         lambda _prices, verbose=False, include_subscriptions=True: (plans, []),
     )
-    monkeypatch.setattr(
-        manager, "check_tables_exist", MagicMock(return_value=True)
-    )
+    monkeypatch.setattr(manager, "check_tables_exist", MagicMock(return_value=True))
     seed_plans = MagicMock()
     seed_events = MagicMock()
     seed_products = MagicMock(return_value=True)
@@ -389,9 +387,7 @@ def test_legacy_backfill_fails_if_any_subscription_plan_cannot_be_imported(
             [],
         ),
     )
-    monkeypatch.setattr(
-        manager, "check_tables_exist", MagicMock(return_value=True)
-    )
+    monkeypatch.setattr(manager, "check_tables_exist", MagicMock(return_value=True))
     seed_plans = MagicMock(return_value=False)
     seed_products = MagicMock(return_value=True)
     monkeypatch.setattr(manager, "seed_subscription_plans", seed_plans)
@@ -467,3 +463,245 @@ def test_setup_credit_products_creates_launch_products_and_prices(monkeypatch):
         int(pack["price_usd"] * 100) for pack in stripe_manager.CREDIT_PACKS
     ]
     price_api.modify.assert_not_called()
+
+
+@pytest.mark.parametrize("metadata_amount", [None, "", "not-a-number", "0", "-200"])
+def test_invalid_managed_product_metadata_is_ignored(metadata_amount):
+    product = SimpleNamespace(
+        metadata={
+            "catalog_owner": stripe_manager.CREDIT_CATALOG_OWNER,
+            "credit_amount": metadata_amount,
+        }
+    )
+    assert stripe_manager.StripeManager._credit_amount_from_product(product) is None
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("credit_amount", True),
+        ("credit_amount", 200.0),
+        ("credit_amount", 400),
+        ("stripe_price_id", None),
+        ("stripe_product_id", ""),
+        ("currency", "EUR"),
+        ("name", "Unapproved pack"),
+    ],
+)
+def test_catalog_seed_rejects_malformed_pack_before_any_rpc(monkeypatch, field, value):
+    client = MagicMock()
+    monkeypatch.setattr(
+        stripe_manager, "supabase_config", SimpleNamespace(client=client)
+    )
+    products = _approved_credit_products()
+    products[0][field] = value
+    assert stripe_manager.StripeManager().seed_credit_products(products) is False
+    client.rpc.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "field", ["credit_amount", "stripe_price_id", "stripe_product_id"]
+)
+def test_catalog_seed_rejects_duplicate_identifiers_before_any_rpc(monkeypatch, field):
+    client = MagicMock()
+    monkeypatch.setattr(
+        stripe_manager, "supabase_config", SimpleNamespace(client=client)
+    )
+    products = _approved_credit_products()
+    products[1][field] = products[0][field]
+    assert stripe_manager.StripeManager().seed_credit_products(products) is False
+    client.rpc.assert_not_called()
+
+
+def test_catalog_seed_dry_run_never_writes(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(
+        stripe_manager, "supabase_config", SimpleNamespace(client=client)
+    )
+    assert (
+        stripe_manager.StripeManager().seed_credit_products(
+            _approved_credit_products(), dry_run=True
+        )
+        is True
+    )
+    client.rpc.assert_not_called()
+    client.table.assert_not_called()
+
+
+def test_catalog_seed_requires_complete_database_confirmation(monkeypatch):
+    client = MagicMock()
+    client.rpc.return_value.execute.return_value = SimpleNamespace(data=3)
+    monkeypatch.setattr(
+        stripe_manager, "supabase_config", SimpleNamespace(client=client)
+    )
+    assert (
+        stripe_manager.StripeManager().seed_credit_products(_approved_credit_products())
+        is False
+    )
+
+
+def test_setup_reuses_paginated_products_and_creates_only_repriced_1000_pack(
+    monkeypatch,
+):
+    """An existing catalog upgrades prices without duplicate products or retirement."""
+    manager = stripe_manager.StripeManager()
+    prices = _stripe_credit_prices()
+    product_api = MagicMock()
+    product_api.list.side_effect = [
+        SimpleNamespace(data=[prices[0].product], has_more=True),
+        SimpleNamespace(data=[p.product for p in prices[1:]], has_more=False),
+    ]
+    price_api = MagicMock()
+    by_product = {p.product.id: p for p in prices}
+    old_price = SimpleNamespace(
+        id="price_old_1000",
+        type="one_time",
+        currency="usd",
+        unit_amount=2500,
+        metadata={"catalog_owner": stripe_manager.CREDIT_CATALOG_OWNER},
+    )
+    price_api.list.side_effect = lambda **kwargs: SimpleNamespace(
+        data=(
+            [old_price]
+            if kwargs["product"] == "prod_1000"
+            else [by_product[kwargs["product"]]]
+        )
+    )
+    price_api.create.return_value = SimpleNamespace(id="price_new_1000")
+    monkeypatch.setattr(
+        manager, "stripe", SimpleNamespace(Product=product_api, Price=price_api)
+    )
+
+    assert manager.setup_credit_products() is True
+    product_api.list.assert_any_call(active=True, limit=100, starting_after="prod_200")
+    product_api.create.assert_not_called()
+    price_api.create.assert_called_once_with(
+        product="prod_1000",
+        unit_amount=2300,
+        currency="usd",
+        metadata={
+            "catalog_owner": stripe_manager.CREDIT_CATALOG_OWNER,
+            "credit_amount": "1000",
+        },
+    )
+    price_api.modify.assert_not_called()
+    assert all(
+        call.kwargs.get("active") is None for call in product_api.modify.call_args_list
+    )
+
+
+def test_repeated_setup_reuses_matching_prices_without_duplicate_mutations(monkeypatch):
+    manager = stripe_manager.StripeManager()
+    prices = _stripe_credit_prices()
+    product_api = MagicMock()
+    product_api.list.return_value = SimpleNamespace(
+        data=[p.product for p in prices], has_more=False
+    )
+    price_api = MagicMock()
+    price_api.list.side_effect = lambda **kwargs: SimpleNamespace(
+        data=[p for p in prices if p.product.id == kwargs["product"]]
+    )
+    monkeypatch.setattr(
+        manager, "stripe", SimpleNamespace(Product=product_api, Price=price_api)
+    )
+    assert manager.setup_credit_products() is True
+    assert manager.setup_credit_products() is True
+    product_api.create.assert_not_called()
+    price_api.create.assert_not_called()
+    price_api.modify.assert_not_called()
+
+
+def test_setup_dry_run_reports_existing_and_missing_prices_without_provider_writes(
+    monkeypatch,
+):
+    manager = stripe_manager.StripeManager()
+    product_api = MagicMock()
+    product_api.list.return_value = SimpleNamespace(
+        data=[_stripe_credit_prices()[0].product], has_more=False
+    )
+    price_api = MagicMock()
+    price_api.list.return_value = SimpleNamespace(data=[])
+    monkeypatch.setattr(
+        manager, "stripe", SimpleNamespace(Product=product_api, Price=price_api)
+    )
+    assert manager.setup_credit_products(dry_run=True) is True
+    product_api.create.assert_not_called()
+    product_api.modify.assert_not_called()
+    price_api.create.assert_not_called()
+    price_api.modify.assert_not_called()
+
+
+def test_setup_product_listing_failure_stops_without_writes(monkeypatch):
+    manager = stripe_manager.StripeManager()
+    product_api = MagicMock()
+    product_api.list.side_effect = RuntimeError("provider listing unavailable")
+    price_api = MagicMock()
+    monkeypatch.setattr(
+        manager, "stripe", SimpleNamespace(Product=product_api, Price=price_api)
+    )
+    assert manager.setup_credit_products() is False
+    product_api.create.assert_not_called()
+    product_api.modify.assert_not_called()
+    price_api.list.assert_not_called()
+
+
+def test_analysis_filters_obsolete_packs_and_old_prices_but_keeps_new_1000_price():
+    prices = _stripe_credit_prices()
+    current = prices[2]
+    old_price = SimpleNamespace(
+        **{**vars(current), "id": "price_old_1000", "unit_amount": 2500}
+    )
+    retired_product = SimpleNamespace(
+        id="prod_400",
+        name="400 Credits Pack",
+        active=True,
+        description="Retired pack",
+        metadata={
+            "catalog_owner": stripe_manager.CREDIT_CATALOG_OWNER,
+            "credit_amount": "400",
+        },
+    )
+    retired_price = SimpleNamespace(
+        **{
+            **vars(current),
+            "product": retired_product,
+            "id": "price_400",
+            "unit_amount": 1000,
+        }
+    )
+    _, products = stripe_manager.StripeManager().analyze_stripe_data(
+        [old_price, retired_price, *prices], verbose=True, include_subscriptions=False
+    )
+    assert [(p["credit_amount"], p["price_amount"]) for p in products] == [
+        (200, 500),
+        (500, 1200),
+        (1000, 2300),
+        (2000, 4400),
+    ]
+
+
+def test_legacy_backfill_preview_reports_count_without_database_writes(
+    monkeypatch, capsys
+):
+    """Preview the separately selected legacy import without accessing the DB."""
+    manager = stripe_manager.StripeManager()
+    plans = [{"name": "Legacy Starter"}]
+    monkeypatch.setattr(manager, "fetch_all_stripe_prices", lambda: [object()])
+    monkeypatch.setattr(
+        manager,
+        "analyze_stripe_data",
+        lambda _prices, verbose=False, include_subscriptions=True: (plans, []),
+    )
+    monkeypatch.setattr(manager, "check_tables_exist", MagicMock())
+    monkeypatch.setattr(
+        manager, "seed_subscription_plans", MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(manager, "seed_credit_products", MagicMock())
+
+    assert manager.seed_database(
+        dry_run=True, include_legacy_billing_data=True, include_credit_products=False
+    )
+    assert "Found 1 legacy subscription plans" in capsys.readouterr().out
+    manager.check_tables_exist.assert_not_called()
+    manager.seed_subscription_plans.assert_called_once_with(plans, True)
+    manager.seed_credit_products.assert_not_called()

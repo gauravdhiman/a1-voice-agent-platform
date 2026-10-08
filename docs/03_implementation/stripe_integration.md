@@ -246,8 +246,13 @@ python scripts/stripe_manager.py setup-credits
 This creates standardized credit products:
 
 - 200 Credits Pack ($5.00)
-- 400 Credits Pack ($10.00)
-- 1000 Credits Pack ($25.00)
+- 500 Credits Pack ($12.00)
+- 1000 Credits Pack ($23.00)
+- 2000 Credits Pack ($44.00)
+
+Apply the reviewed catalog migration before database synchronization and follow
+the [four-pack rollout procedure](../05_operations/stripe_management.md#four-pack-catalog-rollout).
+Product setup alone does not switch the active database catalog.
 
 ### Sync Credit Packs; Import Legacy Billing Data Only by Exception
 
@@ -266,7 +271,7 @@ The default command:
 
 - Uses pagination to fetch all Stripe products
 - Detects legacy subscription products but leaves those records unchanged
-- Synchronizes only the three approved credit products
+- Synchronizes only the four approved credit products
 - Reports uncategorized items for manual review
 
 Use `--include-legacy-billing-data --skip-credit-products` only for the
@@ -330,7 +335,7 @@ The tool includes smart detection capabilities:
 If you were using the old individual scripts, here's the mapping:
 
 | Old Script                                                                 | New Command                                                 |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `python scripts/stripe_diagnostic.py`                                      | `python scripts/stripe_manager.py diagnostic`               |
 | `python scripts/cleanup_old_stripe_products.py --dry-run`                  | `python scripts/stripe_manager.py cleanup --dry-run`        |
 | `python scripts/setup_stripe_credit_products.py --setup-credits --dry-run` | `python scripts/stripe_manager.py setup-credits --dry-run`  |

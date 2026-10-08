@@ -125,7 +125,7 @@ the existing authored content with generic industry labels.
 The market has three recognizable pricing shapes:
 
 | Pattern | Public signal | Implication for 24x7 AI |
-| --- | --- | --- |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Developer infrastructure + pass-through | Vapi advertises $0.05/min hosting, includes 10 concurrency, and passes model-provider costs through | Transparent and attractive to technical builders, but customers carry cost variability and configuration burden. [Vapi pricing](https://vapi.ai/pricing) |
 | All-in usage rate | Bland lists $0.14/min on Start, $0.12/min plus $299/month on Build, and $0.11/min plus $499/month on Scale; Retell publishes a broad $0.07–$0.31/min range and a current example around $0.11/min | Easy to understand for SMBs; the platform must actively manage provider and telephony margins. [Bland pricing](https://app.bland.com/pricing), [Retell pricing](https://www.retellai.com/pricing) |
 | Bundled SaaS minutes | Synthflow lists $29/month for 50 minutes, $450/month for 2,000 minutes, and $900/month for 4,000 minutes on its BPO page, with overage rates and enterprise pricing | Bundles create predictable budgets and room for packaging, but unused minutes and concurrency must be modeled. [Synthflow BPO pricing](https://synthflow.ai/ai-agent-for-bpo) |
@@ -148,19 +148,21 @@ them through the authenticated Plan Catalog admin following the
 [plan publish spec](../09_launch_strategy/06-plan-publish-spec.md):
 
 | Tier | Monthly price | Annual price | Included call minutes/month | Included credits/month |
-| --- | ---: | ---: | ---: | ---: |
+| ------- | ------------: | -----------: | --------------------------: | ---------------------: |
 | Free | $0 | — | 10 | 100 |
 | Starter | $49 | $490 | 250 | 2,500 |
 | Pro | $149 | $1,490 | 1,000 | 10,000 |
 | Scale | $299 | $2,990 | 2,100 | 21,000 |
 
-Current runtime pricing is 10 credits per connected voice minute, 80 credits
+Default runtime pricing is 10 credits per connected voice minute, 80 credits
 per additional US local number-month, 200 credits per existing legacy non-US
 local or mobile number-month, and 120 credits per toll-free number-month. New
 platform number search and purchase are US-only and mobile inventory is
 disabled in v1; imported customer-owned Twilio numbers have no platform rental
 fee. These values are internal meters, not a claim that one credit should be
-marketed as currency. Credit top-ups are $5/200, $10/400, and $25/1,000.
+marketed as currency. Credit top-ups are $5/200, $12/500, $23/1,000, and
+$44/2,000. At the default 10 credits per call minute, their effective call rates are
+$0.25, $0.24, $0.23, and $0.22 per minute.
 
 Recommended commercial presentation:
 

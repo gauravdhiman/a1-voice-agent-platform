@@ -49,7 +49,7 @@ The database is designed as a multi-tenant SaaS platform with the following key 
 Stores tenant organization information. Each organization represents a separate customer/tenant.
 
 | Column           | Type         | Constraints             | Description                                                                 |
-| ---------------- | ------------ | ----------------------- | --------------------------------------------------------------------------- |
+| --------------------------------- | ------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | id               | UUID         | PRIMARY KEY             | Unique organization identifier                                              |
 | name             | VARCHAR(100) | NOT NULL, UNIQUE        | Organization display name                                                   |
 | description      | TEXT         | NULLABLE                | Organization description                                                    |
@@ -75,10 +75,6 @@ Stores tenant organization information. Each organization represents a separate 
 **Foreign Keys**: None
 **RLS**: Enabled
 
-The Stripe catalog manager reconciles the complete approved pack set through
-the service-role-only `sync_credit_product_catalog(jsonb)` function. It validates
-all rows, switches the active set, and upserts products in one database
-transaction; an error leaves the prior active catalog unchanged.
 **Indexes**: Unique on `name`, `slug`
 
 **Derived (not a column):** `provider_credentials_status` — a per-provider
@@ -238,7 +234,7 @@ to a personal organization.
 Stores voice agent configurations for each organization.
 
 | Column              | Type         | Constraints                     | Description                             |
-| ------------------- | ------------ | ------------------------------- | --------------------------------------- |
+| ------------------------------ | ------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | id                  | UUID         | PRIMARY KEY                     | Unique voice agent identifier           |
 | organization_id     | UUID         | NOT NULL, FK → organizations.id | Organization identifier                 |
 | name                | VARCHAR(100) | NOT NULL                        | Voice agent display name                |
@@ -261,7 +257,9 @@ Stores voice agent configurations for each organization.
 | demo_max_call_duration_seconds | INTEGER | NOT NULL, DEFAULT -1, CHECK = -1 OR > 0 | Maximum duration captured for each new demo reservation. `-1` means unlimited; active calls keep the duration captured at reservation — migration 20260827000001 |
 | created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
 | updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
+
 **Foreign Keys**:
+
 - `organization_id` → `organizations.id` (CASCADE)
 - `preset_id` → `pipeline_presets.id` (SET NULL) — migration 20260729000001 (deleting a preset drops referencing agents back to the System Default preset row — migration 20260729000002)
 **Indexes**:
@@ -286,7 +284,7 @@ demo agent row, then changed from `reserved` to `consumed` by
 has no public RLS policy; direct access is restricted to the service role.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| ----------- | ------------ | ------------------------------------------------------------ | -------------------------------------------------------- |
 | id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Reservation identifier embedded in the voice-session JWT |
 | agent_id | UUID | NOT NULL, FK → voice_agents.id (CASCADE) | Demo agent whose budget was reserved |
 | session_id | VARCHAR(100) | NOT NULL, UNIQUE | Voice-session id; makes token issuance idempotent |
@@ -310,7 +308,7 @@ provider, then the voice runtime records a minimal presentation-safe summary
 after a tool result.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| --------------- | ------------ | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Receipt row identifier |
 | session_id | VARCHAR(100) | NOT NULL | Voice session identifier; never returned by the public endpoint |
 | agent_id | UUID | NOT NULL, FK → voice_agents.id (CASCADE) | Demo agent that performed the action |
@@ -350,7 +348,7 @@ aggregates and recent rows through the service-role API
 analytics copy.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| --------------- | ------------ | ----------------------------------------- | ------------------------------------------------ |
 | id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Rating row identifier |
 | session_id | VARCHAR(100) | NOT NULL, UNIQUE | Voice session identifier; one rating per session |
 | agent_id | UUID | NOT NULL, FK → voice_agents.id (CASCADE) | Demo agent that was rated |
@@ -379,7 +377,7 @@ reverse. Distinct from `demo_outcome_receipts` (short-lived visitor receipts):
 leads persist until converted/dropped and are never shown to visitors.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| ------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Lead row identifier |
 | name | VARCHAR(120) | NOT NULL | Contact name |
 | business_name | VARCHAR(160) | NULLABLE | Business name |
@@ -413,7 +411,7 @@ already acknowledged as sent. Disabled Telegram/WhatsApp channels are marked
 skipped; enabled but incomplete or failing channels remain pending for retry.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| ------------------------------------------------------ | ------------------ | ------------------------------------------------------------------ | ---------------------------------------------------- |
 | id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Queue row identifier |
 | lead_id | UUID | UNIQUE, NOT NULL, FK → interest_leads.id (CASCADE) | Submitted lead |
 | email_state / telegram_state / whatsapp_state | TEXT | NOT NULL, DEFAULT 'pending', CHECK `pending`, `sent`, or `skipped` | Independent channel delivery state |
@@ -447,7 +445,7 @@ Org admins may also log rows manually for callbacks arriving on other
 channels.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| --------------- | ------------ | --------------------------------------------------------------------- | --------------------------------------------------------- |
 | id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Escalation row identifier |
 | organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning organization |
 | agent_id | UUID | NULLABLE, FK → voice_agents.id (SET NULL) | Agent on the call, when known |
@@ -481,7 +479,7 @@ application code. Investigation fields only — no tokens, passwords, or
 request bodies.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| ---------- | ------------ | ---------------------------------------- | ------------------------------------- |
 | id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Event row identifier |
 | user_id | UUID | NULLABLE | Account id when known |
 | email | VARCHAR(320) | NULLABLE | Account email when known (indexed) |
@@ -509,7 +507,7 @@ table is shared across organizations and is read by the public voice-template
 service; no organization foreign key or RLS policy is used.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| ------------------- | ------------ | ----------------------- | -------------------------------------------------- |
 | id | UUID | PRIMARY KEY | Unique template identifier |
 | name | VARCHAR(100) | NOT NULL | Template name shown in agent setup |
 | industry | VARCHAR(100) | NOT NULL | Industry grouping used for browsing |
@@ -539,7 +537,7 @@ instructions.
 System-wide tools available for integration with voice agents.
 
 | Column                | Type          | Constraints                       | Description                                                                 |
-| --------------------- | ------------- | --------------------------------- | --------------------------------------------------------------------------- |
+| ----------------------------- | ------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | id                    | UUID          | PRIMARY KEY                       | Unique platform tool identifier                                             |
 | name                  | VARCHAR(100)  | NOT NULL, UNIQUE                  | Tool name (e.g., Gmail, Google_calendar_appointment)                       |
 | description           | TEXT          | NULLABLE                          | Tool description                                                            |
@@ -562,15 +560,18 @@ System-wide tools available for integration with voice agents.
 | updated_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()           | Last update timestamp                                                        |
 
 **Foreign Keys**:
+
 - `organization_id` → `organizations.id` (CASCADE) — added migration 20260725000001 (dormant; MCP creates force NULL)
 
 **Indexes**:
+
 - `ix_platform_tools_organization_id` on `organization_id` — migration 20260725000001
 - `ix_platform_tools_is_published` on `is_published` — migration 20260726000001 (org-user catalog listing filters on it)
 
 **RLS**: Not enabled (system-wide tools). Catalog visibility is enforced at the service layer (`get_platform_tools` filters `is_published=true AND is_active=true`; `get_organization_tools` applies organization overrides). RLS hardening is a follow-up TODO.
 
 **Visibility / publish lifecycle** (RFC §6.6):
+
 - `is_published=false` → **draft**: visible only to platform admins (authoring/management view).
 - `is_published=true` + `is_active=true` → **published**: visible in every organization's **Organization Tools** catalog by default; an organization admin can hide it from new agent connections. Org admins attach visible tools and supply their own API key (the `{{KEY}}` template is substituted with `agent_tools.sensitive_config["api_key"]` at runtime — no platform test-key fallback).
 - `organization_id` is **dormant** (org-scoped custom tier retired); MCP rows are forced to NULL on create.
@@ -587,7 +588,7 @@ same override. Existing `agent_tools` rows are intentionally preserved and
 remain available to the runtime; the agent page marks them as hidden.
 
 | Column          | Type        | Constraints                                      | Description |
-| --------------- | ----------- | ------------------------------------------------ | ----------- |
+| --------------- | ----------- | ------------------------------------------ | ------------------------------------------------- |
 | id              | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid()            | Visibility override identifier |
 | organization_id | UUID        | NOT NULL, FK → organizations.id (CASCADE)        | Organization receiving the override |
 | tool_id         | UUID        | NOT NULL, FK → platform_tools.id (CASCADE)       | Published platform tool being overridden |
@@ -644,7 +645,7 @@ remain available to the runtime; the agent page marks them as hidden.
 Global, platform-admin-managed catalog of named voice-engine **presets** (Phase 3 of the modular voice engine — see `docs/01_architecture/voice_engine_pipeline_design.md`). Mirrors the `platform_tools` catalog pattern: no RLS, `is_published` lifecycle, `(result, error)` service contract, `assert_platform_role("platform_admin")` gating on CRUD.
 
 | Column        | Type         | Constraints                  | Description                                                                 |
-| ------------- | ------------ | ---------------------------- | --------------------------------------------------------------------------- |
+| ------------ | ------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | id            | UUID         | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique preset identifier                                          |
 | name          | VARCHAR(100) | NOT NULL, UNIQUE             | Preset name (upsert key)                                                    |
 | description   | TEXT         | NULLABLE                     | Preset description                                                          |
@@ -655,8 +656,9 @@ Global, platform-admin-managed catalog of named voice-engine **presets** (Phase 
 | created_at    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()      | Creation timestamp                                                          |
 | updated_at    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()      | Last update timestamp                                                       |
 
-**Foreign Keys**: None (referenced *by* `voice_agents.preset_id`)
+**Foreign Keys**: None (referenced _by_ `voice_agents.preset_id`)
 **Indexes**:
+
 - `ix_pipeline_presets_is_published` on `is_published` — migration 20260729000001
 - `ux_pipeline_presets_is_default` UNIQUE PARTIAL on `is_default` WHERE `is_default = true` — migration 20260729000002. Enforces **at most one** system-default row (a partial unique index; the many `is_default=false` rows are unconstrained).
 
@@ -681,7 +683,7 @@ name, not the LiveKit product) was removed in migration
 Junction table mapping voice agents to platform tools with configuration.
 
 | Column               | Type           | Constraints                      | Description                         |
-| -------------------- | -------------- | -------------------------------- | ----------------------------------- |
+| ------------------------ | -------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | id                   | UUID           | PRIMARY KEY                      | Unique agent tool identifier        |
 | agent_id             | UUID           | NOT NULL, FK → voice_agents.id   | Voice agent identifier              |
 | tool_id              | UUID           | NOT NULL, FK → platform_tools.id | Platform tool identifier            |
@@ -758,7 +760,7 @@ release. A crashed holder's lease auto-expires via the `claim_token_refresh` TTL
 so refresh is not blocked forever.
 
 | Column         | Type        | Constraints                              | Description                                  |
-| -------------- | ----------- | ---------------------------------------- | -------------------------------------------- |
+| ------------- | ----------- | ------------------------------------------ | --------------------------------------------- |
 | agent_tool_id  | UUID         | PRIMARY KEY, FK → agent_tools.id (CASCADE) | The agent tool whose token is being refreshed |
 | locked_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                  | When the lease was acquired (used for TTL)   |
 | claim          | TEXT        | NOT NULL                                 | Unique claim id from the acquiring instance  |
@@ -798,7 +800,7 @@ clears `credentials_unreadable` after the next successful application decrypt.
 Stores embed button configuration for voice agents, enabling them to be embedded on external websites.
 
 | Column               | Type           | Constraints                     | Description                                      |
-| -------------------- | -------------- | ------------------------------- | ------------------------------------------------ |
+| -------------------- | ----------- | -------------------------------- | ----------------------------------------------------------------------------- |
 | id                   | UUID           | PRIMARY KEY                     | Unique embed config identifier                   |
 | agent_id             | UUID           | NOT NULL, FK → voice_agents.id  | Voice agent identifier                           |
 | button_text          | VARCHAR(50)    | NOT NULL, DEFAULT 'Call Us'     | Text displayed on the button                     |
@@ -833,7 +835,7 @@ corresponding `call_logs` source metadata.
 Tracks usage of embed call buttons for analytics and rate limiting.
 
 | Column            | Type         | Constraints                            | Description                            |
-| ----------------- | ------------ | -------------------------------------- | -------------------------------------- |
+| ---------------- | ------------ | ------------------------------------- | ---------------------------------- |
 | id                | UUID         | PRIMARY KEY                            | Unique log identifier                  |
 | embed_config_id   | UUID         | NOT NULL, FK → agent_embed_configs.id  | Embed configuration identifier         |
 | domain            | VARCHAR(255) | NULLABLE                               | Domain that initiated the call         |
@@ -862,7 +864,7 @@ the sole source of truth for phone-to-agent routing; the legacy
 `voice_agents.phone_number` field is not used by inbound call handling.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| ---------------------------- | ------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | id | UUID | PRIMARY KEY | Number record |
 | organization_id | UUID | NOT NULL, FK → organizations.id | Owning organization |
 | phone_number | VARCHAR(20) | NOT NULL | E.164 number |
@@ -920,7 +922,7 @@ defaults if the settings row cannot be read during startup or a transient
 database failure occurs.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| ---------------------------- | ------------- | ------------------------- | --------------------------------------------------------- |
 | id | UUID | PRIMARY KEY | Fixed singleton ID `00000000-0000-0000-0000-000000000002` |
 | billing_grace_period_days | INTEGER | NOT NULL, > 0, DEFAULT 7 | Days to keep incoming calls disabled before release |
 | billing_check_interval_hours | NUMERIC(10,2) | NOT NULL, > 0, DEFAULT 24 | Rental billing scheduler cadence |
@@ -958,7 +960,7 @@ Only the service role accesses this singleton. The platform-admin API is
 Tracks voice sessions for organization reporting and concurrent-call limits.
 
 | Column                | Type         | Constraints                              | Description |
-| --------------------- | ------------ | ---------------------------------------- | ----------- |
+| --------------------- | ------------- | ------------------------------------- | --------------------------------------------------------------------------------------------- |
 | id                    | UUID         | PRIMARY KEY                              | Unique call log identifier |
 | call_sid              | VARCHAR(100) | NOT NULL, UNIQUE                         | Provider/session identifier |
 | organization_id       | UUID         | NOT NULL, FK → organizations.id          | Owning organization |
@@ -999,7 +1001,7 @@ environment-specific Cloudflare R2 bucket in staging/production. The database
 stores the bucket/path and text artifacts, never public audio URLs.
 
 | Column            | Type         | Constraints                              | Description |
-| ----------------- | ------------ | ---------------------------------------- | ----------- |
+| -------------------- | ------------ | -------------------------------------------- | ------------------------------------------- |
 | id                | UUID         | PRIMARY KEY                              | Artifact identifier |
 | call_log_id       | UUID         | NOT NULL, FK → call_logs.id              | Related call |
 | organization_id   | UUID         | NOT NULL, FK → organizations.id          | Tenant boundary |
@@ -1055,7 +1057,7 @@ Defines available subscription tiers.
 Tracks organization subscription status.
 
 | Column                 | Type         | Constraints                          | Description                                         |
-| ---------------------- | ------------ | ------------------------------------ | --------------------------------------------------- |
+| ----------------------- | ------------ | ------------------------------------ | -------------------------------------------------------------------------- |
 | id                     | UUID         | PRIMARY KEY                          | Unique subscription identifier                      |
 | organization_id        | UUID         | NOT NULL, FK → organizations.id      | Organization identifier                             |
 | subscription_plan_id   | UUID         | NULLABLE, FK → subscription_plans.id | Plan identifier                                     |
@@ -1097,7 +1099,7 @@ are metered. Platform admins edit this catalog in the Plan Catalog → Usage
 pricing tab; the catalog is not organization-specific.
 
 | Column      | Type         | Constraints             | Description                                |
-| ----------- | ------------ | ----------------------- | ------------------------------------------ |
+| ------------ | ------------ | ----------------------- | ----------------------------------------------------------------------------- |
 | id          | UUID         | PRIMARY KEY             | Unique event identifier                    |
 | name        | VARCHAR(100) | NOT NULL, UNIQUE        | Event name                                 |
 | description | TEXT         | NULLABLE                | Event description                          |
@@ -1127,7 +1129,7 @@ currently a free plan feature.
 Tracks all credit movements.
 
 | Column                   | Type         | Constraints                     | Description                                               |
-| ------------------------ | ------------ | ------------------------------- | --------------------------------------------------------- |
+| ------------------------ | ------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | id                       | UUID         | PRIMARY KEY                     | Unique transaction identifier                             |
 | organization_id          | UUID         | NOT NULL, FK → organizations.id | Organization identifier                                   |
 | transaction_type         | VARCHAR(50)  | NOT NULL                        | Type: earned, purchased, consumed, expired                |
@@ -1161,7 +1163,7 @@ row is processed by the notification scheduler and remains pending when a
 provider or database failure requires retry.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| --------------------- | ----------- | --------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | id | UUID | PRIMARY KEY | Outbox row identifier |
 | organization_id | UUID | NOT NULL, FK → organizations.id | Organization whose balance changed |
 | credit_transaction_id | UUID | NOT NULL, UNIQUE, FK → credit_transactions.id | Idempotent source debit |
@@ -1198,7 +1200,7 @@ Immutable audit record for a platform administrator allocation. The table is
 not a customer purchase and does not represent an entitlement or plan change.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| --------------- | ------------ | --------------------------------------------- | ---------------------------------- |
 | id | UUID | PRIMARY KEY | Grant identifier |
 | organization_id | UUID | NOT NULL, FK → organizations.id | Target organization |
 | transaction_id | UUID | NOT NULL, UNIQUE, FK → credit_transactions.id | Matching ledger row |
@@ -1219,6 +1221,16 @@ route-level `platform_admin` check.
 ### credit_products
 
 Defines standalone credit purchase products.
+
+The Stripe catalog manager reconciles the approved four-pack set through the
+service-role-only `sync_credit_product_catalog(jsonb)` function: 200/$5,
+500/$12, 1,000/$23, and 2,000/$44. It validates all rows, serializes concurrent
+syncs with a transaction-scoped advisory lock, and switches the active set and
+upserts products in one transaction. An error leaves the prior active catalog
+unchanged. Migration `20261007000001` changes the RPC validation contract;
+the catalog rows are updated only by the explicit Stripe-manager sync.
+The migration and sync do not change organization credit balances or the
+credit transaction ledger.
 
 | Column            | Type         | Constraints             | Description               |
 | ----------------- | ------------ | ----------------------- | ------------------------- |
@@ -1278,7 +1290,7 @@ Tracks payment history and invoices.
 Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan versions** and **sparse entitlements** per version.
 
 | Table | Purpose |
-| ----- | ------- |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `plan_products` | Plan families (`starter`, `growth`) — marketing identity; `sort_order` is the customer-facing tier rank and does not restrict transitions |
 | `plan_versions` | Immutable published snapshots (v1, v2, …) with explicit `billing_mode`, `credit_grant_policy`, price, and optional Stripe Price |
 | `entitlement_definitions` | Platform catalog of limit/feature keys, value types, enforcement handlers |
@@ -1310,7 +1322,7 @@ Stores the sparse entitlement assignments for an immutable plan version. The
 entitlement evaluation.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| --------------- | ------------ | ------------------------------------------------------------------------------------ | ---------------------------------------- |
 | id | UUID | PRIMARY KEY | Assignment identifier |
 | plan_version_id | UUID | NOT NULL, FK → `plan_versions.id` CASCADE | Version containing the assignment |
 | entitlement_key | VARCHAR(100) | NOT NULL, FK → `entitlement_definitions.key` RESTRICT; unique with `plan_version_id` | Assigned catalog entitlement |
@@ -1431,7 +1443,7 @@ Tracks all sent notifications.
 Stores one-time tokens for Resend-delivered email verification during signup.
 
 | Column     | Type        | Constraints                          | Description                          |
-| ---------- | ----------- | ------------------------------------ | ------------------------------------ |
+| ---------- | ------------ | -------------------------------------- | ------------------------------- |
 | id         | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid() | Token row ID                         |
 | user_id    | UUID        | NOT NULL, UNIQUE                     | Reference to `auth.users.id`         |
 | token      | VARCHAR(255)| NOT NULL, UNIQUE                     | URL-safe verification token          |
@@ -1453,7 +1465,7 @@ Singleton table for platform-admin notification configuration (lead-alert
 recipients, verification sender, and Telegram alerts).
 
 | Column                         | Type         | Constraints              | Description                                      |
-| ------------------------------ | ------------ | ------------------------ | ------------------------------------------------ |
+| --------------------------------------------- | ------------ | ----------------------- | ------------------------------------------------------------------- |
 | id                             | UUID         | PRIMARY KEY              | Fixed singleton ID (`00000000-0000-0000-0000-000000000001`) |
 | platform_admin_email           | VARCHAR(320) | NULLABLE                 | Recipient for platform-admin demo, interest-lead, and OAuth alerts |
 | platform_admin_sms_phone       | VARCHAR(32)  | NULLABLE                 | Optional platform-admin OAuth alert destination in E.164 format |
@@ -1490,7 +1502,7 @@ token are present. The organization owns its Telegram bot; SMS sending uses the
 platform's Twilio integration.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| ---------------------------- | ------------ | ---------------------------------------------- | ------------------------------------------------------------------------ |
 | organization_id | UUID | PRIMARY KEY, FK → organizations.id (CASCADE) | Owning organization |
 | alert_email | VARCHAR(320) | NULLABLE, max length 320 | Additional email destination |
 | sms_phone | VARCHAR(32) | NULLABLE, E.164 check | SMS destination; presence enables SMS |
@@ -1516,7 +1528,7 @@ contains safe display metadata and recovery instructions; it never contains
 contact destinations, OAuth tokens, client secrets, or provider response bodies.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| -------------------------------------------------- | ----------- | ----------------------------------------- | ---------------------------------------------------------------------------- |
 | id | UUID | PRIMARY KEY | Queue row identifier |
 | event_key | TEXT | UNIQUE, NOT NULL | Idempotency key for the connection generation and alert category |
 | agent_tool_id | UUID | NOT NULL, FK → agent_tools.id (CASCADE) | OAuth connection requiring attention |
@@ -2224,6 +2236,7 @@ erDiagram
 104. `20261001000005` - Add a service-role-only credit catalog sync function that validates the complete launch pack set and atomically upserts it while deactivating stale database products.
 105. `20261001000006` - Add an atomic subscription plan-transition claim and transition-ID-guarded clear RPC so overlapping plan changes cannot erase an interval-reset credit grant signal.
 106. `20261002000001` - Update the `premium_tools` entitlement label and description to identify the included premium integrations.
+107. `20261007000001` - Update the service-role-only credit catalog sync RPC to accept four discounted credit packs and restore the previous three-pack validation on downgrade.
 
 ---
 
@@ -2234,7 +2247,7 @@ erDiagram
 Organization-level skill library. Skills are reusable knowledge/procedure packages in markdown.
 
 | Column              | Type         | Constraints                     | Description                             |
-| ------------------- | ------------ | ------------------------------- | --------------------------------------- |
+| --------------- | ------------ | --------------------------------- | --------------------------------------------------------------- |
 | id                  | UUID         | PRIMARY KEY                     | Unique skill identifier                 |
 | organization_id     | UUID         | NOT NULL, FK → organizations.id | Organization identifier                 |
 | slug                | VARCHAR(100) | NOT NULL                        | URL-safe unique identifier (kebab-case) |
@@ -2260,7 +2273,7 @@ Organization-level skill library. Skills are reusable knowledge/procedure packag
 Reference files for skills. Stores additional files like `references/policies.md` that skills can reference. Files are loaded on-demand via the `load_skill_reference` voice-ws tool.
 
 | Column              | Type         | Constraints                             | Description                     |
-| ------------------- | ------------ | --------------------------------------- | ------------------------------- |
+| ------------ | ----------- | ------------------------------------- | --------------------------------------- |
 | id                  | UUID         | PRIMARY KEY                             | Unique file identifier          |
 | skill_id            | UUID         | NOT NULL, FK → organization_skills.id   | Parent skill                    |
 | file_path           | TEXT         | NOT NULL                                | e.g., "references/policies.md"  |
@@ -2277,7 +2290,7 @@ Reference files for skills. Stores additional files like `references/policies.md
 Junction table linking agents to skills from their organization's library.
 
 | Column              | Type         | Constraints                             | Description                     |
-| ------------------- | ------------ | --------------------------------------- | ------------------------------- |
+| ---------- | ----------- | ------------------------------------- | ---------------------------- |
 | id                  | UUID         | PRIMARY KEY                             | Unique assignment identifier    |
 | agent_id            | UUID         | NOT NULL, FK → voice_agents.id          | Agent identifier                |
 | skill_id            | UUID         | NOT NULL, FK → organization_skills.id   | Skill identifier                |
@@ -2297,7 +2310,7 @@ These tables support the **fork/refresh model**: platform admins maintain immuta
 Immutable skill templates controlled by the platform. These are the source of truth for forked copies in organization libraries.
 
 | Column              | Type         | Constraints                     | Description                                      |
-| ------------------- | ------------ | ------------------------------- | ------------------------------------------------ |
+| ------------ | ------------ | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | id                  | UUID         | PRIMARY KEY                     | Unique platform skill identifier                 |
 | slug                | VARCHAR(100) | NOT NULL, UNIQUE                | Global URL-safe identifier (kebab-case)          |
 | name                | VARCHAR(200) | NOT NULL                        | Display name shown in template library           |
@@ -2327,6 +2340,7 @@ Immutable skill templates controlled by the platform. These are the source of tr
 **Access**: No RLS. Platform admin only.
 
 **Migration history**:
+
 - `20260624000001` - Replace `is_active` + `is_deleted` booleans with a single
   `status VARCHAR(20)` enum. Backfilled legacy rows using the matrix above,
   then dropped the booleans and added a CHECK constraint.
@@ -2336,7 +2350,7 @@ Immutable skill templates controlled by the platform. These are the source of tr
 Default reference files bundled with a platform skill. These files are copied to the organization skill on fork.
 
 | Column              | Type         | Constraints                             | Description                     |
-| ------------------- | ------------ | --------------------------------------- | ------------------------------- |
+| ------------ | ----------- | --------------------------------- | --------------------------------- |
 | id                  | UUID         | PRIMARY KEY                             | Unique file identifier          |
 | skill_id            | UUID         | NOT NULL, FK → platform_skills.id       | Parent platform skill           |
 | file_path           | TEXT         | NOT NULL                                | e.g., "references/policies.md" |
@@ -2354,7 +2368,7 @@ Default reference files bundled with a platform skill. These files are copied to
 Audit trail for refresh operations. Each time an organization refreshes a forked skill from its platform source, a log entry is created.
 
 | Column              | Type         | Constraints                             | Description                     |
-| ------------------- | ------------ | --------------------------------------- | ------------------------------- |
+| ------------------ | ----------- | ------------------------------------- | ------------------------------- |
 | id                  | UUID         | PRIMARY KEY                             | Unique log entry identifier     |
 | org_skill_id        | UUID         | NOT NULL, FK → organization_skills.id   | Forked skill that was refreshed |
 | old_source_version  | VARCHAR(20)  | NULLABLE                                | Platform version before refresh   |
@@ -2371,7 +2385,7 @@ Only the backend service-role CLI path writes this table; it is not exposed as a
 browser-facing admin API.
 
 | Column | Type | Constraints | Description |
-| --- | --- | --- | --- |
+| ------------------ | ------------ | ---------------------------------------------------------------------- | -------------------------------------------------------------- |
 | id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Seed operation identifier |
 | domain | VARCHAR(100) | NOT NULL | Catalog domain, e.g. `platform_skills` or `system_pricing` |
 | definition_version | VARCHAR(100) | NOT NULL | Version of the operator-facing source catalog |

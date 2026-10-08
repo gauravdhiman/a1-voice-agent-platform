@@ -8,6 +8,11 @@ settles admitted calls fully at teardown, and runs a five-minute notification
 outbox/retry loop for low-credit warnings at 20%, 10%, and 5%. See
 [`docs/03_implementation/credit_usage_enforcement_and_notifications.md`](../docs/03_implementation/credit_usage_enforcement_and_notifications.md).
 
+The four one-time credit packs are code-owned in `src/billing/credit_catalog.py`.
+Stripe setup and the atomic database catalog sync are explicit operator actions;
+see the [credit catalog rollout](../docs/05_operations/stripe_management.md#four-pack-catalog-rollout).
+Catalog changes preserve purchased credit balances and historical transactions.
+
 OAuth connections refresh through a Postgres lease and credential-generation
 fence. Ambiguous provider outcomes stop automatic reuse and notify organization
 admins by email plus configured platform-admin channels. See
