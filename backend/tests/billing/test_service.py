@@ -4,11 +4,11 @@ Billing Service Tests
 
 import json
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.billing.models import (
     BillingStatus,
     CreditTransaction,
@@ -710,81 +710,226 @@ class TestBillingServiceOrganizationSubscriptions:
         assert result is None
 
 
+class _BalanceQuery:
+    """Small provider fake recording balance-query filters without mock chains."""
+
+    def __init__(self, rows):
+        self.rows = list(rows)
+        self.calls = []
+        self.failure = None
+        self.execute_count = 0
+        self._negated = False
+
+    @property
+    def not_(self):
+        """Record explicit negation so a dropped NOT predicate fails the test."""
+        self._negated = True
+        return self
+
+    def select(self, columns):
+        self.calls.append(("select", columns))
+        return self
+
+    def eq(self, column, value):
+        self.calls.append(("eq", column, value))
+        return self
+
+    def is_(self, column, value):
+        assert self._negated, "Expected a NOT NULL expiry predicate"
+        self._negated = False
+        assert value == "null"
+        self.calls.append(("not_null", column))
+        self.rows = [row for row in self.rows if row[column] is not None]
+        return self
+
+    def lte(self, column, value):
+        self.calls.append(("lte", column, value))
+        boundary = datetime.fromisoformat(value)
+        self.rows = [
+            row for row in self.rows if datetime.fromisoformat(row[column]) <= boundary
+        ]
+        return self
+
+    def gte(self, column, value):
+        self.calls.append(("gte", column, value))
+        boundary = datetime.fromisoformat(value)
+        self.rows = [
+            row for row in self.rows if datetime.fromisoformat(row[column]) >= boundary
+        ]
+        return self
+
+    def order(self, column):
+        self.calls.append(("order", column))
+        self.rows.sort(key=lambda row: datetime.fromisoformat(row[column]))
+        return self
+
+    def execute(self):
+        self.execute_count += 1
+        if self.failure is not None:
+            raise self.failure
+        return SimpleNamespace(data=self.rows)
+
+
+def _balance_queries(service, organizations, expiring=None):
+    """Bind named provider queries so unknown table access fails immediately."""
+    organization_query = _BalanceQuery(organizations)
+    expiry_query = _BalanceQuery(expiring or [])
+    queries = {"organizations": organization_query, "credit_transactions": expiry_query}
+    service.supabase = SimpleNamespace(table=queries.__getitem__)
+    return organization_query, expiry_query
+
+
 class TestBillingServiceCreditManagement:
     """Test cases for credit management."""
 
-    @pytest.mark.skip(
-        reason="Complex mocking - requires chained Supabase queries with multiple side_effect calls"
+    @pytest.mark.parametrize(
+        "pools,expected_total",
+        [
+            ({"credit_balance": 1500}, 1500),
+            ({}, 0),
+            (
+                {
+                    "credit_balance": None,
+                    "admin_credit_balance": None,
+                    "purchased_credit_balance": None,
+                },
+                0,
+            ),
+            (
+                {
+                    "credit_balance": None,
+                    "admin_credit_balance": 200,
+                    "purchased_credit_balance": 500,
+                },
+                700,
+            ),
+            (
+                {
+                    "credit_balance": 1000,
+                    "admin_credit_balance": 200,
+                    "purchased_credit_balance": 500,
+                },
+                1700,
+            ),
+            (
+                {
+                    "credit_balance": -20,
+                    "admin_credit_balance": 10,
+                    "purchased_credit_balance": 100,
+                },
+                90,
+            ),
+        ],
     )
     @pytest.mark.asyncio
     async def test_get_credit_balance_total(
-        self,
-        billing_service,
-        mock_supabase_client,
-        sample_org_id,
+        self, billing_service, sample_org_id, pools, expected_total
     ):
-        """Returns correct total_credits."""
-        mock_org_response = MagicMock()
-        mock_org_response.data = [{"credit_balance": 1500}]
-        mock_tx_response = MagicMock()
-        mock_tx_response.data = []
-        mock_expiring_response = MagicMock()
-        mock_expiring_response.data = []
-
-        mock_supabase_client.table.side_effect = [
-            MagicMock().select().eq().execute(mock_org_response),
-            MagicMock().select().eq().execute(mock_tx_response),
-            MagicMock().select().eq().gt().execute(mock_expiring_response),
-        ]
+        """Sum current pools, preserving debt and treating absent values as zero."""
+        organization, expiries = _balance_queries(billing_service, [pools])
 
         result = await billing_service.get_credit_balance(sample_org_id)
 
-        assert result.total_credits == 1500
+        assert result.total_credits == expected_total
+        assert result.total_credits == (
+            result.subscription_credits
+            + result.admin_granted_credits
+            + result.purchased_credits
+        )
+        assert result.expiring_soon == 0
+        assert result.expires_at is None
+        assert organization.calls == [
+            (
+                "select",
+                "credit_balance, admin_credit_balance, purchased_credit_balance",
+            ),
+            ("eq", "id", str(sample_org_id)),
+        ]
+        assert ("eq", "organization_id", str(sample_org_id)) in expiries.calls
 
-    @pytest.mark.skip(
-        reason="Complex mocking - requires chained Supabase queries with multiple side_effect calls"
-    )
     @pytest.mark.asyncio
-    async def test_get_credit_balance_breakdown(
-        self,
-        billing_service,
-        mock_supabase_client,
-        sample_org_id,
-    ):
-        """Returns subscription vs purchased breakdown."""
-        now = datetime.now(timezone.utc)
-
-        mock_org_response = MagicMock()
-        mock_org_response.data = [{"credit_balance": 1500}]
-
-        mock_tx_response = MagicMock()
-        mock_tx_response.data = [
-            {
-                "amount": 1000,
-                "source": "subscription",
-                "created_at": now.isoformat(),
-            },
-            {
-                "amount": 500,
-                "source": "purchase",
-                "created_at": now.isoformat(),
-            },
-        ]
-
-        mock_expiring_response = MagicMock()
-        mock_expiring_response.data = []
-
-        mock_supabase_client.table.side_effect = [
-            MagicMock().select().eq().execute(mock_org_response),
-            MagicMock().select().eq().execute(mock_tx_response),
-            MagicMock().select().eq().gt().execute(mock_expiring_response),
-        ]
+    async def test_get_credit_balance_breakdown(self, billing_service, sample_org_id):
+        """Keep plan, administrator, and purchased pools distinct."""
+        _balance_queries(
+            billing_service,
+            [
+                {
+                    "credit_balance": 1000,
+                    "admin_credit_balance": 250,
+                    "purchased_credit_balance": 500,
+                }
+            ],
+        )
 
         result = await billing_service.get_credit_balance(sample_org_id)
 
-        assert result.total_credits == 1500
+        assert result.total_credits == 1750
         assert result.subscription_credits == 1000
+        assert result.admin_granted_credits == 250
         assert result.purchased_credits == 500
+
+    @pytest.mark.asyncio
+    async def test_get_credit_balance_reports_ordered_upcoming_expiries(
+        self, billing_service, sample_org_id
+    ):
+        """Filter expiry window, sum matching grants, and expose earliest expiry."""
+        now = datetime.now(timezone.utc)
+        earliest = now + timedelta(days=2)
+        later = now + timedelta(days=20)
+        _, expiries = _balance_queries(
+            billing_service,
+            [{"credit_balance": 500}],
+            [
+                {"amount": 200, "expires_at": later.isoformat()},
+                {"amount": 100, "expires_at": earliest.isoformat()},
+                {"amount": 999, "expires_at": (now - timedelta(days=1)).isoformat()},
+                {"amount": 999, "expires_at": (now + timedelta(days=31)).isoformat()},
+                {"amount": 999, "expires_at": None},
+            ],
+        )
+
+        result = await billing_service.get_credit_balance(sample_org_id)
+
+        assert result.expiring_soon == 300
+        assert result.expires_at == earliest
+        assert ("not_null", "expires_at") in expiries.calls
+        assert ("order", "expires_at") in expiries.calls
+        assert [call[0] for call in expiries.calls] == [
+            "select",
+            "eq",
+            "not_null",
+            "lte",
+            "gte",
+            "order",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_get_credit_balance_rejects_missing_organization(
+        self, billing_service, sample_org_id
+    ):
+        """An unknown tenant raises without querying another tenant's ledger."""
+        _, expiries = _balance_queries(billing_service, [])
+        with pytest.raises(ValueError, match="Organization .* not found"):
+            await billing_service.get_credit_balance(sample_org_id)
+        assert expiries.execute_count == 0
+
+    @pytest.mark.parametrize("table", ["organizations", "credit_transactions"])
+    @pytest.mark.asyncio
+    async def test_get_credit_balance_propagates_provider_failure(
+        self, billing_service, sample_org_id, table
+    ):
+        """Provider failures propagate instead of presenting a false zero balance."""
+        organization, expiries = _balance_queries(
+            billing_service, [{"credit_balance": 500}]
+        )
+        failure = RuntimeError("isolated test provider unavailable")
+        query = organization if table == "organizations" else expiries
+        query.failure = failure
+        with pytest.raises(RuntimeError) as raised:
+            await billing_service.get_credit_balance(sample_org_id)
+        assert raised.value is failure
+        if table == "organizations":
+            assert expiries.execute_count == 0
 
     @pytest.mark.skip(
         reason="Complex mocking - requires credit_event, organization, and transaction table mocks"
