@@ -78,8 +78,8 @@ SYSTEM_PRICING: tuple[SystemPricingDefinition, ...] = (
         event_name="phone_number_toll_free_month",
         display_name="Toll-free phone numbers",
         description=(
-            "An active toll-free phone number uses 120 credits ($3 at 40 credits "
-            "per dollar) for each rental month."
+            "An active toll-free phone number uses 120 credits for each rental "
+            "month. Its approximate USD equivalent depends on the credit pack."
         ),
         category="phone_number",
         meter_type="count",

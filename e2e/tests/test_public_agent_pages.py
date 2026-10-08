@@ -234,8 +234,11 @@ def test_verdi_table_public_demo_page_renders_restaurant_script(
     ).to_be_visible()
     expect(page.get_by_text("What time do you close tonight?")).to_be_visible()
     expect(
+        page.get_by_text("I'd like two Sonoran grain bowls for pickup.")
+    ).to_be_visible()
+    expect(
         page.get_by_text(
-            "Sofia will answer questions or capture a confirmed dummy order."
+            "The agent will answer questions or capture a confirmed demo order."
         )
     ).to_be_visible()
 

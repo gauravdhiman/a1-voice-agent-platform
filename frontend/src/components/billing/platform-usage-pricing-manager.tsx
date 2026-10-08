@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/tooltip";
 import { adminPlanService } from "@/services/admin-plan-service";
 import type { CreditEvent } from "@/types/admin-plans";
+import { useCreditProducts } from "@/hooks/use-credit-products";
+import type { CreditProduct } from "@/types/billing";
 
 interface CreditEventDraft {
   description: string;
@@ -42,8 +44,6 @@ interface SystemPricingCopy {
   label: string;
   rule: string;
 }
-
-const CREDITS_PER_DOLLAR = 40;
 
 const SYSTEM_PRICING_COPY: Record<string, SystemPricingCopy> = {
   voice_call_minute: {
@@ -94,13 +94,36 @@ function pricingCategory(event: CreditEvent): string {
   return SYSTEM_PRICING_COPY[event.name]?.category ?? "System";
 }
 
-/** Show an approximate dollar equivalent using the published credit-pack rate. */
-function formatCreditDollarEquivalent(credits: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(credits / CREDITS_PER_DOLLAR);
+/** Show the USD range implied by the currently published credit packs. */
+function formatCreditDollarEquivalent(
+  credits: number,
+  products: CreditProduct[] | undefined,
+): string {
+  const usableProducts = products?.filter(
+    (product) =>
+      product.is_active &&
+      product.currency.toUpperCase() === "USD" &&
+      Number.isFinite(product.credit_amount) &&
+      product.credit_amount > 0 &&
+      Number.isFinite(product.price_amount) &&
+      product.price_amount > 0,
+  );
+  if (!usableProducts?.length) return "USD equivalent varies by credit pack";
+
+  const pricesPerCredit = usableProducts.map(
+    (product) => product.price_amount / 100 / product.credit_amount,
+  );
+  const minimum = credits * Math.min(...pricesPerCredit);
+  const maximum = credits * Math.max(...pricesPerCredit);
+  const formatUsd = (amount: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 2,
+    }).format(amount);
+
+  if (minimum === maximum) return `≈ ${formatUsd(minimum)}`;
+  return `≈ ${formatUsd(minimum)}–${formatUsd(maximum)} depending on pack`;
 }
 
 /**
@@ -110,14 +133,19 @@ function formatCreditDollarEquivalent(credits: number): string {
  * the platform owns the measurement and interval for each supported activity.
  */
 export function PlatformUsagePricingManager() {
+  const { data: creditProducts } = useCreditProducts();
   const [events, setEvents] = React.useState<CreditEvent[]>([]);
-  const [drafts, setDrafts] = React.useState<Record<string, CreditEventDraft>>({});
+  const [drafts, setDrafts] = React.useState<Record<string, CreditEventDraft>>(
+    {},
+  );
   const [loading, setLoading] = React.useState(true);
+  const [loadFailed, setLoadFailed] = React.useState(false);
   const [savingName, setSavingName] = React.useState<string | null>(null);
 
   const loadEvents = React.useCallback(async () => {
     try {
       setLoading(true);
+      setLoadFailed(false);
       const rows = await adminPlanService.listCreditEvents();
       setEvents(rows);
       setDrafts(
@@ -134,6 +162,7 @@ export function PlatformUsagePricingManager() {
     } catch (error) {
       console.error("Failed to load usage pricing:", error);
       toast.error("Failed to load usage pricing");
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -155,10 +184,20 @@ export function PlatformUsagePricingManager() {
     if (!draft) return;
     try {
       setSavingName(event.name);
-      const updated = await adminPlanService.updateCreditEvent(event.name, draft);
+      const updated = await adminPlanService.updateCreditEvent(
+        event.name,
+        draft,
+      );
       setEvents((current) =>
         current.map((item) => (item.name === updated.name ? updated : item)),
       );
+      setDrafts((current) => ({
+        ...current,
+        [updated.name]: {
+          description: updated.description ?? "",
+          credit_cost: updated.credit_cost,
+        },
+      }));
       toast.success(`${eventLabel(event)} pricing saved`);
     } catch (error) {
       console.error("Failed to save usage pricing:", error);
@@ -179,6 +218,15 @@ export function PlatformUsagePricingManager() {
     );
   }
 
+  if (loadFailed) {
+    return (
+      <div role="alert" className="space-y-3">
+        <p>Unable to load usage pricing. Please try again.</p>
+        <Button onClick={() => void loadEvents()}>Try again</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border bg-muted/20 p-4">
@@ -189,10 +237,11 @@ export function PlatformUsagePricingManager() {
           <div>
             <h2 className="font-semibold">System usage pricing</h2>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              These are the only activities currently charged from credits. Rates
-              apply across the platform and can be set to zero when an activity
-              is included. The platform owns the measurement rule for each one.
-              At the published top-up rate, 40 credits are worth about $1.
+              These are the only activities currently charged from credits.
+              Rates apply across the platform and can be set to zero when an
+              activity is included. The platform owns the measurement rule for
+              each one. Larger credit packs have a lower effective price, so USD
+              equivalents vary by package.
             </p>
           </div>
         </div>
@@ -211,7 +260,8 @@ export function PlatformUsagePricingManager() {
               <div>
                 <CardTitle>Pricing rates</CardTitle>
                 <CardDescription className="mt-1">
-                  Compare and update every system-wide credit charge in one place.
+                  Compare and update every system-wide credit charge in one
+                  place.
                 </CardDescription>
               </div>
               <Badge variant="secondary">System-wide</Badge>
@@ -229,7 +279,9 @@ export function PlatformUsagePricingManager() {
                     <TableHead>Activity</TableHead>
                     <TableHead>Billing basis</TableHead>
                     <TableHead className="w-[180px]">Credit cost</TableHead>
-                    <TableHead className="w-[120px] text-right">Action</TableHead>
+                    <TableHead className="w-[120px] text-right">
+                      Action
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -243,7 +295,9 @@ export function PlatformUsagePricingManager() {
                     return (
                       <TableRow key={event.name}>
                         <TableCell>
-                          <Badge variant="outline">{pricingCategory(event)}</Badge>
+                          <Badge variant="outline">
+                            {pricingCategory(event)}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -255,7 +309,10 @@ export function PlatformUsagePricingManager() {
                                   className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                   aria-label={`More information about ${label}`}
                                 >
-                                  <Info className="h-4 w-4" aria-hidden="true" />
+                                  <Info
+                                    className="h-4 w-4"
+                                    aria-hidden="true"
+                                  />
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-xs">
@@ -264,7 +321,10 @@ export function PlatformUsagePricingManager() {
                             </Tooltip>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            ≈ {formatCreditDollarEquivalent(draft.credit_cost)}{" "}
+                            {formatCreditDollarEquivalent(
+                              draft.credit_cost,
+                              creditProducts,
+                            )}{" "}
                             {pricingRule(event).toLowerCase()}
                           </p>
                         </TableCell>
@@ -273,7 +333,10 @@ export function PlatformUsagePricingManager() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Label className="sr-only" htmlFor={`cost-${event.name}`}>
+                            <Label
+                              className="sr-only"
+                              htmlFor={`cost-${event.name}`}
+                            >
                               Credit cost for {label}
                             </Label>
                             <Input
@@ -281,6 +344,7 @@ export function PlatformUsagePricingManager() {
                               aria-label={`Credit cost for ${label}`}
                               className="w-28"
                               type="number"
+                              disabled={savingName !== null}
                               min={0}
                               step={1}
                               value={draft.credit_cost}
@@ -302,7 +366,7 @@ export function PlatformUsagePricingManager() {
                           <Button
                             size="sm"
                             onClick={() => void handleSave(event)}
-                            disabled={savingName === event.name}
+                            disabled={savingName !== null}
                           >
                             {savingName === event.name ? (
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

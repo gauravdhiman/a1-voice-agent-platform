@@ -11,13 +11,13 @@ page.
 ## Scope inventory
 
 | Domain | Current source of truth | Current shape | Seed policy | Launch decision |
-| --- | --- | --- | --- | --- |
+| --------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Platform skill templates | `backend/src/voice_agents/skill_seeds.py` | 15 markdown skills plus reference files across dental, restaurant, and HVAC | CLI plan and explicit apply; content-hash idempotent; normal apply never deletes | In scope for launch; review content and safety gates per [launch strategy](../05_operations/master_data_launch_strategy.md) |
 | Platform tool schemas | `shared/voice_agents/tools/implementations` and `PlatformToolRegistry` | Runtime-discovered tools and function schemas | CLI plan and explicit schema resync | In scope; schema changes must be intentional |
 | System usage pricing | `backend/src/billing/system_pricing.py` | Five finite runtime meters: voice minute and four monthly phone-number rates, including US and legacy non-US local rentals | CLI apply creates missing rows and preserves existing rates; reset is non-production only | In scope; rates are hypotheses until measured COGS is available |
 | Notification events | `backend/src/notifications/templates.py` | Nine built-in event keys with template variables | CLI apply creates missing rows; existing rows remain administrator-owned | In scope |
 | Plans and prices | Plan/entitlement migrations plus admin plan catalog | Free plan is migration-managed; no approved paid launch catalog in code | Review-only inventory; blocked from this CLI | Review required; do not seed paid plans from staging data |
-| Credit top-up products | `backend/src/billing/credit_catalog.py` plus Stripe catalog | Three code-owned packs; Stripe product/price IDs are created or reconciled by `backend/scripts/stripe_manager.py` | Preview and explicit Stripe-manager sync; intentionally outside this generic CLI | Review before syncing the selected Stripe account |
+| Credit top-up products      | `backend/src/billing/credit_catalog.py` plus Stripe catalog            | Four code-owned packs; Stripe product/price IDs are created or reconciled by `backend/scripts/stripe_manager.py`           | Preview and explicit Stripe-manager sync; intentionally outside this generic CLI          | Review before syncing the selected Stripe account                                                                           |
 | Entitlement definitions | `20260807000002_add_plan_versioning_and_entitlements.py` | Runtime-enforced limit and feature keys | Migration-managed | In scope as inventory, not a second seeder |
 | Onboarding voice templates | `20260329000001_add_onboarding_and_voice_templates.py` | Five starter templates: dental, HVAC, salon, real estate, plumbing | Migration-managed | In scope as inventory; align with industry rollout later |
 | Voice pipeline presets | `20260729000002_add_pipeline_presets_is_default.py` | One system-default realtime preset | Migration-managed | In scope as inventory |
@@ -168,12 +168,13 @@ these need a new default, add a migration and update this inventory.
 
 Paid plan versions remain configured through the authenticated Plan Catalog
 admin; they are not created by the generic master-data CLI or seeded from
-worktree fixtures. The three credit top-up pack amounts are code-owned in
+worktree fixtures. The four credit top-up pack amounts and prices are code-owned in
 `backend/src/billing/credit_catalog.py`; use the preview and explicit sync
 commands in `backend/scripts/stripe_manager.py` to reconcile Stripe products
 and prices for the selected account. Stripe price IDs and customer billing
 state remain environment/account data, and staging rows are not a production
-source of truth.
+source of truth. Follow the [credit catalog rollout](../05_operations/stripe_management.md#four-pack-catalog-rollout)
+to apply the matching RPC migration before syncing the four-pack catalog.
 
 ## Testing and rollout checklist
 

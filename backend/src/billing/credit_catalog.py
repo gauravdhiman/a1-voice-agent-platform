@@ -12,8 +12,8 @@ class CreditPackDefinition(TypedDict):
     price_usd: float
 
 
-# 40 credits are $1 across all launch packs. No pack advertises an artificial
-# bulk discount; the checkout price and issued credits remain the source of truth.
+# At the default voice rate of 10 credits per connected minute, packs lower the
+# effective call-minute rate in small steps while keeping the entry pack at $5.
 CREDIT_PACKS: tuple[CreditPackDefinition, ...] = (
     {
         "name": "200 Credits Pack",
@@ -22,15 +22,27 @@ CREDIT_PACKS: tuple[CreditPackDefinition, ...] = (
         "price_usd": 5.00,
     },
     {
-        "name": "400 Credits Pack",
-        "description": "400 credits for regular extra usage",
-        "credit_amount": 400,
-        "price_usd": 10.00,
+        "name": "500 Credits Pack",
+        "description": (
+            "500 credits for regular extra usage at a lower call-minute rate"
+        ),
+        "credit_amount": 500,
+        "price_usd": 12.00,
     },
     {
         "name": "1000 Credits Pack",
-        "description": "1000 credits for higher extra usage",
+        "description": (
+            "1000 credits for higher extra usage at a lower call-minute rate"
+        ),
         "credit_amount": 1000,
-        "price_usd": 25.00,
+        "price_usd": 23.00,
+    },
+    {
+        "name": "2000 Credits Pack",
+        "description": (
+            "2000 credits for sustained usage at the lowest call-minute rate"
+        ),
+        "credit_amount": 2000,
+        "price_usd": 44.00,
     },
 )

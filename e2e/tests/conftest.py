@@ -1,6 +1,7 @@
 import pytest
 import os
 import re
+import json
 from playwright.sync_api import BrowserContext, Page
 
 @pytest.fixture(scope="session")
@@ -74,7 +75,7 @@ def pytest_runtest_makereport(item, call):
                 report.extra = extra
 
 def setup_boundary_mocks(page: Page):
-    """Intercepts EXTERNAL boundaries only (Supabase Auth) and suppresses the product tour.
+    """Provide deterministic Auth and read-only API fixtures and suppress the tour.
 
     The dashboard product tour (react-joyride) auto-starts on first login and
     overlays the page with a spotlight that intercepts pointer events. Without
@@ -276,7 +277,24 @@ def setup_boundary_mocks(page: Page):
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body='''{"total_calls_week": 0, "total_calls_month": 0, "avg_duration_seconds": 0, "calls_by_status": [], "calls_by_hour": [], "calls_by_agent": []}'''
+                body=json.dumps(
+                    {
+                        "active_organizations": 0,
+                        "total_calls_week": 0,
+                        "total_calls_month": 0,
+                        "avg_duration_seconds": 0,
+                        "selected_period_days": 30,
+                        "selected_status": None,
+                        "selected_total_calls": 0,
+                        "selected_active_organizations": 0,
+                        "selected_average_duration_seconds": None,
+                        "available_statuses": [],
+                        "calls_by_status": [],
+                        "calls_by_hour": [],
+                        "calls_by_agent": [],
+                        "calls_by_day": [],
+                    }
+                ),
             )
         else:
             route.fulfill(
@@ -285,6 +303,64 @@ def setup_boundary_mocks(page: Page):
                 body='''{"items": [], "total": 0, "page": 1, "page_size": 25, "total_pages": 0}'''
             )
     page.route(re.compile(r".*/api/v1/calls.*"), _handle_calls)
+
+    # Shared read-only dependencies use the current API response contracts.
+    # Individual scenarios register their more specific fixtures afterwards.
+    page.route(
+        re.compile(r".*/api/v1/billing/summary/.*"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "subscription": None,
+                    "credit_balance": 100,
+                    "current_period_usage": 0,
+                    "next_billing_date": None,
+                    "amount_due": None,
+                }
+            ),
+        ),
+    )
+    page.route(
+        re.compile(r".*/api/v1/voice-templates(?:\?.*)?$"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body="[]",
+        ),
+    )
+    page.route(
+        re.compile(r".*/api/v1/presets/catalog(?:\?.*)?$"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "presets": [],
+                    "default_is_ready": True,
+                    "credentials_self_service": True,
+                }
+            ),
+        ),
+    )
+    page.route(
+        re.compile(r".*/api/v1/billing/entitlements/.*"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "limits": {},
+                    "features": {
+                        "premium_tools": {"effective_value": True},
+                        "credit_topup_enabled": {"effective_value": True},
+                    },
+                    "migration": None,
+                }
+            ),
+        ),
+    )
 
 @pytest.fixture(autouse=True)
 def apply_mocks(page: Page):

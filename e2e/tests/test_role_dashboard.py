@@ -162,8 +162,8 @@ def test_dashboard_real_roles_follow_the_selected_workspace(
     expect(page.get_by_role("button", name="Expand navigation")).to_be_visible()
     assert main.bounding_box()["width"] >= 350
     page.get_by_role("button", name="Expand navigation").click()
-    expect(page.get_by_role("button", name="Collapse navigation")).to_be_visible()
-    page.get_by_role("button", name="Collapse navigation").click()
+    expect(page.get_by_role("button", name="Close navigation")).to_be_visible()
+    page.get_by_role("button", name="Close navigation").click()
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
 

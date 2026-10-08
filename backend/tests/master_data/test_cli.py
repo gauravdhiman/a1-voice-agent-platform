@@ -83,13 +83,14 @@ def test_credit_pack_inventory_uses_code_catalog_but_is_not_generic_seedable():
     )
 
     assert credit_products.source.startswith("backend/src/billing/credit_catalog.py")
-    assert credit_products.expected_count == 3
+    assert credit_products.expected_count == 4
     assert credit_products.seedable is False
     assert credit_products.requires_review is True
     assert [pack["credit_amount"] for pack in credit_products.payload] == [
         200,
-        400,
+        500,
         1000,
+        2000,
     ]
 
 

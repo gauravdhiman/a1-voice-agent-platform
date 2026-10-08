@@ -259,6 +259,17 @@ def setup_skill_mocks(page: Page):
 def test_organization_skills_page_shows_skills(page: Page, base_url: str, step):
     """Test that the organization skills tab displays skills in split view."""
     setup_skill_mocks(page)
+    # Selecting a skill loads its file summaries. The broad list mock must
+    # not return skill records for this separate, array-of-files contract.
+    page.route(
+        re.compile(
+            rf".*/api/v1/organizations/{TEST_ORG_ID}/skills/"
+            rf"{MOCK_SKILLS[0]['id']}/files$"
+        ),
+        lambda route: route.fulfill(
+            status=200, content_type="application/json", body="[]"
+        ),
+    )
 
     step("Sign in as test user")
     signin_user(page, base_url)
@@ -280,15 +291,13 @@ def test_organization_skills_page_shows_skills(page: Page, base_url: str, step):
     page.get_by_text("Appointment Booking").first.click()
 
     step("Verify content displayed in right panel")
-    # Prose rendering may vary; check for skill content markers
-    try:
-        expect(page.locator(".prose").get_by_text("When to Use")).to_be_visible(timeout=5000)
-    except Exception:
-        # Fallback: any prose content or skill title in right panel proves content loaded
-        try:
-            expect(page.locator(".prose").first).to_be_visible(timeout=5000)
-        except Exception:
-            expect(page.get_by_text(re.compile(r"Appointment Booking|Skill", re.I)).first).to_be_visible(timeout=5000)
+    content = page.locator(".prose")
+    expect(content.get_by_role("heading", name="Appointment Booking")).to_be_visible()
+    expect(content.get_by_role("heading", name="When to Use")).to_be_visible()
+    expect(content.get_by_text("Caller asks to book", exact=True)).to_be_visible()
+    expect(content.get_by_role("heading", name="Procedure")).to_be_visible()
+    expect(content.get_by_text("Ask for date", exact=True)).to_be_visible()
+    expect(page).to_have_url(re.compile(r"/skills\?.*skill=appointment-booking"))
 
 
 def test_organization_skills_filter(page: Page, base_url: str, step):

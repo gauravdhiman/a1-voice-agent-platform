@@ -5,13 +5,14 @@
 **Last Updated:** 2026-08-12
 **Owner:** Genie (AI Assistant)
 
-**Related:** [Twilio call flow](../01_architecture/twilio_call_flow.md), [Outbound phone calls](../03_implementation/outbound_phone_calls.md) (planned)
+**Related:** [Twilio call flow](01_architecture/twilio_call_flow.md), [Outbound phone calls](03_implementation/outbound_phone_calls.md) (planned)
 
 ---
 
 ## 1. Overview
 
 ### Summary
+
 Enable users to purchase, manage, and use phone numbers directly from the VoiceAI platform. Twilio provides PSTN numbers and Media Streams; `voice-ws` handles the AI voice session over WebSocket.
 
 ### Current implementation contract
@@ -60,6 +61,7 @@ flowchart TD
 ```
 
 ### Target Users
+
 - Small business owners wanting AI voice agents
 - Sales teams needing dedicated phone numbers
 - Customer support teams
@@ -70,12 +72,14 @@ flowchart TD
 ## 2. Problem Statement
 
 ### Current State
+
 - Users must manually set up Twilio accounts
 - Technical configuration (TwiML, Webhooks, SIP Trunking) is confusing
 - Users need to manage numbers separately from voice agents
 - No unified view of phone numbers in the platform
 
 ### Pain Points
+
 1. Twilio setup is technically challenging for non-technical users
 2. Multiple dashboards to manage (platform + Twilio)
 3. No visibility into number status within the platform
@@ -97,6 +101,7 @@ flowchart TD
 ## 4. User Stories
 
 ### US1: Browse Available Numbers
+
 ```
 As a user,
 I want to see available phone numbers for a specific country,
@@ -118,6 +123,7 @@ Acceptance Criteria:
 ```
 
 ### US2: Purchase a Number with Credits
+
 ```
 As a user,
 I want to purchase a phone number using my platform credits,
@@ -134,6 +140,7 @@ Acceptance Criteria:
 ```
 
 ### US3: Assign Number to Agent
+
 ```
 As a user,
 I want to assign a purchased number to my voice agent,
@@ -148,6 +155,7 @@ Acceptance Criteria:
 ```
 
 ### US4: Manage Number Settings
+
 ```
 As a user,
 I want to configure settings for my number,
@@ -160,6 +168,7 @@ Acceptance Criteria:
 ```
 
 ### US5: Release or Disconnect Number
+
 ```
 As a user,
 I want to release a platform number or disconnect an existing number,
@@ -182,6 +191,7 @@ Acceptance Criteria:
 ```
 
 ### US6: Handle Agent Disconnection on Release or Disconnect
+
 ```
 As a user,
 I want to understand what happens when I release or disconnect a number assigned to an agent,
@@ -198,6 +208,7 @@ Acceptance Criteria:
 ```
 
 ### US7: View Unassigned Numbers
+
 ```
 As a user,
 I want to see numbers I own that aren't assigned to any agent,
@@ -249,6 +260,7 @@ Acceptance Criteria:
 ```
 
 ### Dashboard - Numbers Tab
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  My Phone Numbers             [+ Search & Purchase]        │
@@ -274,6 +286,7 @@ Acceptance Criteria:
 ```
 
 ### Cancellation Flow
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Release or Disconnect Phone Number?                         │
@@ -310,6 +323,7 @@ Acceptance Criteria:
   daily configurable retry job attempts the provider release again.
 
 ### D2: Unassigned Numbers ✓
+
 - Users can buy numbers without assigning to an agent
 - Show "used" vs "unused" state in UI
 - Display unused number count on dashboard
@@ -318,6 +332,7 @@ Acceptance Criteria:
   are disabled during the configurable grace period and released afterward.
 
 ### D3: Search/Display Limit ✓
+
 - Maximum 50 results per query (pagination)
 - Platform-purchased ownership remains subject to the organization's
   `max_phone_numbers` entitlement; customer-managed imports are excluded and
@@ -330,12 +345,14 @@ Acceptance Criteria:
   `+pattern`, and `pattern$` search expressions.
 
 ### D4: No Local Pool ✓
+
 - Direct integration with Twilio APIs; voice media via `voice-ws` Media Streams
 - No local pool management
 - Platform-owned numbers are released through Twilio; customer-owned numbers
   are only disconnected locally and are never released by the platform.
 
 ### D5: Agent Assignment Validation
+
 - Prevent assigning same number to multiple agents
 - Check number is not already assigned before linking
 
@@ -365,14 +382,16 @@ Acceptance Criteria:
 ## Appendix: Credits System Integration
 
 ### Pricing Tiers (in credits)
+
 | Number Type | Monthly Cost |
-|-------------|--------------|
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
 | US local | First platform-provided line included with a paid plan; each additional line is 80 credits per rental month |
 | Legacy non-US local | 200 credits per rental month for existing platform rentals; new platform purchases are not available in v1 |
 | Mobile | Legacy existing rentals only: 200 credits per rental month; new platform purchases are disabled in v1 |
 | Toll-Free | 120 credits by default |
 
 ### Credit Purchase Flow
+
 - Users buy credits via Stripe (existing)
 - Platform-owned numbers consume the enabled monthly system-pricing event
   after the number has been purchased; customer-owned numbers do not consume
@@ -417,7 +436,7 @@ Search for phone numbers available for purchase from the provider.
 **Query Parameters:**
 
 | Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
+| ----------------- | ------- | -------- | --------------------------------------------------------------------------- |
 | country_code | string | No | Country code (default: "US") |
 | phone_number_type | string | No | Type: "local", "toll_free", "mobile" (default: "local") |
 | area_code | string | No | Filter by area code |
@@ -464,7 +483,7 @@ curl -X GET "http://localhost:8000/api/v1/phone-numbers/available?organization_i
 **Response Model:** `PhoneNumberSearchResponse`
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ----------- | ------- | ------------------------------- |
 | items | array | List of available phone numbers |
 | total_count | integer | Total results matching query |
 | page | integer | Current page number |
@@ -482,7 +501,7 @@ Purchase a phone number using organization credits.
 **Headers:**
 
 | Header | Required | Description |
-|--------|----------|-------------|
+| --------------- | -------- | ------------------------------------------ |
 | Authorization | Yes | Bearer token |
 | organization_id | Yes | UUID of the organization (query parameter) |
 
@@ -499,7 +518,7 @@ Purchase a phone number using organization credits.
 **Request Model:** `PhoneNumberPurchaseRequest`
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ----------------- | ------ | -------- | ------------------------------------------------------- |
 | phone_number | string | Yes | Phone number to purchase in E.164 format |
 | country_code | string | No | Country code (default: "US") |
 | phone_number_type | string | No | Type: "local", "toll_free", "mobile" (default: "local") |
@@ -546,7 +565,7 @@ curl -X POST "http://localhost:8000/api/v1/phone-numbers/purchase?organization_i
 **Response Model:** `PhoneNumberPurchaseResponse`
 
 | Field | Type | Description |
-|-------|------|-------------|
+| -------------------- | ----------- | ------------------------------------------ |
 | success | boolean | Whether purchase was successful |
 | phone_number | PhoneNumber | Purchased phone number details |
 | message | string | Success message |
@@ -589,7 +608,11 @@ first signed webhook with the returned token verifies it and makes it active.
 ```json
 {
   "success": true,
-  "phone_number": { "status": "verification_required", "billing_mode": "none", "management_mode": "customer_managed" },
+  "phone_number": {
+    "status": "verification_required",
+    "billing_mode": "none",
+    "management_mode": "customer_managed"
+  },
   "voice_url": "https://api.247ai.live/api/v1/voice/twilio/incoming?connection_token=<opaque-token>",
   "status_callback": "https://api.247ai.live/api/v1/voice/twilio/status?connection_token=<opaque-token>",
   "message": "Connect both URLs in Twilio, then place a test call to verify the number."
@@ -629,7 +652,7 @@ Get all phone numbers owned by an organization.
 **Headers:**
 
 | Header | Required | Description |
-|--------|----------|-------------|
+| --------------- | -------- | -------------------------------------- |
 | Authorization | Yes | Bearer token |
 | organization_id | Yes | UUID of the organization (query param) |
 
@@ -695,7 +718,7 @@ curl -X GET "http://localhost:8000/api/v1/phone-numbers?organization_id=<org_uui
 **Response Model:** `PhoneNumberListResponse`
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------------ | ------- | ---------------------------------------- |
 | items | array | List of phone numbers with agent details |
 | total_count | integer | Total numbers owned |
 | unused_count | integer | Numbers not assigned to any agent |
@@ -703,7 +726,7 @@ curl -X GET "http://localhost:8000/api/v1/phone-numbers?organization_id=<org_uui
 **Phone Number Status Values:**
 
 | Status | Description |
-|--------|-------------|
+| --------------------- | ------------------------------------------------- |
 | available | Number is available for purchase |
 | purchased | Number has been purchased |
 | active | Number is active and assigned to agent |
@@ -725,14 +748,14 @@ Assign a purchased phone number to a voice agent.
 **Headers:**
 
 | Header | Required | Description |
-|--------|----------|-------------|
+| --------------- | -------- | -------------------------------------- |
 | Authorization | Yes | Bearer token |
 | organization_id | Yes | UUID of the organization (query param) |
 
 **Path Parameters:**
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
+| --------------- | ---- | -------------------------------- |
 | phone_number_id | UUID | ID of the phone number to assign |
 
 **Request Body:**
@@ -746,7 +769,7 @@ Assign a purchased phone number to a voice agent.
 **Request Model:** `PhoneNumberAssignRequest`
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| -------- | ---- | -------- | ----------------------------------------- |
 | agent_id | UUID | Yes | UUID of the agent to assign the number to |
 
 **Request Example:**
@@ -818,14 +841,14 @@ continues to own and pay Twilio.
 **Headers:**
 
 | Header | Required | Description |
-|--------|----------|-------------|
+| --------------- | -------- | -------------------------------------- |
 | Authorization | Yes | Bearer token |
 | organization_id | Yes | UUID of the organization (query param) |
 
 **Path Parameters:**
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
+| --------------- | ---- | -------------------------------- |
 | phone_number_id | UUID | ID of the phone number to cancel |
 
 **Request Example:**
@@ -864,7 +887,8 @@ call Twilio's release API.
 The launch packages include one US local platform number on request. The
 included number is not provisioned automatically and uses zero credits for its
 monthly rental. Each additional platform-provided US local number uses 80
-credits per rental month ($2 equivalent at 40 credits per dollar); those
+credits per rental month (about $2 at the entry-pack rate; larger credit packs
+lower the effective USD equivalent); those
 credits come from the same balance as call usage. All paid launch plans allow
 additional numbers without a fixed count cap, subject to available credits.
 Customer-owned Twilio numbers are not charged platform rental credits and do
@@ -884,7 +908,7 @@ the v1 frontend.
 ### Error Codes
 
 | Code | HTTP Status | Description |
-|------|-------------|-------------|
+| ---------------------- | ----------- | ----------------------------------------------- |
 | PHONE_NUMBER_NOT_FOUND | 404 | Phone number not found |
 | INSUFFICIENT_CREDITS | 402 | Organization has insufficient credits |
 | ALREADY_ASSIGNED | 409 | Phone number is already assigned to an agent |
@@ -892,4 +916,4 @@ the v1 frontend.
 
 ---
 
-*End of API Documentation v1.0*
+_End of API Documentation v1.0_

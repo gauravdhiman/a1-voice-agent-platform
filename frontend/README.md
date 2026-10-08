@@ -24,6 +24,15 @@ Platform-admin plan configuration is consolidated under **Plan Catalog**. Its
 phone-number rates, with URL-deep-linkable tabs and explanations for each
 runtime-owned billing rule.
 
+Billing's Credits tab shows four top-up packs, call-minute equivalents, and
+volume savings against the entry pack. Minute estimates and rates use the
+current active `voice_call_minute` credit event; 10 credits per minute is the
+default. A missing or invalid rate shows credits only, and a zero-cost meter
+shows calls as included without a finite minute estimate. Estimates assume
+all credits go to calls; phone rentals share the balance.
+See the [billing catalog terms](../docs/02_features/billing/overview.md) and
+[catalog rollout](../docs/05_operations/stripe_management.md#four-pack-catalog-rollout).
+
 ## Authenticated responsive shell
 
 Pages behind authentication share `DashboardLayout` and are validated at

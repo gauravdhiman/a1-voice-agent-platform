@@ -58,7 +58,10 @@ def test_signup_page_renders(page: Page, base_url: str, step):
 def test_dashboard_loads_after_signin(page: Page, base_url: str, step):
     step("Sign in and land on dashboard")
     signin_user(page, base_url)
-    expect(page.get_by_role("heading", name=re.compile(r"Dashboard", re.I))).to_be_visible(timeout=10000)
+    expect(
+        page.get_by_role("heading", name="Test Organization", exact=True)
+    ).to_be_visible(timeout=10000)
+    expect(page.get_by_text("Workspace overview", exact=True)).to_be_visible()
 
 
 def test_agents_page_loads(page: Page, base_url: str, step):
@@ -240,8 +243,11 @@ def test_sidebar_navigation_renders_for_authenticated_user(page: Page, base_url:
     step("Sign in and wait for dashboard layout to hydrate")
     signin_user(page, base_url)
     # Sidebar is part of the dashboard layout
-    expect(page.get_by_role("link", name=re.compile(r"Home|Dashboard", re.I))).to_be_visible(timeout=10000)
-    # Agents link may be hidden if permissions not yet hydrated; at least Home proves sidebar rendered
+    expect(page.get_by_role("link", name="Home", exact=True)).to_be_visible(
+        timeout=10000
+    )
+    expect(page.get_by_role("link", name="Agents", exact=True)).to_be_visible()
+    # The shared fixture grants agent read access, so both links must render.
 
 
 def test_unauthenticated_redirects_to_signin(page: Page, base_url: str, step):

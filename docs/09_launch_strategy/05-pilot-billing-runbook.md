@@ -11,24 +11,33 @@ service (two months free, a 16.7% discount).
 ## Approved launch package
 
 | Plan | Monthly price | Included credits | Up to call minutes¹ | Effective list price/minute |
-|---|---:|---:|---:|---:|
+| ------- | ------------: | ---------------: | ------------------: | --------------------------: |
 | Starter | $49 | 2,500 | 250 | $0.196 |
 | Pro | $149 | 10,000 | 1,000 | $0.149 |
 | Scale | $299 | 21,000 | 2,100 | $0.142 |
 
-¹ Calls use 10 credits per connected minute, rounded up to a whole minute per
-call. These are “up to” estimates if all credits go to calls; phone-number
+¹ The default call rate is 10 credits per connected minute, rounded up to a
+whole minute per call. These are “up to” estimates if all credits go to calls; phone-number
 rentals also use the same balance. No automatic credit reload is enabled.
 
-| Credit top-up | Credits | Up to call minutes | Credit value |
-|---|---:|---:|---:|
-| $5 | 200 | 20 | 40 credits/$1 |
-| $10 | 400 | 40 | 40 credits/$1 |
-| $25 | 1,000 | 100 | 40 credits/$1 |
+| Credit top-up | Credits | Up to call minutes | Effective call rate |
+| ------------- | ------: | -----------------: | ------------------: |
+| $5            |     200 |                 20 |        $0.25/minute |
+| $12           |     500 |                 50 |        $0.24/minute |
+| $23           |   1,000 |                100 |        $0.23/minute |
+| $44           |   2,000 |                200 |        $0.22/minute |
+
+The table assumes the default 10-credit call rate. Billing's Credits tab uses
+the current active `voice_call_minute` event: missing or invalid pricing shows
+credits only, and zero-cost pricing shows included calls without finite minute
+estimates. The larger packs save 4%, 8%, and 12% against the entry pack. Follow
+the
+[catalog rollout procedure](../05_operations/stripe_management.md#four-pack-catalog-rollout)
+to migrate the RPC and synchronize the selected Stripe account.
 
 Every paid plan includes one US local platform number when requested. Each
-additional platform-provided US local number uses 80 credits/month ($2
-equivalent) from the shared balance. The first included line uses zero credits.
+additional platform-provided US local number uses 80 credits/month (about $2
+at the entry-pack rate) from the shared balance. The first included line uses zero credits.
 It remains included only while paid-plan access is active. If it is kept after
 the paid plan ends, the line converts to the 80-credit monthly rental on its
 next renewal date; the subscription-cancel dialog discloses this, and the
@@ -51,12 +60,13 @@ months of the monthly credit allowance. For the launch prices above, that is
 $490 for Starter, $1,490 for Pro, and $2,990 for Scale; do not publish an annual
 version if its price or credit allowance differs from this rule.
 
-At 40 credits per dollar of top-up value, price platform rentals in credits as
-follows: one included US local number per paid plan; each additional US local
-number 80 credits ($2) per month; toll-free 120 credits ($3) per month;
-mobile numbers 200 credits ($5) per month; existing non-US local numbers keep
-the 200-credit legacy price. Mobile and non-US costs vary by country and should
-be reviewed against current carrier rates before those number types are sold.
+At the entry-pack rate (40 credits per $1), current platform-rental rates are:
+one included US local number per paid plan; each additional US local number 80
+credits (about $2) per month; toll-free 120 credits (about $3) per month;
+mobile numbers 200 credits (about $5) per month; existing non-US local numbers
+keep the 200-credit legacy price. Larger credit packs lower the effective USD
+equivalent. Mobile and non-US costs vary by country and should be reviewed
+against current carrier rates before those number types are sold.
 
 Before enabling number rentals, follow the reviewed
 [master-data seeding runbook](../05_operations/master_data_seeding_runbook.md)
@@ -95,10 +105,10 @@ each billing cycle. You do **not** send a new payment link every month.
    - `24x7 AI Starter` — $49/month
     - `24x7 AI Pro` — $149/month
    - `24x7 AI Scale` — $299/month
-    Also create/verify one-time credit top-ups of $5/200, $10/400, and
-    $25/1,000 credits in the platform's credit-product catalog. These are all
-    40 credits per dollar; no pack is marked as discounted unless its actual
-    per-credit price is lower than the others.
+     Also create/verify one-time credit top-ups of $5/200, $12/500, $23/1,000,
+     and $44/2,000 credits in the platform's credit-product catalog. At the
+     default 10 credits per call minute, the packages cost $0.25, $0.24, $0.23,
+     and $0.22 per call minute respectively.
 3. Prefer the platform’s authenticated plan-selection checkout for each
    invited organization. It writes `organization_id` and `plan_version_id`
    onto both the Checkout Session and the underlying Subscription, which is
@@ -117,7 +127,7 @@ each billing cycle. You do **not** send a new payment link every month.
    the expected credit grant in the platform billing page.
 6. Repeat the verified setup in **Live mode**. You can use the same Stripe
    account, but Test and Live mode have separate products, prices, customers,
-   webhook endpoints, and IDs. Re-create the three products/prices and top-ups
+   webhook endpoints, and IDs. Re-create the plan products/prices and four top-ups
    in Live mode, then save the Live Price IDs in the Production Plan Catalog.
    Changing API keys alone does not promote Test objects or their IDs. Set the
    Live API key and webhook signing secret through the production secret
@@ -186,7 +196,7 @@ publishing an enterprise offer.
 ## When something looks wrong
 
 | Symptom | Cause (usual) | Fix |
-|---|---|---|
+| ----------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Paid, org still unselected/old plan | Subscription metadata missing, price not mapped to a published plan version, or webhook failed | Do not grant credits in the DB. Inspect the Stripe Subscription metadata and price mapping, fix the configuration, then use a reviewed repair/replay procedure before enabling calls |
 | Customer charged twice | Double-click / resent link paid twice | Refund the duplicate in Dashboard (manual refunds only — no auto path exists) |
 | Downgrade requested | — | Cancel at period end in Dashboard; access continues to `current_period_end` by design |

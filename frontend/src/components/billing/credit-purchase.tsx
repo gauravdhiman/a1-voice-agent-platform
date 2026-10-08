@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { getStripe } from "@/lib/stripe";
 import { useCreditProducts } from "@/hooks/use-credit-products";
 import { billingService } from "@/services/billing-service";
+import { cn } from "@/lib/utils";
 
 interface CreditPurchaseProps {
   organizationId: string;
@@ -34,7 +35,8 @@ interface CreditPurchaseProps {
  * an upgrade prompt — the backend checkout routes enforce the same gate.
  *
  * @param organizationId - The UUID of the organization to purchase credits for
- * @param onCreditsPurchased - Optional callback fired after a successful purchase
+ * @param onCreditsPurchased - Optional callback after checkout redirects successfully;
+ * payment confirmation and credit allocation happen through the billing webhook.
  * @param autoFocusPurchase - Scrolls to and focuses the purchase section when true
  */
 export function CreditPurchase({
@@ -45,34 +47,97 @@ export function CreditPurchase({
   const [purchasingProduct, setPurchasingProduct] = useState<string | null>(
     null,
   );
-  const [entitlements, setEntitlements] = useState<OrgEntitlements | null>(
-    null,
-  );
+  const [entitlementState, setEntitlementState] = useState<{
+    organizationId: string;
+    data: OrgEntitlements | null;
+    failed: boolean;
+  } | null>(null);
+  const [entitlementRetry, setEntitlementRetry] = useState(0);
+  const [creditsPerCallMinute, setCreditsPerCallMinute] = useState<
+    number | null
+  >(null);
   const purchaseSectionRef = useRef<HTMLDivElement>(null);
+  const checkoutInFlight = useRef(false);
   const { user } = useAuth();
-  const { data: products, isLoading: loading, error } = useCreditProducts();
+  const {
+    data: catalogProducts,
+    isLoading: loading,
+    error,
+    refetch,
+  } = useCreditProducts();
+  const products = useMemo(
+    () =>
+      (catalogProducts ?? [])
+        .filter(
+          (product) =>
+            product.is_active &&
+            Number.isFinite(product.credit_amount) &&
+            product.credit_amount > 0 &&
+            Number.isFinite(product.price_amount) &&
+            product.price_amount > 0 &&
+            /^[A-Za-z]{3}$/.test(product.currency),
+        )
+        .sort((left, right) => left.credit_amount - right.credit_amount),
+    [catalogProducts],
+  );
+  const entitlements =
+    entitlementState?.organizationId === organizationId
+      ? entitlementState.data
+      : null;
+  const entitlementFailed =
+    entitlementState?.organizationId === organizationId &&
+    entitlementState.failed;
 
   useEffect(() => {
     let cancelled = false;
+    setEntitlementState({ organizationId, data: null, failed: false });
     billingService
       .getOrganizationEntitlements(organizationId)
       .then((data) => {
-        if (!cancelled) setEntitlements(data);
+        if (!cancelled) {
+          setEntitlementState({ organizationId, data, failed: false });
+        }
       })
-      .catch((error) => {
-        console.error("Failed to load entitlements:", error);
+      .catch(() => {
+        if (!cancelled) {
+          setEntitlementState({ organizationId, data: null, failed: true });
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [organizationId]);
+  }, [organizationId, entitlementRetry]);
+
+  useEffect(() => {
+    let cancelled = false;
+    billingService
+      .getCreditEvents()
+      .then((events) => {
+        const rate = events.find(
+          (event) => event.name === "voice_call_minute" && event.is_active,
+        )?.credit_cost;
+        if (
+          !cancelled &&
+          rate !== undefined &&
+          Number.isFinite(rate) &&
+          rate >= 0
+        ) {
+          setCreditsPerCallMinute(rate);
+        }
+      })
+      .catch(() => {
+        // Credits remain purchasable when minute estimates are unavailable.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (
       !autoFocusPurchase ||
       loading ||
       !entitlements ||
-      !products ||
       products.length === 0
     ) {
       return;
@@ -89,20 +154,17 @@ export function CreditPurchase({
     return () => window.cancelAnimationFrame(frame);
   }, [autoFocusPurchase, entitlements, loading, products]);
 
-  const topupEnabled = Boolean(
-    entitlements?.features["credit_topup_enabled"]?.effective_value,
-  );
-
-  if (error) {
-    toast.error(error.message);
-  }
+  const topupEnabled =
+    entitlements?.features["credit_topup_enabled"]?.effective_value === true;
 
   const handlePurchase = async (product: CreditProduct) => {
+    if (checkoutInFlight.current) return;
     if (!user) {
       toast.error("Please sign in to purchase credits");
       return;
     }
 
+    checkoutInFlight.current = true;
     setPurchasingProduct(product.id);
 
     try {
@@ -133,6 +195,7 @@ export function CreditPurchase({
       console.error("Failed to create checkout session:", error);
       toast.error("Failed to start checkout process");
       setPurchasingProduct(null);
+      checkoutInFlight.current = false;
     }
   };
 
@@ -142,30 +205,70 @@ export function CreditPurchase({
       currency: currency.toUpperCase(),
     }).format(amount / 100);
 
-  const calculateValuePerCredit = (
-    creditAmount: number,
-    priceAmount: number,
-  ) => {
-    return (priceAmount / 100 / creditAmount).toFixed(4);
+  const formatUsagePrice = (product: CreditProduct) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: product.currency.toUpperCase(),
+      minimumFractionDigits: creditsPerCallMinute ? 2 : 4,
+      maximumFractionDigits: creditsPerCallMinute ? 2 : 4,
+    }).format(
+      (product.price_amount / 100 / product.credit_amount) *
+        (creditsPerCallMinute || 1),
+    );
+
+  const sameCurrencyProducts = (product: CreditProduct) =>
+    products.filter(
+      (item) => item.currency.toUpperCase() === product.currency.toUpperCase(),
+    );
+
+  const getCallMinuteSavingsPercent = (product: CreditProduct) => {
+    const entryRate = Math.max(
+      ...sameCurrencyProducts(product).map(
+        (item) => item.price_amount / item.credit_amount,
+      ),
+    );
+    const productRate = product.price_amount / product.credit_amount;
+    return Math.max(0, Math.round((1 - productRate / entryRate) * 100));
   };
 
-  const getBestValueProduct = () => {
-    if (!products || products.length === 0) return null;
-
-    const sortedByValue = [...products].sort(
+  const isBestValueProduct = (product: CreditProduct) => {
+    const currencyProducts = sameCurrencyProducts(product);
+    const sortedByValue = currencyProducts.sort(
       (left, right) =>
         left.price_amount / left.credit_amount -
         right.price_amount / right.credit_amount,
     );
     const lowest = sortedByValue[0];
     const highestUnitPrice = Math.max(
-      ...products.map((product) => product.price_amount / product.credit_amount),
+      ...currencyProducts.map(
+        (product) => product.price_amount / product.credit_amount,
+      ),
     );
     // Do not label equal-priced packs as a special value.
-    return lowest.price_amount / lowest.credit_amount < highestUnitPrice
-      ? lowest
-      : null;
+    return (
+      lowest.id === product.id &&
+      lowest.price_amount / lowest.credit_amount < highestUnitPrice
+    );
   };
+
+  if (error || entitlementFailed) {
+    return (
+      <div role="alert" className="space-y-3 text-center py-12">
+        <p>
+          {error
+            ? "Unable to load credit packages. Please try again."
+            : "Unable to check credit top-up availability. Please try again."}
+        </p>
+        <Button
+          onClick={() =>
+            error ? void refetch() : setEntitlementRetry((retry) => retry + 1)
+          }
+        >
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
   if (loading || !entitlements) {
     return (
@@ -193,7 +296,7 @@ export function CreditPurchase({
     );
   }
 
-  if (!products || products.length === 0) {
+  if (products.length === 0) {
     return (
       <div className="text-center py-12">
         <Coins className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -201,8 +304,6 @@ export function CreditPurchase({
       </div>
     );
   }
-
-  const bestValueProduct = getBestValueProduct();
 
   return (
     <div
@@ -223,13 +324,12 @@ export function CreditPurchase({
         {products.map((product) => (
           <Card
             key={product.id}
-            className={`relative ${
-              bestValueProduct?.id === product.id
-                ? "border-primary shadow-lg"
-                : ""
-            }`}
+            className={cn(
+              "relative flex flex-col",
+              isBestValueProduct(product) && "border-primary shadow-lg",
+            )}
           >
-            {bestValueProduct?.id === product.id && (
+            {isBestValueProduct(product) && (
               <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                 <Badge variant="default" className="bg-primary">
                   <Star className="w-3 h-3 mr-1" />
@@ -243,7 +343,7 @@ export function CreditPurchase({
                 <Coins className="w-6 h-6 text-primary" />
               </div>
               <CardTitle>{product.name}</CardTitle>
-              <CardDescription className="text-xs">
+              <CardDescription className="min-h-[3rem] text-xs">
                 {product.description}
               </CardDescription>
             </CardHeader>
@@ -254,9 +354,15 @@ export function CreditPurchase({
                   {product.credit_amount.toLocaleString()}
                 </div>
                 <div className="text-sm text-muted-foreground">credits</div>
-                <div className="text-xs text-muted-foreground">
-                  Up to {Math.floor(product.credit_amount / 10).toLocaleString()} call minutes
-                </div>
+                {creditsPerCallMinute !== null && creditsPerCallMinute > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    Up to{" "}
+                    {Math.floor(
+                      product.credit_amount / creditsPerCallMinute,
+                    ).toLocaleString()}{" "}
+                    call minutes
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -264,21 +370,25 @@ export function CreditPurchase({
                   {formatPrice(product.price_amount, product.currency)}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  $
-                  {calculateValuePerCredit(
-                    product.credit_amount,
-                    product.price_amount,
-                  )}{" "}
-                  per credit
+                  {formatUsagePrice(product)} per{" "}
+                  {creditsPerCallMinute ? "call minute" : "credit"}
+                </div>
+                <div className="min-h-4 text-xs font-medium text-primary">
+                  {getCallMinuteSavingsPercent(product) > 0
+                    ? `${getCallMinuteSavingsPercent(product)}% lower ${
+                        creditsPerCallMinute ? "per-minute" : "per-credit"
+                      } rate`
+                    : `Standard ${
+                        creditsPerCallMinute ? "per-minute" : "per-credit"
+                      } rate`}
                 </div>
               </div>
-
             </CardContent>
 
-            <CardFooter>
+            <CardFooter className="mt-auto">
               <Button
                 onClick={() => handlePurchase(product)}
-                disabled={purchasingProduct === product.id}
+                disabled={purchasingProduct !== null}
                 className="w-full"
                 size="sm"
               >
@@ -301,7 +411,17 @@ export function CreditPurchase({
           <h4 className="font-semibold">💡 Credit Usage Tips</h4>
           <div className="text-sm text-muted-foreground space-y-1">
             <p>• Credits never expire once purchased</p>
-            <p>• All packs cost $0.025 per credit</p>
+            <p>• Compare rates to choose the best credit pack for your usage</p>
+            {creditsPerCallMinute === 0 ? (
+              <p>
+                • Voice calls are currently included without a credit charge
+              </p>
+            ) : creditsPerCallMinute !== null ? (
+              <p>
+                • Voice calls use {creditsPerCallMinute} credits per connected
+                minute
+              </p>
+            ) : null}
             <p>• Credits are consumed based on your usage patterns</p>
             <p>• You can track usage in your billing dashboard</p>
           </div>
