@@ -33,6 +33,17 @@ all credits go to calls; phone rentals share the balance.
 See the [billing catalog terms](../docs/02_features/billing/overview.md) and
 [catalog rollout](../docs/05_operations/stripe_management.md#four-pack-catalog-rollout).
 
+## Legal documents
+
+`/terms` and `/privacy` render the latest published document from
+`GET /api/v1/legal/{key}` using the shared `src/components/legal/` renderer
+with loading, empty, and error states. The signup form requires the Terms &
+Conditions / Privacy Policy acknowledgement (links open in new tabs) and
+disables submit and the OAuth buttons until it is checked. Platform admins
+maintain document drafts and publish versions at `/platform/legal` (nav entry
+**Legal Documents**), including the default-checked "notify users" publish
+option. See [Legal Documents](../docs/02_features/legal-documents.md).
+
 ## Authenticated responsive shell
 
 Pages behind authentication share `DashboardLayout` and are validated at

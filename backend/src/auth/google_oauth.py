@@ -45,12 +45,12 @@ class GoogleOAuthService:
     @property
     def redirect_uri(self) -> str:
         """Return the registered backend callback URL for Google."""
-        return (
-            f"{self.settings.api_base_url.rstrip('/')}/api/v1/auth/google/callback"
-        )
+        return f"{self.settings.api_base_url.rstrip('/')}/api/v1/auth/google/callback"
 
     def create_authorization_url(
-        self, invitation_token: str | None = None
+        self,
+        invitation_token: str | None = None,
+        terms_accepted: bool = False,
     ) -> tuple[str, str]:
         """Create a Google authorization URL and signed state value."""
         self._ensure_configuration()
@@ -59,6 +59,7 @@ class GoogleOAuthService:
             redirect_uri=self.redirect_uri,
             jwt_secret_key=self.settings.jwt_secret_key,
             invitation_token=invitation_token,
+            terms_accepted=terms_accepted,
         )
         query = urlencode(
             {
@@ -101,9 +102,7 @@ class GoogleOAuthService:
                     "Google authorization-code exchange failed with status %s",
                     token_response.status_code,
                 )
-                raise GoogleOAuthError(
-                    "Google authorization could not be completed."
-                )
+                raise GoogleOAuthError("Google authorization could not be completed.")
 
             token_data = token_response.json()
             access_token = token_data.get("access_token")
@@ -126,9 +125,7 @@ class GoogleOAuthService:
             userinfo = userinfo_response.json()
             email = self._verified_email(userinfo)
             if not email:
-                raise GoogleOAuthError(
-                    "Google must provide a verified email address."
-                )
+                raise GoogleOAuthError("Google must provide a verified email address.")
 
             first_name, last_name = self._profile_names(userinfo)
             google_sub = str(userinfo.get("sub") or "").strip()
@@ -137,7 +134,9 @@ class GoogleOAuthService:
 
             picture = userinfo.get("picture")
             normalized_picture = (
-                picture.strip() if isinstance(picture, str) and picture.strip() else None
+                picture.strip()
+                if isinstance(picture, str) and picture.strip()
+                else None
             )
             invitation_token = state_payload.get("invitation_token")
             normalized_invitation = (
@@ -153,6 +152,7 @@ class GoogleOAuthService:
                 provider_sub=google_sub,
                 picture=normalized_picture,
                 invitation_token=normalized_invitation,
+                terms_accepted=bool(state_payload.get("terms_accepted", False)),
             )
 
     def _ensure_configuration(self) -> None:
@@ -165,9 +165,7 @@ class GoogleOAuthService:
             "jwt_secret_key": getattr(self.settings, "jwt_secret_key", None),
         }
         if any(not value for value in required_values.values()):
-            missing = [
-                name for name, value in required_values.items() if not value
-            ]
+            missing = [name for name, value in required_values.items() if not value]
             raise GoogleOAuthConfigurationError(
                 "Google OAuth is not configured. Missing: "
                 f"{', '.join(missing)}. Set SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID "

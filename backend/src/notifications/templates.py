@@ -4,7 +4,6 @@ Email template definitions with beautiful HTML layouts.
 
 from html import escape as escape_html
 
-
 # Base HTML template with modern styling
 BASE_TEMPLATE = """
 <!DOCTYPE html>
@@ -366,6 +365,30 @@ INTEREST_LEAD_SUBMITTED_TEMPLATE = """
 """
 
 
+# Legal document update template
+LEGAL_DOCUMENTS_UPDATED_TEMPLATE = """
+<h2>Updated {document_title} 📜</h2>
+<p>Hi {user_name},</p>
+<p>We have published a new version of the <strong>{document_title}</strong> for
+{app_name}.</p>
+
+<div class="info-box">
+    <p><strong>Document:</strong> {document_title}</p>
+    <p><strong>Version:</strong> {version_number}</p>
+    <p><strong>What changed:</strong> {summary_of_changes}</p>
+</div>
+
+<p>Please take a moment to review the updated document. It applies to your use of
+{app_name}.</p>
+<a href="{document_url}" class="cta-button">Read the {document_title}</a>
+
+<p>If you have questions, reply to this email or contact our team through the
+website.</p>
+
+<p>Best regards,<br>The {app_name} Team</p>
+"""
+
+
 # Template registry for easy access
 TEMPLATE_REGISTRY = {
     "user.signup": {
@@ -505,6 +528,19 @@ TEMPLATE_REGISTRY = {
             "demo_slug",
             "submitted_at",
             "interests_url",
+            "app_name",
+        ],
+    },
+    "legal.documents_updated": {
+        "name": "Legal Documents Updated",
+        "subject": "Updated {document_title} - {app_name}",
+        "html_content": LEGAL_DOCUMENTS_UPDATED_TEMPLATE,
+        "variables": [
+            "user_name",
+            "document_title",
+            "version_number",
+            "summary_of_changes",
+            "document_url",
             "app_name",
         ],
     },

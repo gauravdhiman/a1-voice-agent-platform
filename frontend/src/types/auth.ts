@@ -71,6 +71,11 @@ export interface SignUpData {
   passwordConfirm: string;
   firstName: string;
   lastName: string;
+  /**
+   * Acceptance of the Terms & Conditions and Privacy Policy. Required —
+   * the backend rejects signups without it.
+   */
+  terms_accepted: boolean;
   invitationToken?: string;
   captchaToken?: string;
 }
@@ -99,6 +104,8 @@ export interface GoogleIdTokenSignInData {
   token: string;
   nonce?: string;
   invitationToken?: string;
+  /** Whether the user accepted the Terms & Conditions and Privacy Policy. */
+  termsAccepted?: boolean;
 }
 
 // LinkedIn session returned by the backend after OAuth exchange

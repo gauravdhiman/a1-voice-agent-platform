@@ -20,6 +20,7 @@ def identity_with_invite() -> OAuthVerifiedIdentity:
         last_name="Ited",
         provider_sub="google-sub-invite",
         invitation_token="invite-token-abc",
+        terms_accepted=True,
     )
 
 
@@ -31,6 +32,7 @@ def identity_without_invite() -> OAuthVerifiedIdentity:
         first_name="Found",
         last_name="Er",
         provider_sub="google-sub-founder",
+        terms_accepted=True,
     )
 
 

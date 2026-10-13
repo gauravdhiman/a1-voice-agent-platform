@@ -11,9 +11,9 @@ from opentelemetry import trace
 from src.organization.provisioning import ensure_default_organization_for_user
 from src.organization.service import organization_service
 from src.shared.utils import extract_first_last_name
-from supabase import Client
 
 from shared.config import create_isolated_supabase_client, settings
+from supabase import Client
 
 try:
     from supabase_auth.errors import AuthApiError
@@ -38,6 +38,17 @@ class OAuthSessionService:
     def __init__(self, auth_client_factory: Any = _create_isolated_auth_client) -> None:
         self._auth_client_factory = auth_client_factory
 
+    async def _account_exists(self, email: str) -> bool:
+        """Return whether a Supabase Auth account already uses the email.
+
+        Extracted as a seam so injected-client tests can override the lookup
+        without touching the global ``auth_service``. The import stays lazy to
+        avoid an import cycle through ``src.auth.service``.
+        """
+        from src.auth.service import auth_service
+
+        return await auth_service.auth_user_exists(email)
+
     @tracer.start_as_current_span("auth.oauth_session.complete_oauth_sign_in")
     async def complete_oauth_sign_in(
         self, identity: OAuthVerifiedIdentity
@@ -52,6 +63,24 @@ class OAuthSessionService:
         current_span = trace.get_current_span()
         current_span.set_attribute("user.email", identity.email)
         current_span.set_attribute("oauth.provider", identity.provider)
+
+        # New accounts must acknowledge the legal documents before they are
+        # created. Existing users are never blocked from signing in, and their
+        # acceptance rows were captured when they signed up.
+        if not identity.terms_accepted:
+            user_exists = await self._account_exists(identity.email)
+            if not user_exists:
+                current_span.set_attribute("error.type", "terms_not_accepted")
+                current_span.set_status(
+                    trace.Status(trace.StatusCode.ERROR, "terms_not_accepted")
+                )
+                return None, HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "You must accept the Terms & Conditions and Privacy Policy "
+                        "to create an account."
+                    ),
+                )
 
         auth_client = self._auth_client_factory()
         is_new_user = False
@@ -154,6 +183,19 @@ class OAuthSessionService:
         if identity.invitation_token:
             signup_method = "invitation"
         if is_new_user:
+            try:
+                from src.legal.service import legal_service
+
+                await legal_service.record_user_acceptance(
+                    UUID(str(user.id)),
+                    source="oauth",
+                )
+            except Exception:
+                # Acceptance capture must never fail a completed sign-in; the
+                # version history remains the source of truth for review.
+                logger.exception(
+                    "Failed to record legal acceptance for new OAuth user %s", user.id
+                )
             await signup_notifier.notify_new_user(
                 email=identity.email,
                 user_id=UUID(str(user.id)),

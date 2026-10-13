@@ -19,13 +19,20 @@ def create_signed_state(
     redirect_uri: str,
     jwt_secret_key: str,
     invitation_token: str | None = None,
+    terms_accepted: bool = False,
 ) -> str:
-    """Create a signed, short-lived OAuth state payload."""
+    """Create a signed, short-lived OAuth state payload.
+
+    ``terms_accepted`` records that the visitor acknowledged the Terms &
+    Conditions and Privacy Policy before leaving for the provider. The flag is
+    covered by the HMAC signature, so the callback can trust it.
+    """
     payload: dict[str, Any] = {
         "purpose": purpose,
         "redirect_uri": redirect_uri,
         "csrf": secrets.token_urlsafe(24),
         "expires_at": int(time.time()) + STATE_TTL_SECONDS,
+        "terms_accepted": bool(terms_accepted),
     }
     if invitation_token:
         payload["invitation_token"] = invitation_token

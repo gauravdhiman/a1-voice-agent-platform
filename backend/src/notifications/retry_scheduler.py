@@ -64,13 +64,17 @@ class NotificationRetryScheduler:
             except Exception:
                 logger.exception("OAuth attention outbox iteration failed")
             try:
-                from .lead_notification_outbox import (
-                    interest_lead_notification_outbox,
-                )
+                from .lead_notification_outbox import interest_lead_notification_outbox
 
                 await interest_lead_notification_outbox.process_pending()
             except Exception:
                 logger.exception("Interest-lead notification outbox iteration failed")
+            try:
+                from src.legal.update_outbox import legal_update_outbox
+
+                await legal_update_outbox.process_pending()
+            except Exception:
+                logger.exception("Legal document update outbox iteration failed")
             try:
                 await asyncio.sleep(self.check_interval_hours * 3600)
             except asyncio.CancelledError:

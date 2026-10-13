@@ -17,6 +17,8 @@ describe("sitemap", () => {
       `${SITE_URL}/veterinary-appointment-booking`,
       `${SITE_URL}/salon-appointment-booking`,
       `${SITE_URL}/real-estate-lead-capture`,
+      `${SITE_URL}/terms`,
+      `${SITE_URL}/privacy`,
     ]);
   });
 });

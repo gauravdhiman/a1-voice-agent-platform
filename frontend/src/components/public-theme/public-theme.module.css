@@ -253,7 +253,9 @@
   border: 1px solid var(--line, var(--site-line));
   border-radius: 4px;
   color: var(--public-muted, var(--muted));
-  transition: color 0.2s, border-color 0.2s;
+  transition:
+    color 0.2s,
+    border-color 0.2s;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -319,7 +321,9 @@
   border-bottom: 1px solid var(--line, var(--site-line));
   color: var(--ink, var(--site-ink));
   font-size: 15px;
-  transition: color 0.2s, padding-left 0.2s;
+  transition:
+    color 0.2s,
+    padding-left 0.2s;
 }
 .mobileNav a:hover {
   padding-left: 8px;
@@ -409,6 +413,9 @@
 .title span {
   color: var(--public-accent);
 }
+.legalTitle {
+  font-size: clamp(30px, 3.6vw, 46px);
+}
 .lede {
   color: var(--public-muted);
   font-size: clamp(15px, 1.17vw, 18px);
@@ -427,6 +434,21 @@
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 7px;
+}
+
+/* Legal document pages: centered reading column with padded panel body. */
+.legalLayout {
+  position: relative;
+  display: flex;
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  flex-direction: column;
+  padding: 32px;
+}
+.legalBody {
+  padding: 28px;
 }
 .outcomeGrid > .panel:last-child:nth-child(odd) {
   grid-column: 1 / -1;
@@ -518,8 +540,7 @@
   align-items: center;
   gap: 10px;
   padding: 15px 24px;
-  border: 1px solid
-    color-mix(in srgb, var(--public-accent) 45%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--public-accent) 45%, var(--line));
   border-radius: 4px;
   font-size: 13px;
   font-weight: 500;
@@ -752,7 +773,11 @@
     height: 100%;
     padding: 0;
     border: 0;
-    background: color-mix(in srgb, var(--surface, var(--site-surface)) 34%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--surface, var(--site-surface)) 34%,
+      transparent
+    );
     cursor: default;
   }
   .mobileNav {
@@ -1131,6 +1156,12 @@
     padding-right: 5%;
     padding-left: 5%;
   }
+  .legalLayout {
+    padding: 24px;
+  }
+  .legalBody {
+    padding: 20px;
+  }
   .demoMain {
     grid-template-columns: minmax(0, 1fr);
     max-width: 760px;
@@ -1255,6 +1286,12 @@
     padding: 18px;
   }
   .outcomeActionCard {
+    padding: 18px;
+  }
+  .legalLayout {
+    padding: 16px;
+  }
+  .legalBody {
     padding: 18px;
   }
 }

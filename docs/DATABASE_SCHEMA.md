@@ -12,6 +12,7 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Billing Tables](#billing-tables)
 - [Plan Versioning & Entitlements Tables](#plan-versioning--entitlements-tables)
 - [Notification Tables](#notification-tables)
+- [Legal Document Tables](#legal-document-tables)
 - [Platform Skills Tables](#platform-skills-tables)
 - [Master Data Seed Tables](#master-data-seed-tables)
 - [Supabase Auth Tables](#supabase-auth-tables)
@@ -48,29 +49,29 @@ The database is designed as a multi-tenant SaaS platform with the following key 
 
 Stores tenant organization information. Each organization represents a separate customer/tenant.
 
-| Column           | Type         | Constraints             | Description                                                                 |
+| Column                            | Type         | Constraints             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | --------------------------------- | ------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| id               | UUID         | PRIMARY KEY             | Unique organization identifier                                              |
-| name             | VARCHAR(100) | NOT NULL, UNIQUE        | Organization display name                                                   |
-| description      | TEXT         | NULLABLE                | Organization description                                                    |
-| slug             | VARCHAR(100) | NOT NULL, UNIQUE        | URL-friendly identifier; also used for the public page at `/o/{slug}` |
-| is_active        | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Organization active status                                                  |
-| credit_balance   | INTEGER      | NOT NULL, DEFAULT 0     | Available plan credits for the current billing period (expire at period end — migration 20260807000005) |
-| admin_credit_balance | INTEGER | NOT NULL, DEFAULT 0 | Non-expiring platform-admin bonus credits; consumed after plan credits and before purchased credits (migration 20260809000003) |
-| purchased_credit_balance | INTEGER | NOT NULL, DEFAULT 0     | Purchased top-up credits; never expire and are drained after plan and platform bonus credits (migration 20260807000005, precedence updated by 20260809000003) |
-| low_credit_threshold_notified | INTEGER | NULLABLE           | Highest low-balance threshold (20/10/5) already emailed this billing cycle; NULL = re-armed (migration 20260807000005) |
-| website          | VARCHAR(255) | NULLABLE                | Organization website URL                                                    |
-| industry         | VARCHAR(100) | NULLABLE                | Organization industry (e.g. Real Estate)                                    |
-| location         | VARCHAR(255) | NULLABLE                | Physical address or location                                                |
-| business_details | TEXT         | NULLABLE                | Comprehensive business context for AI agents (hours, services, policies...) |
-| google_api_key  | TEXT         | NULLABLE                | Legacy compatibility column. Migration `20260922000002` moves any remaining value into `provider_credentials` and clears it; retained temporarily so older rolling application instances do not fail writes. It must remain NULL until a later cleanup migration drops the column. |
-| provider_credentials | TEXT     | NULLABLE                | Fernet-encrypted JSON of all per-org provider keys via `encrypt_data`/`decrypt_data` (`shared/common/security.py`): `{google, deepgram, openai, cartesia, cerebras, …}` (only the set keys present). The `key_resolver` decrypts this to build the `api_keys` map for `voice-ws/src/speech/factory.py`. Legacy `livekit` entries may exist in older rows but are unused after the Pipecat cutover. Backfilled from `google_api_key` by migration `20260729000001`; remaining plaintext values are cleared by `20260922000002`. |
-| provider_credentials_descriptions | JSONB | NULLABLE | Non-secret per-provider reference notes entered on the API Credentials screen. Stored separately from encrypted keys and returned as `provider_credentials_descriptions`; migration `20260923000001`. |
-| public_page_enabled | BOOLEAN      | NOT NULL, DEFAULT FALSE | Master toggle for the public org showcase at `/o/{slug}` — migration 20260731000001 |
-| public_page_passphrase_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | When true, visitors must submit a passphrase before listing agents — migration 20260731000001 |
-| public_page_passphrase_hash | TEXT | NULLABLE | PBKDF2-SHA256 hash of the org passphrase (never returned to clients) — migration 20260731000001 |
-| created_at       | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                                                          |
-| updated_at       | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                                                       |
+| id                                | UUID         | PRIMARY KEY             | Unique organization identifier                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| name                              | VARCHAR(100) | NOT NULL, UNIQUE        | Organization display name                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| description                       | TEXT         | NULLABLE                | Organization description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| slug                              | VARCHAR(100) | NOT NULL, UNIQUE        | URL-friendly identifier; also used for the public page at `/o/{slug}`                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| is_active                         | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Organization active status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| credit_balance                    | INTEGER      | NOT NULL, DEFAULT 0     | Available plan credits for the current billing period (expire at period end — migration 20260807000005)                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| admin_credit_balance              | INTEGER      | NOT NULL, DEFAULT 0     | Non-expiring platform-admin bonus credits; consumed after plan credits and before purchased credits (migration 20260809000003)                                                                                                                                                                                                                                                                                                                                                                                                 |
+| purchased_credit_balance          | INTEGER      | NOT NULL, DEFAULT 0     | Purchased top-up credits; never expire and are drained after plan and platform bonus credits (migration 20260807000005, precedence updated by 20260809000003)                                                                                                                                                                                                                                                                                                                                                                  |
+| low_credit_threshold_notified     | INTEGER      | NULLABLE                | Highest low-balance threshold (20/10/5) already emailed this billing cycle; NULL = re-armed (migration 20260807000005)                                                                                                                                                                                                                                                                                                                                                                                                         |
+| website                           | VARCHAR(255) | NULLABLE                | Organization website URL                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| industry                          | VARCHAR(100) | NULLABLE                | Organization industry (e.g. Real Estate)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| location                          | VARCHAR(255) | NULLABLE                | Physical address or location                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| business_details                  | TEXT         | NULLABLE                | Comprehensive business context for AI agents (hours, services, policies...)                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| google_api_key                    | TEXT         | NULLABLE                | Legacy compatibility column. Migration `20260922000002` moves any remaining value into `provider_credentials` and clears it; retained temporarily so older rolling application instances do not fail writes. It must remain NULL until a later cleanup migration drops the column.                                                                                                                                                                                                                                             |
+| provider_credentials              | TEXT         | NULLABLE                | Fernet-encrypted JSON of all per-org provider keys via `encrypt_data`/`decrypt_data` (`shared/common/security.py`): `{google, deepgram, openai, cartesia, cerebras, …}` (only the set keys present). The `key_resolver` decrypts this to build the `api_keys` map for `voice-ws/src/speech/factory.py`. Legacy `livekit` entries may exist in older rows but are unused after the Pipecat cutover. Backfilled from `google_api_key` by migration `20260729000001`; remaining plaintext values are cleared by `20260922000002`. |
+| provider_credentials_descriptions | JSONB        | NULLABLE                | Non-secret per-provider reference notes entered on the API Credentials screen. Stored separately from encrypted keys and returned as `provider_credentials_descriptions`; migration `20260923000001`.                                                                                                                                                                                                                                                                                                                          |
+| public_page_enabled               | BOOLEAN      | NOT NULL, DEFAULT FALSE | Master toggle for the public org showcase at `/o/{slug}` — migration 20260731000001                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| public_page_passphrase_enabled    | BOOLEAN      | NOT NULL, DEFAULT FALSE | When true, visitors must submit a passphrase before listing agents — migration 20260731000001                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| public_page_passphrase_hash       | TEXT         | NULLABLE                | PBKDF2-SHA256 hash of the org passphrase (never returned to clients) — migration 20260731000001                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| created_at                        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| updated_at                        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 **Foreign Keys**: None
 **RLS**: Enabled
@@ -196,7 +197,7 @@ Stores organization membership invitations sent to users.
 | expires_at      | TIMESTAMPTZ  | NOT NULL                        | Invitation expiration time                    |
 | created_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                            |
 | accepted_at     | TIMESTAMPTZ  | NULLABLE                        | Acceptance timestamp                          |
-| role_id         | UUID         | NULLABLE, FK → roles.id         | Organization role granted when claimed       |
+| role_id         | UUID         | NULLABLE, FK → roles.id         | Organization role granted when claimed        |
 
 **Foreign Keys**:
 
@@ -233,36 +234,36 @@ to a personal organization.
 
 Stores voice agent configurations for each organization.
 
-| Column              | Type         | Constraints                     | Description                             |
+| Column                         | Type          | Constraints                                              | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------ | ------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id                  | UUID         | PRIMARY KEY                     | Unique voice agent identifier           |
-| organization_id     | UUID         | NOT NULL, FK → organizations.id | Organization identifier                 |
-| name                | VARCHAR(100) | NOT NULL                        | Voice agent display name                |
-| phone_number        | VARCHAR(20)  | NULLABLE                        | Associated phone number                 |
-| persona             | TEXT         | NULLABLE                        | Agent role/character definition         |
-| tone                | VARCHAR(100) | NULLABLE                        | Communication style (Professional, etc) |
-| mission             | TEXT         | NULLABLE                        | Primary goals for this agent            |
-| custom_instructions | TEXT         | NULLABLE                        | Agent-specific context (policies, USPs, FAQs, protocols) |
-| instructions_markdown | TEXT       | NULLABLE                        | Full agent instructions in markdown (replaces field-based prompt building when set). Supports template variables: `{{org.name}}`, `{{org.industry}}`, `{{org.location}}`, `{{org.business_details}}`, `{{agent.name}}` |
-| use_platform_credits | BOOLEAN    | NOT NULL, DEFAULT FALSE         | Use platform credits instead of org API key |
-| preset_id         | UUID         | NULLABLE, FK → pipeline_presets.id | Voice-engine preset reference. voice-ws loads this preset **live on every call** (no versioning — admin edits take effect on the next call). NULL = legacy agent, or one whose preset was deleted via the FK `ON DELETE SET NULL` → resolves to the **System Default** preset row (`pipeline_presets.is_default=true`, migration 20260729000002); if that row is missing/unparseable voice-ws falls back to the hardcoded `default_realtime_config()`. Migrations 20260729000001 (column) + 20260729000002 (system default) |
-| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Agent active status                     |
-| is_published_on_public_page | BOOLEAN | NOT NULL, DEFAULT FALSE | Explicit publish flag for the org public page (`/o/{slug}`). Distinct from `is_active`; both must be true for public listing/calls — migration 20260731000001 |
-| call_recording_enabled | BOOLEAN    | NOT NULL, DEFAULT FALSE         | Explicit per-agent opt-in for call recordings. Runtime recording gates must also allow recording — migration 20260814000001 |
-| is_demo | BOOLEAN | NOT NULL, DEFAULT FALSE | When true, this agent is a demo agent that bypasses credit and concurrency checks and is available on a dedicated public page at `/demo/{demo_slug}`. Platform-admin only; defaults to false — migration 20260820000001 |
-| demo_slug | VARCHAR(100) | NULLABLE, UNIQUE (partial `WHERE demo_slug IS NOT NULL`) | Unique slug for the demo public page (e.g. `acme-dental-demo`); required when `is_demo` is true, must be lowercase alphanumeric plus hyphens. Only demo agents use this column — migration 20260820000001 |
-| public_description | TEXT | NULLABLE | Customer-facing description shown on the public demo page (`/demo/{demo_slug}`). Distinct from LLM prompt fields (`persona`/`mission`/`custom_instructions`); this is marketing copy explaining what the agent does and its scope. UI gated under `is_demo` (platform-admin only) with fallback `public_description → mission → persona` on the page — migration 20260820000002 |
-| demo_public_result_url | VARCHAR(2048) | NULLABLE | Optional HTTPS destination configured by a platform admin for the demo receipt's external-result CTA. Returned only for successful actions in the signed outcome response; never included in public landing-page metadata — migration 20260901000001 |
-| demo_calls_remaining | INTEGER | NOT NULL, DEFAULT -1, CHECK >= -1 | Remaining demo call reservations. `0` disables new demo calls; positive values decrement atomically at token issuance; `-1` means unlimited — migration 20260827000001 |
-| demo_max_call_duration_seconds | INTEGER | NOT NULL, DEFAULT -1, CHECK = -1 OR > 0 | Maximum duration captured for each new demo reservation. `-1` means unlimited; active calls keep the duration captured at reservation — migration 20260827000001 |
-| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
-| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
+| id                             | UUID          | PRIMARY KEY                                              | Unique voice agent identifier                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| organization_id                | UUID          | NOT NULL, FK → organizations.id                          | Organization identifier                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| name                           | VARCHAR(100)  | NOT NULL                                                 | Voice agent display name                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| phone_number                   | VARCHAR(20)   | NULLABLE                                                 | Associated phone number                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| persona                        | TEXT          | NULLABLE                                                 | Agent role/character definition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| tone                           | VARCHAR(100)  | NULLABLE                                                 | Communication style (Professional, etc)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| mission                        | TEXT          | NULLABLE                                                 | Primary goals for this agent                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| custom_instructions            | TEXT          | NULLABLE                                                 | Agent-specific context (policies, USPs, FAQs, protocols)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| instructions_markdown          | TEXT          | NULLABLE                                                 | Full agent instructions in markdown (replaces field-based prompt building when set). Supports template variables: `{{org.name}}`, `{{org.industry}}`, `{{org.location}}`, `{{org.business_details}}`, `{{agent.name}}`                                                                                                                                                                                                                                                                                                      |
+| use_platform_credits           | BOOLEAN       | NOT NULL, DEFAULT FALSE                                  | Use platform credits instead of org API key                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| preset_id                      | UUID          | NULLABLE, FK → pipeline_presets.id                       | Voice-engine preset reference. voice-ws loads this preset **live on every call** (no versioning — admin edits take effect on the next call). NULL = legacy agent, or one whose preset was deleted via the FK `ON DELETE SET NULL` → resolves to the **System Default** preset row (`pipeline_presets.is_default=true`, migration 20260729000002); if that row is missing/unparseable voice-ws falls back to the hardcoded `default_realtime_config()`. Migrations 20260729000001 (column) + 20260729000002 (system default) |
+| is_active                      | BOOLEAN       | NOT NULL, DEFAULT TRUE                                   | Agent active status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| is_published_on_public_page    | BOOLEAN       | NOT NULL, DEFAULT FALSE                                  | Explicit publish flag for the org public page (`/o/{slug}`). Distinct from `is_active`; both must be true for public listing/calls — migration 20260731000001                                                                                                                                                                                                                                                                                                                                                               |
+| call_recording_enabled         | BOOLEAN       | NOT NULL, DEFAULT FALSE                                  | Explicit per-agent opt-in for call recordings. Runtime recording gates must also allow recording — migration 20260814000001                                                                                                                                                                                                                                                                                                                                                                                                 |
+| is_demo                        | BOOLEAN       | NOT NULL, DEFAULT FALSE                                  | When true, this agent is a demo agent that bypasses credit and concurrency checks and is available on a dedicated public page at `/demo/{demo_slug}`. Platform-admin only; defaults to false — migration 20260820000001                                                                                                                                                                                                                                                                                                     |
+| demo_slug                      | VARCHAR(100)  | NULLABLE, UNIQUE (partial `WHERE demo_slug IS NOT NULL`) | Unique slug for the demo public page (e.g. `acme-dental-demo`); required when `is_demo` is true, must be lowercase alphanumeric plus hyphens. Only demo agents use this column — migration 20260820000001                                                                                                                                                                                                                                                                                                                   |
+| public_description             | TEXT          | NULLABLE                                                 | Customer-facing description shown on the public demo page (`/demo/{demo_slug}`). Distinct from LLM prompt fields (`persona`/`mission`/`custom_instructions`); this is marketing copy explaining what the agent does and its scope. UI gated under `is_demo` (platform-admin only) with fallback `public_description → mission → persona` on the page — migration 20260820000002                                                                                                                                             |
+| demo_public_result_url         | VARCHAR(2048) | NULLABLE                                                 | Optional HTTPS destination configured by a platform admin for the demo receipt's external-result CTA. Returned only for successful actions in the signed outcome response; never included in public landing-page metadata — migration 20260901000001                                                                                                                                                                                                                                                                        |
+| demo_calls_remaining           | INTEGER       | NOT NULL, DEFAULT -1, CHECK >= -1                        | Remaining demo call reservations. `0` disables new demo calls; positive values decrement atomically at token issuance; `-1` means unlimited — migration 20260827000001                                                                                                                                                                                                                                                                                                                                                      |
+| demo_max_call_duration_seconds | INTEGER       | NOT NULL, DEFAULT -1, CHECK = -1 OR > 0                  | Maximum duration captured for each new demo reservation. `-1` means unlimited; active calls keep the duration captured at reservation — migration 20260827000001                                                                                                                                                                                                                                                                                                                                                            |
+| created_at                     | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()                                  | Creation timestamp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| updated_at                     | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()                                  | Last update timestamp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 **Foreign Keys**:
 
 - `organization_id` → `organizations.id` (CASCADE)
 - `preset_id` → `pipeline_presets.id` (SET NULL) — migration 20260729000001 (deleting a preset drops referencing agents back to the System Default preset row — migration 20260729000002)
-**Indexes**:
+  **Indexes**:
 
 - `ix_voice_agents_preset_id` on `preset_id` — migration 20260729000001
 - `ix_voice_agents_organization_active` on `(organization_id, is_active)` —
@@ -270,8 +271,8 @@ Stores voice agent configurations for each organization.
 - `ix_voice_agents_is_demo` on `(is_demo) WHERE is_demo = true` — migration 20260820000001
 - `uq_voice_agents_demo_slug` unique partial on `(demo_slug) WHERE demo_slug IS NOT NULL` — migration 20260820000001
 - `ix_demo_call_reservations_agent_created_at` on `(agent_id, created_at)` — migration 20260827000001
-**RLS**: Enabled
-**Real-time**: Enabled
+  **RLS**: Enabled
+  **Real-time**: Enabled
 
 ---
 
@@ -283,14 +284,14 @@ demo agent row, then changed from `reserved` to `consumed` by
 `consume_demo_voice_call` when `voice-ws` admits the signed session. The table
 has no public RLS policy; direct access is restricted to the service role.
 
-| Column | Type | Constraints | Description |
+| Column      | Type         | Constraints                                                  | Description                                              |
 | ----------- | ------------ | ------------------------------------------------------------ | -------------------------------------------------------- |
-| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Reservation identifier embedded in the voice-session JWT |
-| agent_id | UUID | NOT NULL, FK → voice_agents.id (CASCADE) | Demo agent whose budget was reserved |
-| session_id | VARCHAR(100) | NOT NULL, UNIQUE | Voice-session id; makes token issuance idempotent |
-| status | VARCHAR(20) | NOT NULL, DEFAULT `reserved`, CHECK `reserved` or `consumed` | One-time reservation state |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Reservation timestamp |
-| consumed_at | TIMESTAMPTZ | NULLABLE | WebSocket admission timestamp |
+| id          | UUID         | PRIMARY KEY, DEFAULT `gen_random_uuid()`                     | Reservation identifier embedded in the voice-session JWT |
+| agent_id    | UUID         | NOT NULL, FK → voice_agents.id (CASCADE)                     | Demo agent whose budget was reserved                     |
+| session_id  | VARCHAR(100) | NOT NULL, UNIQUE                                             | Voice-session id; makes token issuance idempotent        |
+| status      | VARCHAR(20)  | NOT NULL, DEFAULT `reserved`, CHECK `reserved` or `consumed` | One-time reservation state                               |
+| created_at  | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                                      | Reservation timestamp                                    |
+| consumed_at | TIMESTAMPTZ  | NULLABLE                                                     | WebSocket admission timestamp                            |
 
 **RLS**: Enabled; service-role RPCs only.
 
@@ -307,21 +308,21 @@ intermediate queue: demo tools continue to write directly to their configured
 provider, then the voice runtime records a minimal presentation-safe summary
 after a tool result.
 
-| Column | Type | Constraints | Description |
+| Column          | Type         | Constraints                                                                                     | Description                                                                                   |
 | --------------- | ------------ | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Receipt row identifier |
-| session_id | VARCHAR(100) | NOT NULL | Voice session identifier; never returned by the public endpoint |
-| agent_id | UUID | NOT NULL, FK → voice_agents.id (CASCADE) | Demo agent that performed the action |
-| organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning organization |
-| demo_slug | VARCHAR(100) | NOT NULL | Demo URL slug bound into the signed receipt |
-| action_type | VARCHAR(40) | NOT NULL, CHECK `lead_capture`, `appointment_booking`, `email_delivery`, or `sheet_row_created` | Publicly allowlisted action category |
-| provider | VARCHAR(40) | NOT NULL | Provider label, currently `hubspot`, `google_sheets`, `google_calendar`, `gmail`, or `resend` |
-| status | VARCHAR(20) | NOT NULL, CHECK `succeeded`, `failed`, or `pending` | Visitor-safe action state |
-| error_code | VARCHAR(80) | NULLABLE | Stable safe error code when the action needs attention |
-| captured_fields | JSONB | NOT NULL, DEFAULT `{}` | Allowlisted user-supplied fields, with sensitive values redacted or summarized |
-| provider_result | JSONB | NOT NULL, DEFAULT `{}` | Provider-safe identifiers/status/message; never raw responses |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Receipt creation timestamp |
-| expires_at | TIMESTAMPTZ | NOT NULL, DEFAULT `NOW() + 7 days` | Storage retention boundary |
+| id              | UUID         | PRIMARY KEY, DEFAULT `gen_random_uuid()`                                                        | Receipt row identifier                                                                        |
+| session_id      | VARCHAR(100) | NOT NULL                                                                                        | Voice session identifier; never returned by the public endpoint                               |
+| agent_id        | UUID         | NOT NULL, FK → voice_agents.id (CASCADE)                                                        | Demo agent that performed the action                                                          |
+| organization_id | UUID         | NOT NULL, FK → organizations.id (CASCADE)                                                       | Owning organization                                                                           |
+| demo_slug       | VARCHAR(100) | NOT NULL                                                                                        | Demo URL slug bound into the signed receipt                                                   |
+| action_type     | VARCHAR(40)  | NOT NULL, CHECK `lead_capture`, `appointment_booking`, `email_delivery`, or `sheet_row_created` | Publicly allowlisted action category                                                          |
+| provider        | VARCHAR(40)  | NOT NULL                                                                                        | Provider label, currently `hubspot`, `google_sheets`, `google_calendar`, `gmail`, or `resend` |
+| status          | VARCHAR(20)  | NOT NULL, CHECK `succeeded`, `failed`, or `pending`                                             | Visitor-safe action state                                                                     |
+| error_code      | VARCHAR(80)  | NULLABLE                                                                                        | Stable safe error code when the action needs attention                                        |
+| captured_fields | JSONB        | NOT NULL, DEFAULT `{}`                                                                          | Allowlisted user-supplied fields, with sensitive values redacted or summarized                |
+| provider_result | JSONB        | NOT NULL, DEFAULT `{}`                                                                          | Provider-safe identifiers/status/message; never raw responses                                 |
+| created_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                                                                         | Receipt creation timestamp                                                                    |
+| expires_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT `NOW() + 7 days`                                                              | Storage retention boundary                                                                    |
 
 **RLS**: Enabled with no public or authenticated-user policies; the service
 role is the only database reader/writer. Public access requires a signed,
@@ -347,16 +348,16 @@ aggregates and recent rows through the service-role API
 (`GET /api/v1/leads/demo-feedback`). The PostHog funnel event remains the
 analytics copy.
 
-| Column | Type | Constraints | Description |
+| Column          | Type         | Constraints                               | Description                                      |
 | --------------- | ------------ | ----------------------------------------- | ------------------------------------------------ |
-| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Rating row identifier |
-| session_id | VARCHAR(100) | NOT NULL, UNIQUE | Voice session identifier; one rating per session |
-| agent_id | UUID | NOT NULL, FK → voice_agents.id (CASCADE) | Demo agent that was rated |
-| organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning organization |
-| demo_slug | VARCHAR(100) | NOT NULL | Demo URL slug |
-| rating | SMALLINT | NOT NULL, CHECK 1–5 | Star value |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | First rating timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| id              | UUID         | PRIMARY KEY, DEFAULT `gen_random_uuid()`  | Rating row identifier                            |
+| session_id      | VARCHAR(100) | NOT NULL, UNIQUE                          | Voice session identifier; one rating per session |
+| agent_id        | UUID         | NOT NULL, FK → voice_agents.id (CASCADE)  | Demo agent that was rated                        |
+| organization_id | UUID         | NOT NULL, FK → organizations.id (CASCADE) | Owning organization                              |
+| demo_slug       | VARCHAR(100) | NOT NULL                                  | Demo URL slug                                    |
+| rating          | SMALLINT     | NOT NULL, CHECK 1–5                       | Star value                                       |
+| created_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                   | First rating timestamp                           |
+| updated_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                   | Last update timestamp                            |
 
 **RLS**: Enabled with no public or authenticated-user policies; the service
 role is the only database reader/writer.
@@ -376,20 +377,20 @@ proof destinations (shared Sheet/Calendar) by the demo workflow, never the
 reverse. Distinct from `demo_outcome_receipts` (short-lived visitor receipts):
 leads persist until converted/dropped and are never shown to visitors.
 
-| Column | Type | Constraints | Description |
+| Column        | Type         | Constraints                                                                                                      | Description                                                |
 | ------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Lead row identifier |
-| name | VARCHAR(120) | NOT NULL | Contact name |
-| business_name | VARCHAR(160) | NULLABLE | Business name |
-| email | VARCHAR(320) | NOT NULL | Contact email (indexed, never probed publicly) |
-| phone | VARCHAR(32) | NULLABLE | Callback number |
-| vertical | VARCHAR(40) | NULLABLE | Business vertical slug selected on the public request form |
-| message | TEXT | NULLABLE | What the business needs |
-| source | VARCHAR(40) | NOT NULL, DEFAULT `'request-demo'`, CHECK `request-demo`, `outcome-form`, `contact-us`, `demo-call`, or `manual` | Capture channel |
-| demo_slug | VARCHAR(100) | NULLABLE | Demo agent slug when captured post-demo |
-| status | VARCHAR(20) | NOT NULL, DEFAULT `'new'`, CHECK `new`, `contacted`, `invited`, `converted`, or `dropped` | Follow-up state |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Submission timestamp |
-| contacted_at | TIMESTAMPTZ | NULLABLE | First outreach timestamp (set by operator tooling) |
+| id            | UUID         | PRIMARY KEY, DEFAULT `gen_random_uuid()`                                                                         | Lead row identifier                                        |
+| name          | VARCHAR(120) | NOT NULL                                                                                                         | Contact name                                               |
+| business_name | VARCHAR(160) | NULLABLE                                                                                                         | Business name                                              |
+| email         | VARCHAR(320) | NOT NULL                                                                                                         | Contact email (indexed, never probed publicly)             |
+| phone         | VARCHAR(32)  | NULLABLE                                                                                                         | Callback number                                            |
+| vertical      | VARCHAR(40)  | NULLABLE                                                                                                         | Business vertical slug selected on the public request form |
+| message       | TEXT         | NULLABLE                                                                                                         | What the business needs                                    |
+| source        | VARCHAR(40)  | NOT NULL, DEFAULT `'request-demo'`, CHECK `request-demo`, `outcome-form`, `contact-us`, `demo-call`, or `manual` | Capture channel                                            |
+| demo_slug     | VARCHAR(100) | NULLABLE                                                                                                         | Demo agent slug when captured post-demo                    |
+| status        | VARCHAR(20)  | NOT NULL, DEFAULT `'new'`, CHECK `new`, `contacted`, `invited`, `converted`, or `dropped`                        | Follow-up state                                            |
+| created_at    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                                                                                          | Submission timestamp                                       |
+| contacted_at  | TIMESTAMPTZ  | NULLABLE                                                                                                         | First outreach timestamp (set by operator tooling)         |
 
 **RLS**: Enabled with no public or authenticated-user policies; the service
 role is the only database reader/writer. Reads and status changes require
@@ -410,17 +411,17 @@ WhatsApp have independent delivery state, so a retry does not resend a channel
 already acknowledged as sent. Disabled Telegram/WhatsApp channels are marked
 skipped; enabled but incomplete or failing channels remain pending for retry.
 
-| Column | Type | Constraints | Description |
+| Column                                                 | Type               | Constraints                                                        | Description                                          |
 | ------------------------------------------------------ | ------------------ | ------------------------------------------------------------------ | ---------------------------------------------------- |
-| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Queue row identifier |
-| lead_id | UUID | UNIQUE, NOT NULL, FK → interest_leads.id (CASCADE) | Submitted lead |
-| email_state / telegram_state / whatsapp_state | TEXT | NOT NULL, DEFAULT 'pending', CHECK `pending`, `sent`, or `skipped` | Independent channel delivery state |
-| email_attempts / telegram_attempts / whatsapp_attempts | INTEGER | NOT NULL, DEFAULT 0, CHECK >= 0 | Channel attempt counters |
-| available_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Earliest retry time |
-| lease_claim / lease_until | TEXT / TIMESTAMPTZ | NULLABLE | Worker claim and crash-recovery lease |
-| last_error_code | TEXT | NULLABLE | Safe generic configuration/provider error categories |
-| created_at / updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Queue timestamps |
-| delivered_at | TIMESTAMPTZ | NULLABLE | Set when all channels are sent or skipped |
+| id                                                     | UUID               | PRIMARY KEY, DEFAULT `gen_random_uuid()`                           | Queue row identifier                                 |
+| lead_id                                                | UUID               | UNIQUE, NOT NULL, FK → interest_leads.id (CASCADE)                 | Submitted lead                                       |
+| email_state / telegram_state / whatsapp_state          | TEXT               | NOT NULL, DEFAULT 'pending', CHECK `pending`, `sent`, or `skipped` | Independent channel delivery state                   |
+| email_attempts / telegram_attempts / whatsapp_attempts | INTEGER            | NOT NULL, DEFAULT 0, CHECK >= 0                                    | Channel attempt counters                             |
+| available_at                                           | TIMESTAMPTZ        | NOT NULL, DEFAULT NOW()                                            | Earliest retry time                                  |
+| lease_claim / lease_until                              | TEXT / TIMESTAMPTZ | NULLABLE                                                           | Worker claim and crash-recovery lease                |
+| last_error_code                                        | TEXT               | NULLABLE                                                           | Safe generic configuration/provider error categories |
+| created_at / updated_at                                | TIMESTAMPTZ        | NOT NULL, DEFAULT NOW()                                            | Queue timestamps                                     |
+| delivered_at                                           | TIMESTAMPTZ        | NULLABLE                                                           | Set when all channels are sent or skipped            |
 
 **RLS**: Enabled with no client policies; backend service role only. The
 insert trigger makes lead capture and durable alert enqueue atomic.
@@ -444,20 +445,20 @@ Callbacks page drives the `new → acknowledged → resolved` follow-up.
 Org admins may also log rows manually for callbacks arriving on other
 channels.
 
-| Column | Type | Constraints | Description |
+| Column          | Type         | Constraints                                                           | Description                                               |
 | --------------- | ------------ | --------------------------------------------------------------------- | --------------------------------------------------------- |
-| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Escalation row identifier |
-| organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning organization |
-| agent_id | UUID | NULLABLE, FK → voice_agents.id (SET NULL) | Agent on the call, when known |
-| session_id | VARCHAR(100) | NULLABLE | Voice session identifier, when known |
-| caller_phone | VARCHAR(32) | NOT NULL | Callback number (E.164-ish, validated by the tool) |
-| caller_name | VARCHAR(100) | NULLABLE | Caller name when known |
-| reason | VARCHAR(500) | NOT NULL | One factual sentence: what the callback is about |
-| urgency | VARCHAR(20) | NOT NULL, DEFAULT `'normal'`, CHECK `normal` or `urgent` | Callback urgency |
-| status | VARCHAR(20) | NOT NULL, DEFAULT `'new'`, CHECK `new`, `acknowledged`, or `resolved` | Follow-up state |
-| notified | BOOLEAN | NOT NULL, DEFAULT FALSE | Owner alert email went out at call time |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Request timestamp |
-| acknowledged_at | TIMESTAMPTZ | NULLABLE | First acknowledgement timestamp (set by operator tooling) |
+| id              | UUID         | PRIMARY KEY, DEFAULT `gen_random_uuid()`                              | Escalation row identifier                                 |
+| organization_id | UUID         | NOT NULL, FK → organizations.id (CASCADE)                             | Owning organization                                       |
+| agent_id        | UUID         | NULLABLE, FK → voice_agents.id (SET NULL)                             | Agent on the call, when known                             |
+| session_id      | VARCHAR(100) | NULLABLE                                                              | Voice session identifier, when known                      |
+| caller_phone    | VARCHAR(32)  | NOT NULL                                                              | Callback number (E.164-ish, validated by the tool)        |
+| caller_name     | VARCHAR(100) | NULLABLE                                                              | Caller name when known                                    |
+| reason          | VARCHAR(500) | NOT NULL                                                              | One factual sentence: what the callback is about          |
+| urgency         | VARCHAR(20)  | NOT NULL, DEFAULT `'normal'`, CHECK `normal` or `urgent`              | Callback urgency                                          |
+| status          | VARCHAR(20)  | NOT NULL, DEFAULT `'new'`, CHECK `new`, `acknowledged`, or `resolved` | Follow-up state                                           |
+| notified        | BOOLEAN      | NOT NULL, DEFAULT FALSE                                               | Owner alert email went out at call time                   |
+| created_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                                               | Request timestamp                                         |
+| acknowledged_at | TIMESTAMPTZ  | NULLABLE                                                              | First acknowledgement timestamp (set by operator tooling) |
 
 **RLS**: Enabled with no public or authenticated-user policies; the
 service role is the only database reader/writer. Reads require org
@@ -478,16 +479,16 @@ security-relevant events; rows are never updated or deleted by
 application code. Investigation fields only — no tokens, passwords, or
 request bodies.
 
-| Column | Type | Constraints | Description |
+| Column     | Type         | Constraints                              | Description                           |
 | ---------- | ------------ | ---------------------------------------- | ------------------------------------- |
-| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Event row identifier |
-| user_id | UUID | NULLABLE | Account id when known |
-| email | VARCHAR(320) | NULLABLE | Account email when known (indexed) |
-| event | VARCHAR(60) | NOT NULL, CHECK nine audited event names | Event category |
-| ip | VARCHAR(64) | NULLABLE | Caller IP |
-| user_agent | VARCHAR(500) | NULLABLE | Caller user agent (bounded) |
-| metadata | JSONB | NOT NULL, DEFAULT `{}` | Small extras (provider, reason codes) |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Event timestamp |
+| id         | UUID         | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Event row identifier                  |
+| user_id    | UUID         | NULLABLE                                 | Account id when known                 |
+| email      | VARCHAR(320) | NULLABLE                                 | Account email when known (indexed)    |
+| event      | VARCHAR(60)  | NOT NULL, CHECK nine audited event names | Event category                        |
+| ip         | VARCHAR(64)  | NULLABLE                                 | Caller IP                             |
+| user_agent | VARCHAR(500) | NULLABLE                                 | Caller user agent (bounded)           |
+| metadata   | JSONB        | NOT NULL, DEFAULT `{}`                   | Small extras (provider, reason codes) |
+| created_at | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Event timestamp                       |
 
 **RLS**: Enabled with no public or authenticated-user policies; the
 service role is the only writer. Reads require the `platform_admin`
@@ -506,20 +507,20 @@ Global, platform-admin-managed reusable starting points for agent setup. The
 table is shared across organizations and is read by the public voice-template
 service; no organization foreign key or RLS policy is used.
 
-| Column | Type | Constraints | Description |
+| Column              | Type         | Constraints             | Description                                        |
 | ------------------- | ------------ | ----------------------- | -------------------------------------------------- |
-| id | UUID | PRIMARY KEY | Unique template identifier |
-| name | VARCHAR(100) | NOT NULL | Template name shown in agent setup |
-| industry | VARCHAR(100) | NOT NULL | Industry grouping used for browsing |
-| description | TEXT | NULLABLE | Short catalog description |
-| persona | TEXT | NULLABLE | Starting agent persona |
-| tone | VARCHAR(100) | NULLABLE | Starting communication style |
-| mission | TEXT | NULLABLE | Markdown mission section source |
-| greeting | TEXT | NULLABLE | Markdown greeting section source |
-| custom_instructions | TEXT | NULLABLE | Markdown-capable instructions, lists, and policies |
-| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | Whether the template appears in agent pickers |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| id                  | UUID         | PRIMARY KEY             | Unique template identifier                         |
+| name                | VARCHAR(100) | NOT NULL                | Template name shown in agent setup                 |
+| industry            | VARCHAR(100) | NOT NULL                | Industry grouping used for browsing                |
+| description         | TEXT         | NULLABLE                | Short catalog description                          |
+| persona             | TEXT         | NULLABLE                | Starting agent persona                             |
+| tone                | VARCHAR(100) | NULLABLE                | Starting communication style                       |
+| mission             | TEXT         | NULLABLE                | Markdown mission section source                    |
+| greeting            | TEXT         | NULLABLE                | Markdown greeting section source                   |
+| custom_instructions | TEXT         | NULLABLE                | Markdown-capable instructions, lists, and policies |
+| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Whether the template appears in agent pickers      |
+| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                                 |
+| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                              |
 
 **RLS**: Not enabled. The public read service filters `is_active=true`; all
 create, update, and delete operations are restricted by the backend
@@ -536,28 +537,28 @@ instructions.
 
 System-wide tools available for integration with voice agents.
 
-| Column                | Type          | Constraints                       | Description                                                                 |
+| Column                        | Type          | Constraints                     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ----------------------------- | ------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id                    | UUID          | PRIMARY KEY                       | Unique platform tool identifier                                             |
-| name                  | VARCHAR(100)  | NOT NULL, UNIQUE                  | Tool name (e.g., Gmail, Google_calendar_appointment)                       |
-| description           | TEXT          | NULLABLE                          | Tool description                                                            |
-| config_schema         | JSONB         | NULLABLE                          | JSON schema for tool configuration                                          |
-| tool_functions_schema | JSONB         | NULLABLE                          | JSON schema for available functions                                         |
-| is_active             | BOOLEAN       | NOT NULL, DEFAULT TRUE            | Tool active status                                                          |
-| is_premium            | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Premium tools require the plan's `premium_tools` feature to attach. Visible in the catalog with a badge; attach gated at the API (403) — migration 20260807000006 |
-| is_published          | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE + is_active = available to every organization subject to its visibility override. Backfilled TRUE for existing rows — migration 20260726000001 |
-| auth_type             | VARCHAR(50)   | NULLABLE                          | Authentication type (e.g., 'oauth2', 'api_key') — migration 20260111000001   |
-| requires_auth         | BOOLEAN       | NOT NULL, DEFAULT FALSE           | Whether the tool requires authentication — migration 20260111000001         |
-| auth_config           | JSONB         | NULLABLE                          | Non-secret auth metadata (OAuth URLs, scopes, provider, refresh capability) — migration 20260111000001 |
-| tool_source           | VARCHAR(20)   | NOT NULL, DEFAULT 'legacy'        | 'legacy' (in-tree BaseTool) or 'mcp' (remote MCP server) — migration 20260715000001 |
-| mcp_server_url        | VARCHAR(1024) | NULLABLE                          | Streamable HTTP endpoint of the MCP server (tool_source='mcp' only)          |
-| mcp_server_headers    | JSONB         | NULLABLE                          | Static per-request headers (server-level auth) — tool_source='mcp' only      |
-| mcp_server_name       | VARCHAR(200)  | NULLABLE                          | Human-readable MCP server name for logging — tool_source='mcp' only          |
-| organization_id       | UUID          | NULLABLE, FK → organizations.id   | DORMANT: the org-scoped custom MCP tier is retired (RFC §6.6, 2026-07-26). All published MCP servers are global catalog rows (NULL); the org-scoped read/create code paths are removed. The column is kept for a future org-private-publish tier — migration 20260725000001 |
-| mcp_server_secret_headers | TEXT      | NULLABLE                          | Fernet-encrypted JSON of server-level secret headers. Under the publish-lifecycle model this is a **template**: a value containing `{{KEY}}` is filled at runtime with the attaching org admin's API key (`agent_tools.sensitive_config["api_key"]`); a literal value (no `{{KEY}}`) passes through as a fixed shared header. Never returned to the frontend (a `mcp_secret_headers_configured` bool flag is exposed instead) — migration 20260725000001 |
-| oauth_client_secret_encrypted | TEXT | NULLABLE                     | Fernet-encrypted confidential OAuth client secret; write-only admin input, never included in `auth_config` or API responses — migration 20260814000003 |
-| created_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()           | Creation timestamp                                                          |
-| updated_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()           | Last update timestamp                                                        |
+| id                            | UUID          | PRIMARY KEY                     | Unique platform tool identifier                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| name                          | VARCHAR(100)  | NOT NULL, UNIQUE                | Tool name (e.g., Gmail, Google_calendar_appointment)                                                                                                                                                                                                                                                                                                                                                                                                     |
+| description                   | TEXT          | NULLABLE                        | Tool description                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| config_schema                 | JSONB         | NULLABLE                        | JSON schema for tool configuration                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| tool_functions_schema         | JSONB         | NULLABLE                        | JSON schema for available functions                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| is_active                     | BOOLEAN       | NOT NULL, DEFAULT TRUE          | Tool active status                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| is_premium                    | BOOLEAN       | NOT NULL, DEFAULT FALSE         | Premium tools require the plan's `premium_tools` feature to attach. Visible in the catalog with a badge; attach gated at the API (403) — migration 20260807000006                                                                                                                                                                                                                                                                                        |
+| is_published                  | BOOLEAN       | NOT NULL, DEFAULT FALSE         | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE + is_active = available to every organization subject to its visibility override. Backfilled TRUE for existing rows — migration 20260726000001                                                                                                                                                                                                                                              |
+| auth_type                     | VARCHAR(50)   | NULLABLE                        | Authentication type (e.g., 'oauth2', 'api_key') — migration 20260111000001                                                                                                                                                                                                                                                                                                                                                                               |
+| requires_auth                 | BOOLEAN       | NOT NULL, DEFAULT FALSE         | Whether the tool requires authentication — migration 20260111000001                                                                                                                                                                                                                                                                                                                                                                                      |
+| auth_config                   | JSONB         | NULLABLE                        | Non-secret auth metadata (OAuth URLs, scopes, provider, refresh capability) — migration 20260111000001                                                                                                                                                                                                                                                                                                                                                   |
+| tool_source                   | VARCHAR(20)   | NOT NULL, DEFAULT 'legacy'      | 'legacy' (in-tree BaseTool) or 'mcp' (remote MCP server) — migration 20260715000001                                                                                                                                                                                                                                                                                                                                                                      |
+| mcp_server_url                | VARCHAR(1024) | NULLABLE                        | Streamable HTTP endpoint of the MCP server (tool_source='mcp' only)                                                                                                                                                                                                                                                                                                                                                                                      |
+| mcp_server_headers            | JSONB         | NULLABLE                        | Static per-request headers (server-level auth) — tool_source='mcp' only                                                                                                                                                                                                                                                                                                                                                                                  |
+| mcp_server_name               | VARCHAR(200)  | NULLABLE                        | Human-readable MCP server name for logging — tool_source='mcp' only                                                                                                                                                                                                                                                                                                                                                                                      |
+| organization_id               | UUID          | NULLABLE, FK → organizations.id | DORMANT: the org-scoped custom MCP tier is retired (RFC §6.6, 2026-07-26). All published MCP servers are global catalog rows (NULL); the org-scoped read/create code paths are removed. The column is kept for a future org-private-publish tier — migration 20260725000001                                                                                                                                                                              |
+| mcp_server_secret_headers     | TEXT          | NULLABLE                        | Fernet-encrypted JSON of server-level secret headers. Under the publish-lifecycle model this is a **template**: a value containing `{{KEY}}` is filled at runtime with the attaching org admin's API key (`agent_tools.sensitive_config["api_key"]`); a literal value (no `{{KEY}}`) passes through as a fixed shared header. Never returned to the frontend (a `mcp_secret_headers_configured` bool flag is exposed instead) — migration 20260725000001 |
+| oauth_client_secret_encrypted | TEXT          | NULLABLE                        | Fernet-encrypted confidential OAuth client secret; write-only admin input, never included in `auth_config` or API responses — migration 20260814000003                                                                                                                                                                                                                                                                                                   |
+| created_at                    | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()         | Creation timestamp                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| updated_at                    | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()         | Last update timestamp                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 **Foreign Keys**:
 
@@ -587,14 +588,14 @@ catalog and is enforced by the attach API. Restoring visibility updates the
 same override. Existing `agent_tools` rows are intentionally preserved and
 remain available to the runtime; the agent page marks them as hidden.
 
-| Column          | Type        | Constraints                                      | Description |
+| Column          | Type        | Constraints                                | Description                                       |
 | --------------- | ----------- | ------------------------------------------ | ------------------------------------------------- |
-| id              | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid()            | Visibility override identifier |
-| organization_id | UUID        | NOT NULL, FK → organizations.id (CASCADE)        | Organization receiving the override |
-| tool_id         | UUID        | NOT NULL, FK → platform_tools.id (CASCADE)       | Published platform tool being overridden |
-| is_visible      | BOOLEAN     | NOT NULL, DEFAULT TRUE                            | Effective catalog visibility for the organization |
-| created_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                          | Creation timestamp |
-| updated_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                          | Last update timestamp |
+| id              | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid()     | Visibility override identifier                    |
+| organization_id | UUID        | NOT NULL, FK → organizations.id (CASCADE)  | Organization receiving the override               |
+| tool_id         | UUID        | NOT NULL, FK → platform_tools.id (CASCADE) | Published platform tool being overridden          |
+| is_visible      | BOOLEAN     | NOT NULL, DEFAULT TRUE                     | Effective catalog visibility for the organization |
+| created_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                    | Creation timestamp                                |
+| updated_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                    | Last update timestamp                             |
 
 **Unique constraint**: `(organization_id, tool_id)` named
 `uq_organization_tool_visibility`.
@@ -644,17 +645,17 @@ remain available to the runtime; the agent page marks them as hidden.
 
 Global, platform-admin-managed catalog of named voice-engine **presets** (Phase 3 of the modular voice engine — see `docs/01_architecture/voice_engine_pipeline_design.md`). Mirrors the `platform_tools` catalog pattern: no RLS, `is_published` lifecycle, `(result, error)` service contract, `assert_platform_role("platform_admin")` gating on CRUD.
 
-| Column        | Type         | Constraints                  | Description                                                                 |
+| Column       | Type         | Constraints                            | Description                                                                                                                                                                                                                                                               |
 | ------------ | ------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id            | UUID         | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique preset identifier                                          |
-| name          | VARCHAR(100) | NOT NULL, UNIQUE             | Preset name (upsert key)                                                    |
-| description   | TEXT         | NULLABLE                     | Preset description                                                          |
-| preset_type   | VARCHAR(20)  | NOT NULL                     | Denormalized from `config.engine_mode` on every write (`realtime`\|`pipeline`). Filter column for listings; the service keeps it in sync — **never set by hand**. |
-| config        | JSONB        | NOT NULL                     | Validated `SpeechConfig` (realtime or pipeline discriminated union — `shared/voice_agents/speech_config.py`). Carries **no secrets** (keys come from `organizations.provider_credentials`). |
-| is_published  | BOOLEAN      | NOT NULL, DEFAULT FALSE      | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE = visible to all org users for assignment. |
-| is_default   | BOOLEAN      | NOT NULL, DEFAULT FALSE      | TRUE only on the single **system-default** row — the fallback config an agent uses when `preset_id` is NULL (Phase 4). Response-only; the service sets it only on this seeded row and **never** accepts it as input (`PresetCreate`/`PresetUpdate` use `extra="forbid"`). |
-| created_at    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()      | Creation timestamp                                                          |
-| updated_at    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()      | Last update timestamp                                                       |
+| id           | UUID         | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique preset identifier                                                                                                                                                                                                                                                  |
+| name         | VARCHAR(100) | NOT NULL, UNIQUE                       | Preset name (upsert key)                                                                                                                                                                                                                                                  |
+| description  | TEXT         | NULLABLE                               | Preset description                                                                                                                                                                                                                                                        |
+| preset_type  | VARCHAR(20)  | NOT NULL                               | Denormalized from `config.engine_mode` on every write (`realtime`\|`pipeline`). Filter column for listings; the service keeps it in sync — **never set by hand**.                                                                                                         |
+| config       | JSONB        | NOT NULL                               | Validated `SpeechConfig` (realtime or pipeline discriminated union — `shared/voice_agents/speech_config.py`). Carries **no secrets** (keys come from `organizations.provider_credentials`).                                                                               |
+| is_published | BOOLEAN      | NOT NULL, DEFAULT FALSE                | Publish lifecycle: FALSE = draft (platform-admin-only); TRUE = visible to all org users for assignment.                                                                                                                                                                   |
+| is_default   | BOOLEAN      | NOT NULL, DEFAULT FALSE                | TRUE only on the single **system-default** row — the fallback config an agent uses when `preset_id` is NULL (Phase 4). Response-only; the service sets it only on this seeded row and **never** accepts it as input (`PresetCreate`/`PresetUpdate` use `extra="forbid"`). |
+| created_at   | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                | Creation timestamp                                                                                                                                                                                                                                                        |
+| updated_at   | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                | Last update timestamp                                                                                                                                                                                                                                                     |
 
 **Foreign Keys**: None (referenced _by_ `voice_agents.preset_id`)
 **Indexes**:
@@ -682,22 +683,22 @@ name, not the LiveKit product) was removed in migration
 
 Junction table mapping voice agents to platform tools with configuration.
 
-| Column               | Type           | Constraints                      | Description                         |
+| Column                   | Type           | Constraints                      | Description                                                                                                       |
 | ------------------------ | -------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| id                   | UUID           | PRIMARY KEY                      | Unique agent tool identifier        |
-| agent_id             | UUID           | NOT NULL, FK → voice_agents.id   | Voice agent identifier              |
-| tool_id              | UUID           | NOT NULL, FK → platform_tools.id | Platform tool identifier            |
-| config               | JSONB          | NULLABLE                         | Non-sensitive tool configuration    |
-| sensitive_config     | TEXT           | NULLABLE                         | Encrypted OAuth tokens and API keys |
-| unselected_functions | ARRAY(VARCHAR) | NULLABLE                         | Functions excluded from tool        |
-| is_enabled           | BOOLEAN        | NOT NULL, DEFAULT TRUE           | Tool enabled for this agent         |
-| last_refreshed_at    | TIMESTAMPTZ    | NULLABLE                         | Last OAuth token refresh time       |
-| oauth_credential_version | BIGINT      | NOT NULL, DEFAULT 0              | Credential generation used to fence refresh writes |
-| oauth_refresh_status | TEXT           | NOT NULL, DEFAULT 'ready'        | Lifecycle state: ready, refreshing, outcome_unknown, reauth_required, configuration_error, credentials_unreadable |
-| oauth_refresh_started_at | TIMESTAMPTZ | NULLABLE                       | Start time for a provider refresh with an ambiguous result |
-| oauth_refresh_error_code | TEXT        | NULLABLE                         | Safe failure category for admin recovery guidance |
-| created_at           | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()          | Creation timestamp                  |
-| updated_at           | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()          | Last update timestamp               |
+| id                       | UUID           | PRIMARY KEY                      | Unique agent tool identifier                                                                                      |
+| agent_id                 | UUID           | NOT NULL, FK → voice_agents.id   | Voice agent identifier                                                                                            |
+| tool_id                  | UUID           | NOT NULL, FK → platform_tools.id | Platform tool identifier                                                                                          |
+| config                   | JSONB          | NULLABLE                         | Non-sensitive tool configuration                                                                                  |
+| sensitive_config         | TEXT           | NULLABLE                         | Encrypted OAuth tokens and API keys                                                                               |
+| unselected_functions     | ARRAY(VARCHAR) | NULLABLE                         | Functions excluded from tool                                                                                      |
+| is_enabled               | BOOLEAN        | NOT NULL, DEFAULT TRUE           | Tool enabled for this agent                                                                                       |
+| last_refreshed_at        | TIMESTAMPTZ    | NULLABLE                         | Last OAuth token refresh time                                                                                     |
+| oauth_credential_version | BIGINT         | NOT NULL, DEFAULT 0              | Credential generation used to fence refresh writes                                                                |
+| oauth_refresh_status     | TEXT           | NOT NULL, DEFAULT 'ready'        | Lifecycle state: ready, refreshing, outcome_unknown, reauth_required, configuration_error, credentials_unreadable |
+| oauth_refresh_started_at | TIMESTAMPTZ    | NULLABLE                         | Start time for a provider refresh with an ambiguous result                                                        |
+| oauth_refresh_error_code | TEXT           | NULLABLE                         | Safe failure category for admin recovery guidance                                                                 |
+| created_at               | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()          | Creation timestamp                                                                                                |
+| updated_at               | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()          | Last update timestamp                                                                                             |
 
 **Foreign Keys**:
 
@@ -759,11 +760,11 @@ One row exists per tool **only while a refresh is in flight**; it is deleted on
 release. A crashed holder's lease auto-expires via the `claim_token_refresh` TTL,
 so refresh is not blocked forever.
 
-| Column         | Type        | Constraints                              | Description                                  |
+| Column        | Type        | Constraints                                | Description                                   |
 | ------------- | ----------- | ------------------------------------------ | --------------------------------------------- |
-| agent_tool_id  | UUID         | PRIMARY KEY, FK → agent_tools.id (CASCADE) | The agent tool whose token is being refreshed |
-| locked_at      | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                  | When the lease was acquired (used for TTL)   |
-| claim          | TEXT        | NOT NULL                                 | Unique claim id from the acquiring instance  |
+| agent_tool_id | UUID        | PRIMARY KEY, FK → agent_tools.id (CASCADE) | The agent tool whose token is being refreshed |
+| locked_at     | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                    | When the lease was acquired (used for TTL)    |
+| claim         | TEXT        | NOT NULL                                   | Unique claim id from the acquiring instance   |
 
 **RLS**: Enabled (no policies — only the backend service role, which bypasses RLS, accesses it).
 
@@ -799,23 +800,23 @@ clears `credentials_unreadable` after the next successful application decrypt.
 
 Stores embed button configuration for voice agents, enabling them to be embedded on external websites.
 
-| Column               | Type           | Constraints                     | Description                                      |
+| Column               | Type        | Constraints                      | Description                                                                   |
 | -------------------- | ----------- | -------------------------------- | ----------------------------------------------------------------------------- |
-| id                   | UUID           | PRIMARY KEY                     | Unique embed config identifier                   |
-| agent_id             | UUID           | NOT NULL, FK → voice_agents.id  | Voice agent identifier                           |
-| button_text          | VARCHAR(50)    | NOT NULL, DEFAULT 'Call Us'     | Text displayed on the button                     |
-| button_color         | VARCHAR(7)     | NOT NULL, DEFAULT '#3b82f6'     | Button background/border color (hex)             |
-| button_text_color    | VARCHAR(7)     | NOT NULL, DEFAULT '#ffffff'     | Button text color (hex)                          |
-| button_border_radius | INTEGER        | NOT NULL, DEFAULT 8             | Corner roundness in pixels (0-50)                |
-| button_size          | VARCHAR(20)    | NOT NULL, DEFAULT 'medium'      | Size: small, medium, large                       |
-| button_position      | VARCHAR(20)    | NOT NULL, DEFAULT 'bottom-right'| Position on page (e.g., bottom-right, top-left)  |
-| button_style         | VARCHAR(20)    | NOT NULL, DEFAULT 'filled'      | Style: filled or outline                         |
-| allowed_domains      | ARRAY(TEXT)    | NULLABLE                        | Canonical domains allowed to use embed (empty = all); subdomains are accepted |
-| custom_css           | TEXT           | NULLABLE                        | Custom CSS for button styling                    |
-| is_active            | BOOLEAN        | NOT NULL, DEFAULT TRUE          | Embed active status                              |
-| daily_call_limit     | INTEGER        | NOT NULL, DEFAULT 100           | Maximum calls per day                            |
-| created_at           | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()         | Creation timestamp                               |
-| updated_at           | TIMESTAMPTZ    | NOT NULL, DEFAULT NOW()         | Last update timestamp                            |
+| id                   | UUID        | PRIMARY KEY                      | Unique embed config identifier                                                |
+| agent_id             | UUID        | NOT NULL, FK → voice_agents.id   | Voice agent identifier                                                        |
+| button_text          | VARCHAR(50) | NOT NULL, DEFAULT 'Call Us'      | Text displayed on the button                                                  |
+| button_color         | VARCHAR(7)  | NOT NULL, DEFAULT '#3b82f6'      | Button background/border color (hex)                                          |
+| button_text_color    | VARCHAR(7)  | NOT NULL, DEFAULT '#ffffff'      | Button text color (hex)                                                       |
+| button_border_radius | INTEGER     | NOT NULL, DEFAULT 8              | Corner roundness in pixels (0-50)                                             |
+| button_size          | VARCHAR(20) | NOT NULL, DEFAULT 'medium'       | Size: small, medium, large                                                    |
+| button_position      | VARCHAR(20) | NOT NULL, DEFAULT 'bottom-right' | Position on page (e.g., bottom-right, top-left)                               |
+| button_style         | VARCHAR(20) | NOT NULL, DEFAULT 'filled'       | Style: filled or outline                                                      |
+| allowed_domains      | ARRAY(TEXT) | NULLABLE                         | Canonical domains allowed to use embed (empty = all); subdomains are accepted |
+| custom_css           | TEXT        | NULLABLE                         | Custom CSS for button styling                                                 |
+| is_active            | BOOLEAN     | NOT NULL, DEFAULT TRUE           | Embed active status                                                           |
+| daily_call_limit     | INTEGER     | NOT NULL, DEFAULT 100            | Maximum calls per day                                                         |
+| created_at           | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()          | Creation timestamp                                                            |
+| updated_at           | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()          | Last update timestamp                                                         |
 
 **Foreign Keys**: `agent_id` → `voice_agents.id` (CASCADE)
 **RLS**: Enabled
@@ -834,17 +835,17 @@ corresponding `call_logs` source metadata.
 
 Tracks usage of embed call buttons for analytics and rate limiting.
 
-| Column            | Type         | Constraints                            | Description                            |
+| Column           | Type         | Constraints                           | Description                        |
 | ---------------- | ------------ | ------------------------------------- | ---------------------------------- |
-| id                | UUID         | PRIMARY KEY                            | Unique log identifier                  |
-| embed_config_id   | UUID         | NOT NULL, FK → agent_embed_configs.id  | Embed configuration identifier         |
-| domain            | VARCHAR(255) | NULLABLE                               | Domain that initiated the call         |
-| ip_address        | VARCHAR(45)  | NULLABLE                               | Visitor IP address                     |
-| user_agent        | TEXT         | NULLABLE                               | Browser user agent                     |
-| status            | VARCHAR(20)  | NOT NULL, DEFAULT 'started'            | Status: started, completed, failed     |
-| duration_seconds  | INTEGER      | NULLABLE                               | Call duration in seconds               |
-| ended_at          | TIMESTAMPTZ  | NULLABLE                               | Call end timestamp                     |
-| started_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                | Call start timestamp                   |
+| id               | UUID         | PRIMARY KEY                           | Unique log identifier              |
+| embed_config_id  | UUID         | NOT NULL, FK → agent_embed_configs.id | Embed configuration identifier     |
+| domain           | VARCHAR(255) | NULLABLE                              | Domain that initiated the call     |
+| ip_address       | VARCHAR(45)  | NULLABLE                              | Visitor IP address                 |
+| user_agent       | TEXT         | NULLABLE                              | Browser user agent                 |
+| status           | VARCHAR(20)  | NOT NULL, DEFAULT 'started'           | Status: started, completed, failed |
+| duration_seconds | INTEGER      | NULLABLE                              | Call duration in seconds           |
+| ended_at         | TIMESTAMPTZ  | NULLABLE                              | Call end timestamp                 |
+| started_at       | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()               | Call start timestamp               |
 
 **Foreign Keys**: `embed_config_id` → `agent_embed_configs.id` (CASCADE)
 **RLS**: Enabled
@@ -863,38 +864,38 @@ Stores both platform-purchased and customer-owned Twilio numbers. This table is
 the sole source of truth for phone-to-agent routing; the legacy
 `voice_agents.phone_number` field is not used by inbound call handling.
 
-| Column | Type | Constraints | Description |
+| Column                       | Type          | Constraints                        | Description                                                                                                                                                     |
 | ---------------------------- | ------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id | UUID | PRIMARY KEY | Number record |
-| organization_id | UUID | NOT NULL, FK → organizations.id | Owning organization |
-| phone_number | VARCHAR(20) | NOT NULL | E.164 number |
-| provider | VARCHAR(20) | NOT NULL, DEFAULT twilio | Provider name |
-| provider_sid | VARCHAR(255) | NULLABLE, UNIQUE | Twilio phone-number SID when platform-managed |
-| phone_number_type | VARCHAR(20) | NOT NULL | local, mobile, or toll_free |
-| country_code | VARCHAR(2) | NOT NULL, DEFAULT US | ISO country code; `ZZ` means legacy geography requires review |
-| area_code | VARCHAR(10) | NULLABLE | Provider/catalog area code |
-| monthly_cost_credits | INTEGER | NOT NULL, >= 0 | Current system monthly rate |
-| is_included_in_plan | BOOLEAN | NOT NULL, DEFAULT FALSE | True for the organization's single included platform-managed US local line while the paid plan allowance applies; the line uses 0 credits during that allowance |
-| status | VARCHAR(30) | NOT NULL | provisioning, purchased, active, verification_required, release_pending, disconnected, or cancelled |
-| assigned_agent_id | UUID | NULLABLE, FK → voice_agents.id | Agent receiving calls from this number |
-| is_incoming_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | Whether inbound routing is enabled |
-| is_outgoing_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | Whether outbound use is enabled |
-| billing_status | VARCHAR(20) | NOT NULL, DEFAULT active | active or past_due |
-| billing_mode | VARCHAR(30) | NOT NULL, DEFAULT platform_rental | platform_rental for platform-owned numbers; none for customer-owned numbers |
-| provisioning_source | VARCHAR(20) | NOT NULL, DEFAULT platform | platform or customer |
-| management_mode | VARCHAR(30) | NOT NULL, DEFAULT platform_managed | Whether the platform may call Twilio purchase/release APIs |
-| configuration_status | VARCHAR(30) | NOT NULL, DEFAULT configured | pending, configured, verification_required, or failed |
-| next_billing_at | TIMESTAMPTZ | NULLABLE | Next monthly rental due date |
-| billing_grace_ends_at | TIMESTAMPTZ | NULLABLE | Past-due release deadline |
-| connection_token_hash | VARCHAR(64) | NULLABLE, UNIQUE | Hash of the customer webhook connection token used for verification |
-| connection_token_encrypted | TEXT | NULLABLE | Fernet-encrypted token retained only while customer webhook setup is pending |
-| provisioning_idempotency_key | VARCHAR(255) | NULLABLE | Organization-scoped retry key for platform purchase |
-| configuration_error | VARCHAR(1000) | NULLABLE | Last provisioning or verification error |
-| last_verified_at | TIMESTAMPTZ | NULLABLE | Last verified webhook timestamp |
-| purchased_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Purchase timestamp |
-| cancelled_at | TIMESTAMPTZ | NULLABLE | Release timestamp |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Record creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last record update timestamp |
+| id                           | UUID          | PRIMARY KEY                        | Number record                                                                                                                                                   |
+| organization_id              | UUID          | NOT NULL, FK → organizations.id    | Owning organization                                                                                                                                             |
+| phone_number                 | VARCHAR(20)   | NOT NULL                           | E.164 number                                                                                                                                                    |
+| provider                     | VARCHAR(20)   | NOT NULL, DEFAULT twilio           | Provider name                                                                                                                                                   |
+| provider_sid                 | VARCHAR(255)  | NULLABLE, UNIQUE                   | Twilio phone-number SID when platform-managed                                                                                                                   |
+| phone_number_type            | VARCHAR(20)   | NOT NULL                           | local, mobile, or toll_free                                                                                                                                     |
+| country_code                 | VARCHAR(2)    | NOT NULL, DEFAULT US               | ISO country code; `ZZ` means legacy geography requires review                                                                                                   |
+| area_code                    | VARCHAR(10)   | NULLABLE                           | Provider/catalog area code                                                                                                                                      |
+| monthly_cost_credits         | INTEGER       | NOT NULL, >= 0                     | Current system monthly rate                                                                                                                                     |
+| is_included_in_plan          | BOOLEAN       | NOT NULL, DEFAULT FALSE            | True for the organization's single included platform-managed US local line while the paid plan allowance applies; the line uses 0 credits during that allowance |
+| status                       | VARCHAR(30)   | NOT NULL                           | provisioning, purchased, active, verification_required, release_pending, disconnected, or cancelled                                                             |
+| assigned_agent_id            | UUID          | NULLABLE, FK → voice_agents.id     | Agent receiving calls from this number                                                                                                                          |
+| is_incoming_enabled          | BOOLEAN       | NOT NULL, DEFAULT TRUE             | Whether inbound routing is enabled                                                                                                                              |
+| is_outgoing_enabled          | BOOLEAN       | NOT NULL, DEFAULT FALSE            | Whether outbound use is enabled                                                                                                                                 |
+| billing_status               | VARCHAR(20)   | NOT NULL, DEFAULT active           | active or past_due                                                                                                                                              |
+| billing_mode                 | VARCHAR(30)   | NOT NULL, DEFAULT platform_rental  | platform_rental for platform-owned numbers; none for customer-owned numbers                                                                                     |
+| provisioning_source          | VARCHAR(20)   | NOT NULL, DEFAULT platform         | platform or customer                                                                                                                                            |
+| management_mode              | VARCHAR(30)   | NOT NULL, DEFAULT platform_managed | Whether the platform may call Twilio purchase/release APIs                                                                                                      |
+| configuration_status         | VARCHAR(30)   | NOT NULL, DEFAULT configured       | pending, configured, verification_required, or failed                                                                                                           |
+| next_billing_at              | TIMESTAMPTZ   | NULLABLE                           | Next monthly rental due date                                                                                                                                    |
+| billing_grace_ends_at        | TIMESTAMPTZ   | NULLABLE                           | Past-due release deadline                                                                                                                                       |
+| connection_token_hash        | VARCHAR(64)   | NULLABLE, UNIQUE                   | Hash of the customer webhook connection token used for verification                                                                                             |
+| connection_token_encrypted   | TEXT          | NULLABLE                           | Fernet-encrypted token retained only while customer webhook setup is pending                                                                                    |
+| provisioning_idempotency_key | VARCHAR(255)  | NULLABLE                           | Organization-scoped retry key for platform purchase                                                                                                             |
+| configuration_error          | VARCHAR(1000) | NULLABLE                           | Last provisioning or verification error                                                                                                                         |
+| last_verified_at             | TIMESTAMPTZ   | NULLABLE                           | Last verified webhook timestamp                                                                                                                                 |
+| purchased_at                 | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()            | Purchase timestamp                                                                                                                                              |
+| cancelled_at                 | TIMESTAMPTZ   | NULLABLE                           | Release timestamp                                                                                                                                               |
+| created_at                   | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()            | Record creation timestamp                                                                                                                                       |
+| updated_at                   | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()            | Last record update timestamp                                                                                                                                    |
 
 The phone-rental scheduler checks platform-rental rows daily (both the billing
 cadence and release-retry cadence are configurable), disables inbound calls
@@ -921,15 +922,15 @@ provider-release retry scheduling. Environment variables provide deployment
 defaults if the settings row cannot be read during startup or a transient
 database failure occurs.
 
-| Column | Type | Constraints | Description |
+| Column                       | Type          | Constraints               | Description                                               |
 | ---------------------------- | ------------- | ------------------------- | --------------------------------------------------------- |
-| id | UUID | PRIMARY KEY | Fixed singleton ID `00000000-0000-0000-0000-000000000002` |
-| billing_grace_period_days | INTEGER | NOT NULL, > 0, DEFAULT 7 | Days to keep incoming calls disabled before release |
-| billing_check_interval_hours | NUMERIC(10,2) | NOT NULL, > 0, DEFAULT 24 | Rental billing scheduler cadence |
-| release_retry_interval_hours | NUMERIC(10,2) | NOT NULL, > 0, DEFAULT 24 | Provider release retry cadence |
-| updated_by | UUID | NULLABLE | Platform admin who last changed settings |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
-| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+| id                           | UUID          | PRIMARY KEY               | Fixed singleton ID `00000000-0000-0000-0000-000000000002` |
+| billing_grace_period_days    | INTEGER       | NOT NULL, > 0, DEFAULT 7  | Days to keep incoming calls disabled before release       |
+| billing_check_interval_hours | NUMERIC(10,2) | NOT NULL, > 0, DEFAULT 24 | Rental billing scheduler cadence                          |
+| release_retry_interval_hours | NUMERIC(10,2) | NOT NULL, > 0, DEFAULT 24 | Provider release retry cadence                            |
+| updated_by                   | UUID          | NULLABLE                  | Platform admin who last changed settings                  |
+| created_at                   | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()   | Creation timestamp                                        |
+| updated_at                   | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()   | Last update timestamp                                     |
 
 **Indexes**:
 
@@ -959,27 +960,27 @@ Only the service role accesses this singleton. The platform-admin API is
 
 Tracks voice sessions for organization reporting and concurrent-call limits.
 
-| Column                | Type         | Constraints                              | Description |
+| Column                | Type          | Constraints                           | Description                                                                                   |
 | --------------------- | ------------- | ------------------------------------- | --------------------------------------------------------------------------------------------- |
-| id                    | UUID         | PRIMARY KEY                              | Unique call log identifier |
-| call_sid              | VARCHAR(100) | NOT NULL, UNIQUE                         | Provider/session identifier |
-| organization_id       | UUID         | NOT NULL, FK → organizations.id          | Owning organization |
-| agent_id              | UUID         | NULLABLE, FK → voice_agents.id           | Agent used by the call |
-| source_type           | VARCHAR(30)  | NULLABLE                                 | Stable source category: `phone`, `web_test`, `web_embed`, `web_demo`, or `web_public` |
-| source_url            | VARCHAR(2048) | NULLABLE                                | Sanitized HTTP(S) page URL for browser-originated calls; query and fragment removed |
-| source_domain         | VARCHAR(255) | NULLABLE                                 | Canonical hostname for the browser source |
-| status                | VARCHAR(50)  | NOT NULL, DEFAULT `initiated`            | Session status |
-| failure_code          | VARCHAR(100) | NULLABLE                                 | Stable, non-sensitive runtime failure classification (for example `model_reasoning_required`) |
-| failure_message       | VARCHAR(1000) | NULLABLE                                | Safe admin-facing explanation of the failure; raw provider diagnostics are not stored |
-| duration              | INTEGER      | NOT NULL, DEFAULT `0`                    | Duration in seconds |
-| credits_consumed      | INTEGER      | NOT NULL, DEFAULT `0`                    | Credits billed at teardown |
-| credit_transaction_id | UUID         | NULLABLE, FK → credit_transactions.id    | Ledger row explaining the call charge |
-| caller_number         | VARCHAR(30)  | NULLABLE                                 | Caller number; mask in UI |
-| called_number         | VARCHAR(30)  | NULLABLE                                 | Destination number |
-| started_at            | TIMESTAMPTZ  | NULLABLE                                 | Session start |
-| ended_at              | TIMESTAMPTZ  | NULLABLE                                 | Session end |
-| created_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp |
-| updated_at            | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Last update timestamp |
+| id                    | UUID          | PRIMARY KEY                           | Unique call log identifier                                                                    |
+| call_sid              | VARCHAR(100)  | NOT NULL, UNIQUE                      | Provider/session identifier                                                                   |
+| organization_id       | UUID          | NOT NULL, FK → organizations.id       | Owning organization                                                                           |
+| agent_id              | UUID          | NULLABLE, FK → voice_agents.id        | Agent used by the call                                                                        |
+| source_type           | VARCHAR(30)   | NULLABLE                              | Stable source category: `phone`, `web_test`, `web_embed`, `web_demo`, or `web_public`         |
+| source_url            | VARCHAR(2048) | NULLABLE                              | Sanitized HTTP(S) page URL for browser-originated calls; query and fragment removed           |
+| source_domain         | VARCHAR(255)  | NULLABLE                              | Canonical hostname for the browser source                                                     |
+| status                | VARCHAR(50)   | NOT NULL, DEFAULT `initiated`         | Session status                                                                                |
+| failure_code          | VARCHAR(100)  | NULLABLE                              | Stable, non-sensitive runtime failure classification (for example `model_reasoning_required`) |
+| failure_message       | VARCHAR(1000) | NULLABLE                              | Safe admin-facing explanation of the failure; raw provider diagnostics are not stored         |
+| duration              | INTEGER       | NOT NULL, DEFAULT `0`                 | Duration in seconds                                                                           |
+| credits_consumed      | INTEGER       | NOT NULL, DEFAULT `0`                 | Credits billed at teardown                                                                    |
+| credit_transaction_id | UUID          | NULLABLE, FK → credit_transactions.id | Ledger row explaining the call charge                                                         |
+| caller_number         | VARCHAR(30)   | NULLABLE                              | Caller number; mask in UI                                                                     |
+| called_number         | VARCHAR(30)   | NULLABLE                              | Destination number                                                                            |
+| started_at            | TIMESTAMPTZ   | NULLABLE                              | Session start                                                                                 |
+| ended_at              | TIMESTAMPTZ   | NULLABLE                              | Session end                                                                                   |
+| created_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()               | Creation timestamp                                                                            |
+| updated_at            | TIMESTAMPTZ   | NOT NULL, DEFAULT NOW()               | Last update timestamp                                                                         |
 
 **Indexes**: organization, agent, created_at, status, credit_transaction_id,
 `ix_call_logs_failure_code`, `ix_call_logs_source_type`,
@@ -1000,24 +1001,24 @@ Audio bytes live in the private local recording directory in development or an
 environment-specific Cloudflare R2 bucket in staging/production. The database
 stores the bucket/path and text artifacts, never public audio URLs.
 
-| Column            | Type         | Constraints                              | Description |
+| Column               | Type         | Constraints                                  | Description                                 |
 | -------------------- | ------------ | -------------------------------------------- | ------------------------------------------- |
-| id                | UUID         | PRIMARY KEY                              | Artifact identifier |
-| call_log_id       | UUID         | NOT NULL, FK → call_logs.id              | Related call |
-| organization_id   | UUID         | NOT NULL, FK → organizations.id          | Tenant boundary |
-| artifact_type     | VARCHAR(30)  | NOT NULL, CHECK recording/transcript/summary | Artifact kind |
-| status            | VARCHAR(30)  | NOT NULL, DEFAULT `pending`              | Processing state |
-| encryption_mode   | VARCHAR(30)  | NOT NULL, DEFAULT `provider_managed`    | Key-management strategy used for the object |
-| storage_bucket    | VARCHAR(120) | NULLABLE                                 | Private object bucket |
-| storage_path      | TEXT         | NULLABLE                                 | `{org_id}/{call_id}/recording.wav` |
-| mime_type         | VARCHAR(120) | NULLABLE                                 | Audio or text MIME type |
-| size_bytes        | BIGINT       | NULLABLE                                 | Stored object size |
-| duration_seconds  | INTEGER      | NULLABLE                                 | Recording duration |
-| text_content      | TEXT         | NULLABLE                                 | Transcript or summary text |
-| metadata          | JSONB        | NULLABLE                                 | Provider/model/version/audit metadata |
-| retention_expires_at | TIMESTAMPTZ | NULLABLE                              | Earliest safe cleanup time for the object |
-| created_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Creation timestamp |
-| updated_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                  | Last update timestamp |
+| id                   | UUID         | PRIMARY KEY                                  | Artifact identifier                         |
+| call_log_id          | UUID         | NOT NULL, FK → call_logs.id                  | Related call                                |
+| organization_id      | UUID         | NOT NULL, FK → organizations.id              | Tenant boundary                             |
+| artifact_type        | VARCHAR(30)  | NOT NULL, CHECK recording/transcript/summary | Artifact kind                               |
+| status               | VARCHAR(30)  | NOT NULL, DEFAULT `pending`                  | Processing state                            |
+| encryption_mode      | VARCHAR(30)  | NOT NULL, DEFAULT `provider_managed`         | Key-management strategy used for the object |
+| storage_bucket       | VARCHAR(120) | NULLABLE                                     | Private object bucket                       |
+| storage_path         | TEXT         | NULLABLE                                     | `{org_id}/{call_id}/recording.wav`          |
+| mime_type            | VARCHAR(120) | NULLABLE                                     | Audio or text MIME type                     |
+| size_bytes           | BIGINT       | NULLABLE                                     | Stored object size                          |
+| duration_seconds     | INTEGER      | NULLABLE                                     | Recording duration                          |
+| text_content         | TEXT         | NULLABLE                                     | Transcript or summary text                  |
+| metadata             | JSONB        | NULLABLE                                     | Provider/model/version/audit metadata       |
+| retention_expires_at | TIMESTAMPTZ  | NULLABLE                                     | Earliest safe cleanup time for the object   |
+| created_at           | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                      | Creation timestamp                          |
+| updated_at           | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                      | Last update timestamp                       |
 
 **Unique Constraint**: `(call_log_id, artifact_type)`.
 **Indexes**: organization_id, call_log_id, retention_expires_at.
@@ -1056,25 +1057,25 @@ Defines available subscription tiers.
 
 Tracks organization subscription status.
 
-| Column                 | Type         | Constraints                          | Description                                         |
+| Column                  | Type         | Constraints                          | Description                                                                |
 | ----------------------- | ------------ | ------------------------------------ | -------------------------------------------------------------------------- |
-| id                     | UUID         | PRIMARY KEY                          | Unique subscription identifier                      |
-| organization_id        | UUID         | NOT NULL, FK → organizations.id      | Organization identifier                             |
-| subscription_plan_id   | UUID         | NULLABLE, FK → subscription_plans.id | Plan identifier                                     |
-| plan_version_id        | UUID         | NULLABLE, FK → plan_versions.id      | Immutable plan version selected for the subscription |
-| stripe_subscription_id | VARCHAR(255) | NULLABLE, UNIQUE                     | Stripe subscription identifier                      |
-| stripe_customer_id     | VARCHAR(255) | NULLABLE                             | Stripe customer identifier; null for free plans     |
-| status                 | VARCHAR(50)  | NOT NULL                             | Status: trial, active, past_due, cancelled, expired |
-| current_period_start   | TIMESTAMPTZ  | NULLABLE                             | Current billing period start                        |
-| current_period_end     | TIMESTAMPTZ  | NULLABLE                             | Current billing period end                          |
-| trial_start            | TIMESTAMPTZ  | NULLABLE                             | Trial start time                                    |
-| trial_end              | TIMESTAMPTZ  | NULLABLE                             | Trial end time                                      |
-| cancel_at_period_end   | BOOLEAN      | NOT NULL, DEFAULT FALSE              | Auto-renewal flag                                   |
-| cancelled_at           | TIMESTAMPTZ  | NULLABLE                             | Cancellation timestamp                              |
-| metadata               | JSONB        | NULLABLE                             | Additional metadata                                 |
+| id                      | UUID         | PRIMARY KEY                          | Unique subscription identifier                                             |
+| organization_id         | UUID         | NOT NULL, FK → organizations.id      | Organization identifier                                                    |
+| subscription_plan_id    | UUID         | NULLABLE, FK → subscription_plans.id | Plan identifier                                                            |
+| plan_version_id         | UUID         | NULLABLE, FK → plan_versions.id      | Immutable plan version selected for the subscription                       |
+| stripe_subscription_id  | VARCHAR(255) | NULLABLE, UNIQUE                     | Stripe subscription identifier                                             |
+| stripe_customer_id      | VARCHAR(255) | NULLABLE                             | Stripe customer identifier; null for free plans                            |
+| status                  | VARCHAR(50)  | NOT NULL                             | Status: trial, active, past_due, cancelled, expired                        |
+| current_period_start    | TIMESTAMPTZ  | NULLABLE                             | Current billing period start                                               |
+| current_period_end      | TIMESTAMPTZ  | NULLABLE                             | Current billing period end                                                 |
+| trial_start             | TIMESTAMPTZ  | NULLABLE                             | Trial start time                                                           |
+| trial_end               | TIMESTAMPTZ  | NULLABLE                             | Trial end time                                                             |
+| cancel_at_period_end    | BOOLEAN      | NOT NULL, DEFAULT FALSE              | Auto-renewal flag                                                          |
+| cancelled_at            | TIMESTAMPTZ  | NULLABLE                             | Cancellation timestamp                                                     |
+| metadata                | JSONB        | NULLABLE                             | Additional metadata                                                        |
 | pending_plan_transition | JSONB        | NULLABLE                             | Atomic plan-change claim; held through interval-reset invoice credit grant |
-| created_at             | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()              | Creation timestamp                                  |
-| updated_at             | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()              | Last update timestamp                               |
+| created_at              | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()              | Creation timestamp                                                         |
+| updated_at              | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()              | Last update timestamp                                                      |
 
 **Foreign Keys**:
 
@@ -1098,19 +1099,19 @@ Defines platform activities and the credit rate/usage interval used when they
 are metered. Platform admins edit this catalog in the Plan Catalog → Usage
 pricing tab; the catalog is not organization-specific.
 
-| Column      | Type         | Constraints             | Description                                |
+| Column       | Type         | Constraints             | Description                                                                   |
 | ------------ | ------------ | ----------------------- | ----------------------------------------------------------------------------- |
-| id          | UUID         | PRIMARY KEY             | Unique event identifier                    |
-| name        | VARCHAR(100) | NOT NULL, UNIQUE        | Event name                                 |
-| description | TEXT         | NULLABLE                | Event description                          |
-| credit_cost | INTEGER      | NOT NULL, >= 0          | Credits per configured usage unit; zero means free |
-| category    | VARCHAR(50)  | NOT NULL                | Category: voice or phone_number for supported system pricing |
-| is_active   | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Whether the activity is available for charging |
-| meter_type  | VARCHAR(20)  | NOT NULL, DEFAULT count | Runtime-owned measure: count, duration, or storage — migration 20260811000001 |
-| billing_unit | VARCHAR(20) | NOT NULL, DEFAULT event | Charge interval: event, minute, day, or month — migration 20260811000001 |
-| metadata    | JSONB        | NULLABLE                | Additional metadata                        |
-| created_at  | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                         |
-| updated_at  | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                      |
+| id           | UUID         | PRIMARY KEY             | Unique event identifier                                                       |
+| name         | VARCHAR(100) | NOT NULL, UNIQUE        | Event name                                                                    |
+| description  | TEXT         | NULLABLE                | Event description                                                             |
+| credit_cost  | INTEGER      | NOT NULL, >= 0          | Credits per configured usage unit; zero means free                            |
+| category     | VARCHAR(50)  | NOT NULL                | Category: voice or phone_number for supported system pricing                  |
+| is_active    | BOOLEAN      | NOT NULL, DEFAULT TRUE  | Whether the activity is available for charging                                |
+| meter_type   | VARCHAR(20)  | NOT NULL, DEFAULT count | Runtime-owned measure: count, duration, or storage — migration 20260811000001 |
+| billing_unit | VARCHAR(20)  | NOT NULL, DEFAULT event | Charge interval: event, minute, day, or month — migration 20260811000001      |
+| metadata     | JSONB        | NULLABLE                | Additional metadata                                                           |
+| created_at   | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                                                            |
+| updated_at   | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                                                         |
 
 **Meter/unit compatibility:** `count` uses `event` or `month`, `duration` uses
 `minute`, and `storage` uses `day` or `month`. The active system catalog
@@ -1128,21 +1129,21 @@ currently a free plan feature.
 
 Tracks all credit movements.
 
-| Column                   | Type         | Constraints                     | Description                                               |
+| Column                   | Type         | Constraints                     | Description                                                                                                                                                                                                                                 |
 | ------------------------ | ------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id                       | UUID         | PRIMARY KEY                     | Unique transaction identifier                             |
-| organization_id          | UUID         | NOT NULL, FK → organizations.id | Organization identifier                                   |
-| transaction_type         | VARCHAR(50)  | NOT NULL                        | Type: earned, purchased, consumed, expired                |
-| amount                   | INTEGER      | NOT NULL                        | Positive for credits added, negative for consumed         |
-| balance_after            | INTEGER      | NOT NULL                        | Balance after transaction                                 |
-| source                   | VARCHAR(50)  | NOT NULL                        | Source: subscription, purchase, event_consumption, expiry, admin_adjustment, referral |
-| source_id                | UUID         | NULLABLE                        | Reference to source record                                |
-| credit_event_id          | UUID         | NULLABLE, FK → credit_events.id | Event identifier (for consumption)                        |
+| id                       | UUID         | PRIMARY KEY                     | Unique transaction identifier                                                                                                                                                                                                               |
+| organization_id          | UUID         | NOT NULL, FK → organizations.id | Organization identifier                                                                                                                                                                                                                     |
+| transaction_type         | VARCHAR(50)  | NOT NULL                        | Type: earned, purchased, consumed, expired                                                                                                                                                                                                  |
+| amount                   | INTEGER      | NOT NULL                        | Positive for credits added, negative for consumed                                                                                                                                                                                           |
+| balance_after            | INTEGER      | NOT NULL                        | Balance after transaction                                                                                                                                                                                                                   |
+| source                   | VARCHAR(50)  | NOT NULL                        | Source: subscription, purchase, event_consumption, expiry, admin_adjustment, referral                                                                                                                                                       |
+| source_id                | UUID         | NULLABLE                        | Reference to source record                                                                                                                                                                                                                  |
+| credit_event_id          | UUID         | NULLABLE, FK → credit_events.id | Event identifier (for consumption)                                                                                                                                                                                                          |
 | expires_at               | TIMESTAMPTZ  | NULLABLE                        | Expiration timestamp for plan (subscription) credits; **NULL for purchased credits** (never expire) — the two-pool backfill in migration 20260807000005 keys on `source='purchase'` + `transaction_type='purchased'` + `expires_at IS NULL` |
-| stripe_payment_intent_id | VARCHAR(255) | NULLABLE                        | Stripe payment intent identifier                          |
-| description              | TEXT         | NULLABLE                        | Transaction description                                   |
-| metadata                 | JSONB        | NULLABLE                        | Source/policy/period metadata; subscription grants include a stable `grant_key` for idempotency |
-| created_at               | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                                        |
+| stripe_payment_intent_id | VARCHAR(255) | NULLABLE                        | Stripe payment intent identifier                                                                                                                                                                                                            |
+| description              | TEXT         | NULLABLE                        | Transaction description                                                                                                                                                                                                                     |
+| metadata                 | JSONB        | NULLABLE                        | Source/policy/period metadata; subscription grants include a stable `grant_key` for idempotency                                                                                                                                             |
+| created_at               | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                                                                                                                                                                                                                          |
 
 **Foreign Keys**:
 
@@ -1162,17 +1163,17 @@ Durable low-credit evaluation work created after a successful credit debit. The
 row is processed by the notification scheduler and remains pending when a
 provider or database failure requires retry.
 
-| Column | Type | Constraints | Description |
+| Column                | Type        | Constraints                                   | Description                                                                                 |
 | --------------------- | ----------- | --------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| id | UUID | PRIMARY KEY | Outbox row identifier |
-| organization_id | UUID | NOT NULL, FK → organizations.id | Organization whose balance changed |
-| credit_transaction_id | UUID | NOT NULL, UNIQUE, FK → credit_transactions.id | Idempotent source debit |
-| balance_after | INTEGER | NOT NULL | Combined balance used for threshold evaluation; may be negative after final-call settlement |
-| attempt_count | INTEGER | NOT NULL, DEFAULT 0 | Outbox processing attempts |
-| last_attempt_at | TIMESTAMPTZ | NULLABLE | Most recent processing attempt |
-| last_error | TEXT | NULLABLE | Retry diagnostic |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Queue insertion time |
-| processed_at | TIMESTAMPTZ | NULLABLE | Completion time; NULL means pending |
+| id                    | UUID        | PRIMARY KEY                                   | Outbox row identifier                                                                       |
+| organization_id       | UUID        | NOT NULL, FK → organizations.id               | Organization whose balance changed                                                          |
+| credit_transaction_id | UUID        | NOT NULL, UNIQUE, FK → credit_transactions.id | Idempotent source debit                                                                     |
+| balance_after         | INTEGER     | NOT NULL                                      | Combined balance used for threshold evaluation; may be negative after final-call settlement |
+| attempt_count         | INTEGER     | NOT NULL, DEFAULT 0                           | Outbox processing attempts                                                                  |
+| last_attempt_at       | TIMESTAMPTZ | NULLABLE                                      | Most recent processing attempt                                                              |
+| last_error            | TEXT        | NULLABLE                                      | Retry diagnostic                                                                            |
+| created_at            | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                       | Queue insertion time                                                                        |
+| processed_at          | TIMESTAMPTZ | NULLABLE                                      | Completion time; NULL means pending                                                         |
 
 **Foreign Keys**:
 
@@ -1199,16 +1200,16 @@ created_at)` and `ix_credit_notification_outbox_organization_id` on
 Immutable audit record for a platform administrator allocation. The table is
 not a customer purchase and does not represent an entitlement or plan change.
 
-| Column | Type | Constraints | Description |
+| Column          | Type         | Constraints                                   | Description                        |
 | --------------- | ------------ | --------------------------------------------- | ---------------------------------- |
-| id | UUID | PRIMARY KEY | Grant identifier |
-| organization_id | UUID | NOT NULL, FK → organizations.id | Target organization |
-| transaction_id | UUID | NOT NULL, UNIQUE, FK → credit_transactions.id | Matching ledger row |
-| amount | INTEGER | NOT NULL, CHECK > 0 | Bonus credits allocated |
-| reason | TEXT | NOT NULL | Required support/business reason |
-| created_by | UUID | NOT NULL | Authenticated platform-admin actor |
-| idempotency_key | VARCHAR(120) | NULLABLE, UNIQUE per organization | Retry key |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Allocation time |
+| id              | UUID         | PRIMARY KEY                                   | Grant identifier                   |
+| organization_id | UUID         | NOT NULL, FK → organizations.id               | Target organization                |
+| transaction_id  | UUID         | NOT NULL, UNIQUE, FK → credit_transactions.id | Matching ledger row                |
+| amount          | INTEGER      | NOT NULL, CHECK > 0                           | Bonus credits allocated            |
+| reason          | TEXT         | NOT NULL                                      | Required support/business reason   |
+| created_by      | UUID         | NOT NULL                                      | Authenticated platform-admin actor |
+| idempotency_key | VARCHAR(120) | NULLABLE, UNIQUE per organization             | Retry key                          |
+| created_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                       | Allocation time                    |
 
 **RLS**: Enabled. Writes are performed by the backend service role after the
 route-level `platform_admin` check.
@@ -1289,17 +1290,17 @@ Tracks payment history and invoices.
 
 Replaces the edit-in-place pattern of `subscription_plans` with **immutable plan versions** and **sparse entitlements** per version.
 
-| Table | Purpose |
+| Table                                             | Purpose                                                                                                                                   |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `plan_products` | Plan families (`starter`, `growth`) — marketing identity; `sort_order` is the customer-facing tier rank and does not restrict transitions |
-| `plan_versions` | Immutable published snapshots (v1, v2, …) with explicit `billing_mode`, `credit_grant_policy`, price, and optional Stripe Price |
-| `entitlement_definitions` | Platform catalog of limit/feature keys, value types, enforcement handlers |
-| `plan_version_entitlements` | Sparse assigned limits/features per version (`value` JSONB), with explicit `display_order` for customer-facing cards |
-| `plan_version_publish_events` | Migration policy when a new version is published |
-| `organization_subscription_migrations` | Per-subscriber grace period and migration status |
-| `organization_usage_counters` | Fast usage counts for limit enforcement |
-| `organization_entitlement_overrides` | Optional enterprise per-org exceptions |
-| `organization_subscription_entitlement_snapshots` | Audit snapshots on subscribe/migrate/renew |
+| `plan_products`                                   | Plan families (`starter`, `growth`) — marketing identity; `sort_order` is the customer-facing tier rank and does not restrict transitions |
+| `plan_versions`                                   | Immutable published snapshots (v1, v2, …) with explicit `billing_mode`, `credit_grant_policy`, price, and optional Stripe Price           |
+| `entitlement_definitions`                         | Platform catalog of limit/feature keys, value types, enforcement handlers                                                                 |
+| `plan_version_entitlements`                       | Sparse assigned limits/features per version (`value` JSONB), with explicit `display_order` for customer-facing cards                      |
+| `plan_version_publish_events`                     | Migration policy when a new version is published                                                                                          |
+| `organization_subscription_migrations`            | Per-subscriber grace period and migration status                                                                                          |
+| `organization_usage_counters`                     | Fast usage counts for limit enforcement                                                                                                   |
+| `organization_entitlement_overrides`              | Optional enterprise per-org exceptions                                                                                                    |
+| `organization_subscription_entitlement_snapshots` | Audit snapshots on subscribe/migrate/renew                                                                                                |
 
 **Key change to `organization_subscriptions`:** add `plan_version_id` FK → `plan_versions.id` (subscription locked to version at signup). Deprecate `subscription_plan_id` after backfill.
 
@@ -1329,14 +1330,14 @@ Stores the sparse entitlement assignments for an immutable plan version. The
 `display_order` column controls presentation only; it does not affect runtime
 entitlement evaluation.
 
-| Column | Type | Constraints | Description |
+| Column          | Type         | Constraints                                                                          | Description                              |
 | --------------- | ------------ | ------------------------------------------------------------------------------------ | ---------------------------------------- |
-| id | UUID | PRIMARY KEY | Assignment identifier |
-| plan_version_id | UUID | NOT NULL, FK → `plan_versions.id` CASCADE | Version containing the assignment |
-| entitlement_key | VARCHAR(100) | NOT NULL, FK → `entitlement_definitions.key` RESTRICT; unique with `plan_version_id` | Assigned catalog entitlement |
-| value | JSONB | NOT NULL | Immutable value for this version |
-| display_order | INTEGER | NOT NULL | Zero-based customer-facing card sequence |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Assignment creation time |
+| id              | UUID         | PRIMARY KEY                                                                          | Assignment identifier                    |
+| plan_version_id | UUID         | NOT NULL, FK → `plan_versions.id` CASCADE                                            | Version containing the assignment        |
+| entitlement_key | VARCHAR(100) | NOT NULL, FK → `entitlement_definitions.key` RESTRICT; unique with `plan_version_id` | Assigned catalog entitlement             |
+| value           | JSONB        | NOT NULL                                                                             | Immutable value for this version         |
+| display_order   | INTEGER      | NOT NULL                                                                             | Zero-based customer-facing card sequence |
+| created_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                                                              | Assignment creation time                 |
 
 **Indexes:** `idx_plan_version_entitlements_display_order`
 
@@ -1450,14 +1451,14 @@ Tracks all sent notifications.
 
 Stores one-time tokens for Resend-delivered email verification during signup.
 
-| Column     | Type        | Constraints                          | Description                          |
+| Column     | Type         | Constraints                            | Description                     |
 | ---------- | ------------ | -------------------------------------- | ------------------------------- |
-| id         | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid() | Token row ID                         |
-| user_id    | UUID        | NOT NULL, UNIQUE                     | Reference to `auth.users.id`         |
-| token      | VARCHAR(255)| NOT NULL, UNIQUE                     | URL-safe verification token          |
-| expires_at | TIMESTAMPTZ | NOT NULL                             | Token expiry (default 24 hours)      |
-| used_at    | TIMESTAMPTZ | NULLABLE                             | When the token was consumed          |
-| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()              | Creation timestamp                   |
+| id         | UUID         | PRIMARY KEY, DEFAULT gen_random_uuid() | Token row ID                    |
+| user_id    | UUID         | NOT NULL, UNIQUE                       | Reference to `auth.users.id`    |
+| token      | VARCHAR(255) | NOT NULL, UNIQUE                       | URL-safe verification token     |
+| expires_at | TIMESTAMPTZ  | NOT NULL                               | Token expiry (default 24 hours) |
+| used_at    | TIMESTAMPTZ  | NULLABLE                               | When the token was consumed     |
+| created_at | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                | Creation timestamp              |
 
 **Indexes**:
 
@@ -1472,22 +1473,22 @@ Stores one-time tokens for Resend-delivered email verification during signup.
 Singleton table for platform-admin notification configuration (lead-alert
 recipients, verification sender, and Telegram alerts).
 
-| Column                         | Type         | Constraints              | Description                                      |
+| Column                                        | Type         | Constraints             | Description                                                         |
 | --------------------------------------------- | ------------ | ----------------------- | ------------------------------------------------------------------- |
-| id                             | UUID         | PRIMARY KEY              | Fixed singleton ID (`00000000-0000-0000-0000-000000000001`) |
-| platform_admin_email           | VARCHAR(320) | NULLABLE                 | Recipient for platform-admin demo, interest-lead, and OAuth alerts |
-| platform_admin_sms_phone       | VARCHAR(32)  | NULLABLE                 | Optional platform-admin OAuth alert destination in E.164 format |
-| platform_admin_sms_notifications_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | Explicit platform-admin SMS opt-in for OAuth attention alerts |
-| platform_admin_whatsapp_phone | VARCHAR(32) | NULLABLE | WhatsApp destination for platform-admin lead alerts in E.164 format |
-| platform_admin_whatsapp_notifications_enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | Explicit platform-admin WhatsApp opt-in for lead alerts |
-| verification_from_email        | VARCHAR(255) | NULLABLE                 | Resend sender for verification emails            |
-| verification_from_name         | VARCHAR(100) | NULLABLE                 | Display name for verification emails             |
-| telegram_bot_token_encrypted   | TEXT         | NULLABLE                 | Fernet-encrypted Telegram bot token              |
-| telegram_chat_id               | VARCHAR(100) | NULLABLE                 | Telegram chat/group ID for admin alerts          |
-| telegram_notifications_enabled | BOOLEAN      | NOT NULL, DEFAULT FALSE  | Enable/disable Telegram signup, lead, and OAuth alerts |
-| updated_by                     | UUID         | NULLABLE                 | Last platform admin who updated settings         |
-| created_at                     | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()  | Creation timestamp                               |
-| updated_at                     | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()  | Last update timestamp                            |
+| id                                            | UUID         | PRIMARY KEY             | Fixed singleton ID (`00000000-0000-0000-0000-000000000001`)         |
+| platform_admin_email                          | VARCHAR(320) | NULLABLE                | Recipient for platform-admin demo, interest-lead, and OAuth alerts  |
+| platform_admin_sms_phone                      | VARCHAR(32)  | NULLABLE                | Optional platform-admin OAuth alert destination in E.164 format     |
+| platform_admin_sms_notifications_enabled      | BOOLEAN      | NOT NULL, DEFAULT FALSE | Explicit platform-admin SMS opt-in for OAuth attention alerts       |
+| platform_admin_whatsapp_phone                 | VARCHAR(32)  | NULLABLE                | WhatsApp destination for platform-admin lead alerts in E.164 format |
+| platform_admin_whatsapp_notifications_enabled | BOOLEAN      | NOT NULL, DEFAULT FALSE | Explicit platform-admin WhatsApp opt-in for lead alerts             |
+| verification_from_email                       | VARCHAR(255) | NULLABLE                | Resend sender for verification emails                               |
+| verification_from_name                        | VARCHAR(100) | NULLABLE                | Display name for verification emails                                |
+| telegram_bot_token_encrypted                  | TEXT         | NULLABLE                | Fernet-encrypted Telegram bot token                                 |
+| telegram_chat_id                              | VARCHAR(100) | NULLABLE                | Telegram chat/group ID for admin alerts                             |
+| telegram_notifications_enabled                | BOOLEAN      | NOT NULL, DEFAULT FALSE | Enable/disable Telegram signup, lead, and OAuth alerts              |
+| updated_by                                    | UUID         | NULLABLE                | Last platform admin who updated settings                            |
+| created_at                                    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Creation timestamp                                                  |
+| updated_at                                    | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW() | Last update timestamp                                               |
 
 **RLS**: Service role only (backend reads/writes via service key).
 
@@ -1509,15 +1510,15 @@ is enabled when both a chat destination and the organization's encrypted bot
 token are present. The organization owns its Telegram bot; SMS sending uses the
 platform's Twilio integration.
 
-| Column | Type | Constraints | Description |
+| Column                       | Type         | Constraints                                    | Description                                                              |
 | ---------------------------- | ------------ | ---------------------------------------------- | ------------------------------------------------------------------------ |
-| organization_id | UUID | PRIMARY KEY, FK → organizations.id (CASCADE) | Owning organization |
-| alert_email | VARCHAR(320) | NULLABLE, max length 320 | Additional email destination |
-| sms_phone | VARCHAR(32) | NULLABLE, E.164 check | SMS destination; presence enables SMS |
-| telegram_chat_id | VARCHAR(100) | NULLABLE, numeric chat ID or `@username` check | Telegram destination; required with the bot token |
-| telegram_bot_token_encrypted | TEXT | NULLABLE | Organization-owned Telegram bot token encrypted with the application key |
-| updated_by | UUID | NULLABLE, FK → auth.users.id (SET NULL) | Last administrator who changed settings |
-| created_at / updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Audit timestamps |
+| organization_id              | UUID         | PRIMARY KEY, FK → organizations.id (CASCADE)   | Owning organization                                                      |
+| alert_email                  | VARCHAR(320) | NULLABLE, max length 320                       | Additional email destination                                             |
+| sms_phone                    | VARCHAR(32)  | NULLABLE, E.164 check                          | SMS destination; presence enables SMS                                    |
+| telegram_chat_id             | VARCHAR(100) | NULLABLE, numeric chat ID or `@username` check | Telegram destination; required with the bot token                        |
+| telegram_bot_token_encrypted | TEXT         | NULLABLE                                       | Organization-owned Telegram bot token encrypted with the application key |
+| updated_by                   | UUID         | NULLABLE, FK → auth.users.id (SET NULL)        | Last administrator who changed settings                                  |
+| created_at / updated_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                        | Audit timestamps                                                         |
 
 **RLS**: Enabled; only backend `service_role` has a policy. API routes authorize
 the target organization admin or a platform admin. Partial updates use an
@@ -1535,29 +1536,150 @@ credential generation and alert category has a unique `event_key`. The payload
 contains safe display metadata and recovery instructions; it never contains
 contact destinations, OAuth tokens, client secrets, or provider response bodies.
 
-| Column | Type | Constraints | Description |
+| Column                                             | Type        | Constraints                               | Description                                                                  |
 | -------------------------------------------------- | ----------- | ----------------------------------------- | ---------------------------------------------------------------------------- |
-| id | UUID | PRIMARY KEY | Queue row identifier |
-| event_key | TEXT | UNIQUE, NOT NULL | Idempotency key for the connection generation and alert category |
-| agent_tool_id | UUID | NOT NULL, FK → agent_tools.id (CASCADE) | OAuth connection requiring attention |
-| organization_id | UUID | NOT NULL, FK → organizations.id (CASCADE) | Owning tenant |
-| payload | JSONB | NOT NULL | Safe organization/agent/tool labels, status, recovery steps, and action link |
-| telegram_state / organization_telegram_state | TEXT | NOT NULL, DEFAULT 'pending' | Independent platform and organization Telegram states |
-| sms_state / organization_sms_state | TEXT | NOT NULL, DEFAULT 'pending' | Independent platform and organization SMS states |
-| telegram_attempts / organization_telegram_attempts | INTEGER | NOT NULL, DEFAULT 0 | Independent Telegram attempt counters |
-| sms_attempts / organization_sms_attempts | INTEGER | NOT NULL, DEFAULT 0 | Independent SMS attempt counters |
-| available_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Earliest retry time |
-| lease_claim | TEXT | NULLABLE | Worker claim token |
-| lease_until | TIMESTAMPTZ | NULLABLE | Claim expiration for crash recovery |
-| last_error_code | TEXT | NULLABLE | Safe generic channel-delivery category |
-| created_at / updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Queue timestamps |
-| delivered_at | TIMESTAMPTZ | NULLABLE | Set when all configured channels are sent or skipped |
+| id                                                 | UUID        | PRIMARY KEY                               | Queue row identifier                                                         |
+| event_key                                          | TEXT        | UNIQUE, NOT NULL                          | Idempotency key for the connection generation and alert category             |
+| agent_tool_id                                      | UUID        | NOT NULL, FK → agent_tools.id (CASCADE)   | OAuth connection requiring attention                                         |
+| organization_id                                    | UUID        | NOT NULL, FK → organizations.id (CASCADE) | Owning tenant                                                                |
+| payload                                            | JSONB       | NOT NULL                                  | Safe organization/agent/tool labels, status, recovery steps, and action link |
+| telegram_state / organization_telegram_state       | TEXT        | NOT NULL, DEFAULT 'pending'               | Independent platform and organization Telegram states                        |
+| sms_state / organization_sms_state                 | TEXT        | NOT NULL, DEFAULT 'pending'               | Independent platform and organization SMS states                             |
+| telegram_attempts / organization_telegram_attempts | INTEGER     | NOT NULL, DEFAULT 0                       | Independent Telegram attempt counters                                        |
+| sms_attempts / organization_sms_attempts           | INTEGER     | NOT NULL, DEFAULT 0                       | Independent SMS attempt counters                                             |
+| available_at                                       | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                   | Earliest retry time                                                          |
+| lease_claim                                        | TEXT        | NULLABLE                                  | Worker claim token                                                           |
+| lease_until                                        | TIMESTAMPTZ | NULLABLE                                  | Claim expiration for crash recovery                                          |
+| last_error_code                                    | TEXT        | NULLABLE                                  | Safe generic channel-delivery category                                       |
+| created_at / updated_at                            | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                   | Queue timestamps                                                             |
+| delivered_at                                       | TIMESTAMPTZ | NULLABLE                                  | Set when all configured channels are sent or skipped                         |
 
 **RLS**: Enabled with no client policies; backend service role only.
 `claim_oauth_attention_outbox` uses `FOR UPDATE SKIP LOCKED` to claim bounded
 batches across backend instances. Failed sends remain pending with bounded
 exponential retry. Delivery is at-least-once if a provider accepted a message
 but the database acknowledgment was lost.
+
+---
+
+## Legal Document Tables
+
+Versioned Terms & Conditions and Privacy Policy content plus the acceptance and
+notification records created around it. `document_key` is `'terms'` or
+`'privacy'` in every table. Application access uses the service-role client;
+all four tables have RLS enabled with no policies.
+
+### legal_document_versions
+
+Immutable-on-publish version history for one legal document. At most one
+`draft` and one `is_current` row may exist per `document_key`, enforced by
+partial unique indexes; publishing demotes the predecessor to `deprecated`
+before promoting the draft.
+
+| Column                  | Type        | Constraints                                                                   | Description                                                                                       |
+| ----------------------- | ----------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| id                      | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid()                                        | Version row identifier                                                                            |
+| document_key            | VARCHAR(20) | NOT NULL, CHECK IN ('terms','privacy')                                        | Which document                                                                                    |
+| version_number          | INTEGER     | NOT NULL, UNIQUE with document_key (`uq_legal_document_versions_key_version`) | Monotonic per document                                                                            |
+| status                  | VARCHAR(20) | NOT NULL, CHECK IN ('draft','published','deprecated','retired')               | Lifecycle state                                                                                   |
+| content_markdown        | TEXT        | NOT NULL                                                                      | Full document body as Markdown                                                                    |
+| summary_of_changes      | TEXT        | NULLABLE                                                                      | What changed in this version; shown in notification emails                                        |
+| is_current              | BOOLEAN     | NOT NULL, DEFAULT false                                                       | Public pages serve this row; partial unique per key (`ux_legal_document_versions_single_current`) |
+| published_at            | TIMESTAMPTZ | NULLABLE                                                                      | Set on publish                                                                                    |
+| published_by            | UUID        | NULLABLE                                                                      | Publishing platform admin (auth user id, no FK)                                                   |
+| created_by              | UUID        | NULLABLE                                                                      | Draft author (auth user id, no FK); NULL for seed-created v1                                      |
+| created_at / updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                                                       | Row timestamps                                                                                    |
+
+**Indexes**:
+
+- `uq_legal_document_versions_key_version` UNIQUE on `(document_key, version_number)`
+- `ix_legal_document_versions_key_status` on `(document_key, status)`
+- `ux_legal_document_versions_single_draft` UNIQUE on `(document_key)` WHERE `status = 'draft'`
+- `ux_legal_document_versions_single_current` UNIQUE on `(document_key)` WHERE `is_current`
+
+**RLS**: Enabled with no policies; backend service role only.
+
+### legal_document_publish_events
+
+One immutable audit row per publish. Records who published, whether user
+notification was requested, and how many outbox rows were enqueued.
+
+| Column                             | Type        | Constraints                                          | Description                                                           |
+| ---------------------------------- | ----------- | ---------------------------------------------------- | --------------------------------------------------------------------- |
+| id                                 | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid()               | Event identifier                                                      |
+| legal_document_version_id          | UUID        | NOT NULL, FK → legal_document_versions.id (CASCADE)  | Published version                                                     |
+| document_key                       | VARCHAR(20) | NOT NULL, CHECK IN ('terms','privacy')               | Which document                                                        |
+| version_number                     | INTEGER     | NOT NULL                                             | Denormalized published version number                                 |
+| previous_legal_document_version_id | UUID        | NULLABLE, FK → legal_document_versions.id (SET NULL) | Demoted predecessor                                                   |
+| notify_users                       | BOOLEAN     | NOT NULL, DEFAULT false                              | Publish-time "notify users" choice                                    |
+| notified_count                     | INTEGER     | NULLABLE                                             | Outbox rows enqueued for this dispatch                                |
+| dispatch_id                        | UUID        | NULLABLE                                             | Shared id of the enqueued notification batch; NULL when not notifying |
+| published_by                       | UUID        | NULLABLE                                             | Publishing platform admin (auth user id, no FK)                       |
+| published_at                       | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                              | Publish time                                                          |
+
+**Indexes**: `ix_legal_document_publish_events_version` on
+`legal_document_version_id`; `ix_legal_document_publish_events_dispatch` on
+`dispatch_id`.
+
+**RLS**: Enabled with no policies; backend service role only.
+
+### legal_document_acceptances
+
+Per-user acknowledgement of the legal versions in force at signup or
+sign-in. Idempotent per `(user_id, document_key, version_number)`; the `source`
+check constraint is `('signup','oauth','reaccept')` (`reaccept` is reserved for
+a future user-facing re-acknowledgement flow).
+
+| Column                    | Type        | Constraints                                                                                            | Description                          |
+| ------------------------- | ----------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| id                        | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid()                                                                 | Acceptance row identifier            |
+| user_id                   | UUID        | NOT NULL, UNIQUE with document_key + version_number (`uq_legal_document_acceptances_user_key_version`) | Accepting user (auth user id, no FK) |
+| document_key              | VARCHAR(20) | NOT NULL, CHECK IN ('terms','privacy')                                                                 | Which document                       |
+| legal_document_version_id | UUID        | NOT NULL, FK → legal_document_versions.id (CASCADE)                                                    | Accepted version row                 |
+| version_number            | INTEGER     | NOT NULL                                                                                               | Accepted version number              |
+| source                    | VARCHAR(20) | NOT NULL, CHECK IN ('signup','oauth','reaccept')                                                       | How acceptance was captured          |
+| user_agent                | TEXT        | NULLABLE                                                                                               | Request user agent at acceptance     |
+| ip_address                | VARCHAR(45) | NULLABLE                                                                                               | Request client address at acceptance |
+| accepted_at               | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                                                                                | Acceptance time                      |
+
+**Indexes**: `ix_legal_document_acceptances_user` on `user_id`;
+`ix_legal_document_acceptances_version` on `legal_document_version_id`.
+
+**RLS**: Enabled with no policies; backend service role only.
+
+### legal_update_notification_outbox
+
+Durable per-recipient email queue created when a platform admin publishes a
+legal document with "notify users" checked. Rows stay pending
+(`processed_at IS NULL`) until the notification scheduler's legal-update pass
+sends them through `notification_service.send_notification`; sends use
+idempotency key `legal:{document_key}:{version_number}:{user_id}` so retries
+cannot double-email. `summary_of_changes` is denormalized at enqueue time so a
+later draft edit cannot change an already-queued email.
+
+| Column                    | Type        | Constraints                                                                         | Description                                   |
+| ------------------------- | ----------- | ----------------------------------------------------------------------------------- | --------------------------------------------- |
+| id                        | UUID        | PRIMARY KEY, DEFAULT gen_random_uuid()                                              | Outbox row identifier                         |
+| dispatch_id               | UUID        | NOT NULL, UNIQUE with user_id (`uq_legal_update_notification_outbox_dispatch_user`) | Publish dispatch grouping                     |
+| legal_document_version_id | UUID        | NOT NULL, FK → legal_document_versions.id (CASCADE)                                 | Published version                             |
+| document_key              | VARCHAR(20) | NOT NULL, CHECK IN ('terms','privacy')                                              | Which document                                |
+| version_number            | INTEGER     | NOT NULL                                                                            | Published version number                      |
+| user_id                   | UUID        | NOT NULL                                                                            | Recipient (auth user id, no FK)               |
+| recipient_email           | TEXT        | NOT NULL                                                                            | Delivery address                              |
+| recipient_name            | TEXT        | NULLABLE                                                                            | Display name from auth user metadata          |
+| summary_of_changes        | TEXT        | NULLABLE                                                                            | Denormalized "what changed" copy              |
+| attempt_count             | INTEGER     | NOT NULL, DEFAULT 0                                                                 | Delivery attempts                             |
+| last_attempt_at           | TIMESTAMPTZ | NULLABLE                                                                            | Last attempt; also the optimistic claim token |
+| last_error                | TEXT        | NULLABLE                                                                            | Last failure diagnostic (truncated)           |
+| created_at                | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                                                             | Enqueue time                                  |
+| processed_at              | TIMESTAMPTZ | NULLABLE                                                                            | Completion time; NULL means pending           |
+
+**Indexes**: `ix_legal_update_notification_outbox_pending` on `(processed_at,
+created_at)`; `ix_legal_update_notification_outbox_dispatch` on `dispatch_id`.
+
+**RLS**: Enabled with no policies; backend service role only. Claiming uses an
+optimistic `last_attempt_at` conditional update with bounded exponential retry
+(`attempt_count` capped) so concurrent scheduler passes do not double-send.
 
 ---
 
@@ -2246,6 +2368,7 @@ erDiagram
 106. `20261002000001` - Update the `premium_tools` entitlement label and description to identify the included premium integrations.
 107. `20261007000001` - Update the service-role-only credit catalog sync RPC to accept four discounted credit packs and restore the previous three-pack validation on downgrade.
 108. `20261008000001` - Default `max_agents` to unlimited and publish a new Free plan version with unlimited agent creation.
+109. `20261012000001` - Add legal document versioning: `legal_document_versions` (one draft and one current version per document key, enforced by partial unique indexes), `legal_document_publish_events` publish audit rows, `legal_document_acceptances` per-user acceptance records, and `legal_update_notification_outbox` for publish-time user notification emails. All four tables are service-role only (RLS enabled, no policies).
 
 ---
 
@@ -2255,24 +2378,24 @@ erDiagram
 
 Organization-level skill library. Skills are reusable knowledge/procedure packages in markdown.
 
-| Column              | Type         | Constraints                     | Description                             |
+| Column          | Type         | Constraints                       | Description                                                     |
 | --------------- | ------------ | --------------------------------- | --------------------------------------------------------------- |
-| id                  | UUID         | PRIMARY KEY                     | Unique skill identifier                 |
-| organization_id     | UUID         | NOT NULL, FK → organizations.id | Organization identifier                 |
-| slug                | VARCHAR(100) | NOT NULL                        | URL-safe unique identifier (kebab-case) |
-| name                | VARCHAR(200) | NOT NULL                        | Skill display name                      |
-| description         | TEXT         | NULLABLE                        | Short description for prompt metadata   |
-| content             | TEXT         | NOT NULL                        | Full skill content in markdown          |
-| category            | VARCHAR(50)  | NOT NULL, DEFAULT 'custom'      | Always 'custom' (forked, created, or imported) |
-| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Whether the skill is active             |
-| is_visible          | BOOLEAN      | NOT NULL, DEFAULT TRUE          | Visibility in org library UI (does NOT affect agent assignment) |
-| version             | VARCHAR(50)  | NULLABLE                        | Skill version (e.g., '1.0.0')          |
-| author              | VARCHAR(200) | NULLABLE                        | Skill author attribution                |
-| content_hash        | VARCHAR(64)  | NULLABLE                        | SHA-256 hash for change detection       |
-| source_skill_id     | UUID         | NULLABLE, FK → platform_skills.id | Platform skill this was forked from (NULL = created/imported) |
-| source_version      | VARCHAR(20)  | NULLABLE                        | Platform skill version at time of fork  |
-| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                      |
-| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                   |
+| id              | UUID         | PRIMARY KEY                       | Unique skill identifier                                         |
+| organization_id | UUID         | NOT NULL, FK → organizations.id   | Organization identifier                                         |
+| slug            | VARCHAR(100) | NOT NULL                          | URL-safe unique identifier (kebab-case)                         |
+| name            | VARCHAR(200) | NOT NULL                          | Skill display name                                              |
+| description     | TEXT         | NULLABLE                          | Short description for prompt metadata                           |
+| content         | TEXT         | NOT NULL                          | Full skill content in markdown                                  |
+| category        | VARCHAR(50)  | NOT NULL, DEFAULT 'custom'        | Always 'custom' (forked, created, or imported)                  |
+| is_active       | BOOLEAN      | NOT NULL, DEFAULT TRUE            | Whether the skill is active                                     |
+| is_visible      | BOOLEAN      | NOT NULL, DEFAULT TRUE            | Visibility in org library UI (does NOT affect agent assignment) |
+| version         | VARCHAR(50)  | NULLABLE                          | Skill version (e.g., '1.0.0')                                   |
+| author          | VARCHAR(200) | NULLABLE                          | Skill author attribution                                        |
+| content_hash    | VARCHAR(64)  | NULLABLE                          | SHA-256 hash for change detection                               |
+| source_skill_id | UUID         | NULLABLE, FK → platform_skills.id | Platform skill this was forked from (NULL = created/imported)   |
+| source_version  | VARCHAR(20)  | NULLABLE                          | Platform skill version at time of fork                          |
+| created_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()           | Creation timestamp                                              |
+| updated_at      | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()           | Last update timestamp                                           |
 
 **Unique Constraint**: (organization_id, slug)
 **RLS**: Enabled
@@ -2281,16 +2404,16 @@ Organization-level skill library. Skills are reusable knowledge/procedure packag
 
 Reference files for skills. Stores additional files like `references/policies.md` that skills can reference. Files are loaded on-demand via the `load_skill_reference` voice-ws tool.
 
-| Column              | Type         | Constraints                             | Description                     |
+| Column       | Type        | Constraints                           | Description                             |
 | ------------ | ----------- | ------------------------------------- | --------------------------------------- |
-| id                  | UUID         | PRIMARY KEY                             | Unique file identifier          |
-| skill_id            | UUID         | NOT NULL, FK → organization_skills.id   | Parent skill                    |
-| file_path           | TEXT         | NOT NULL                                | e.g., "references/policies.md"  |
-| content             | TEXT         | NOT NULL                                | File content                    |
-| file_kind           | VARCHAR(50)  | NOT NULL, DEFAULT 'reference'           | 'reference', 'script', 'asset', 'other' |
-| content_hash        | VARCHAR(64)  | NULLABLE                                | SHA-256 hash for change detection |
-| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Creation timestamp              |
-| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Last update timestamp           |
+| id           | UUID        | PRIMARY KEY                           | Unique file identifier                  |
+| skill_id     | UUID        | NOT NULL, FK → organization_skills.id | Parent skill                            |
+| file_path    | TEXT        | NOT NULL                              | e.g., "references/policies.md"          |
+| content      | TEXT        | NOT NULL                              | File content                            |
+| file_kind    | VARCHAR(50) | NOT NULL, DEFAULT 'reference'         | 'reference', 'script', 'asset', 'other' |
+| content_hash | VARCHAR(64) | NULLABLE                              | SHA-256 hash for change detection       |
+| created_at   | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()               | Creation timestamp                      |
+| updated_at   | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()               | Last update timestamp                   |
 
 **Unique Constraint**: (skill_id, file_path)
 
@@ -2298,13 +2421,13 @@ Reference files for skills. Stores additional files like `references/policies.md
 
 Junction table linking agents to skills from their organization's library.
 
-| Column              | Type         | Constraints                             | Description                     |
+| Column     | Type        | Constraints                           | Description                  |
 | ---------- | ----------- | ------------------------------------- | ---------------------------- |
-| id                  | UUID         | PRIMARY KEY                             | Unique assignment identifier    |
-| agent_id            | UUID         | NOT NULL, FK → voice_agents.id          | Agent identifier                |
-| skill_id            | UUID         | NOT NULL, FK → organization_skills.id   | Skill identifier                |
-| is_active           | BOOLEAN      | NOT NULL, DEFAULT TRUE                  | Whether assignment is active    |
-| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Creation timestamp              |
+| id         | UUID        | PRIMARY KEY                           | Unique assignment identifier |
+| agent_id   | UUID        | NOT NULL, FK → voice_agents.id        | Agent identifier             |
+| skill_id   | UUID        | NOT NULL, FK → organization_skills.id | Skill identifier             |
+| is_active  | BOOLEAN     | NOT NULL, DEFAULT TRUE                | Whether assignment is active |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()               | Creation timestamp           |
 
 **Unique Constraint**: (agent_id, skill_id)
 
@@ -2318,19 +2441,19 @@ These tables support the **fork/refresh model**: platform admins maintain immuta
 
 Immutable skill templates controlled by the platform. These are the source of truth for forked copies in organization libraries.
 
-| Column              | Type         | Constraints                     | Description                                      |
+| Column       | Type         | Constraints                                                                    | Description                                                                  |
 | ------------ | ------------ | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| id                  | UUID         | PRIMARY KEY                     | Unique platform skill identifier                 |
-| slug                | VARCHAR(100) | NOT NULL, UNIQUE                | Global URL-safe identifier (kebab-case)          |
-| name                | VARCHAR(200) | NOT NULL                        | Display name shown in template library           |
-| description         | TEXT         | NULLABLE                        | Short description for template browsing          |
-| content             | TEXT         | NOT NULL                        | Full SKILL.md content                            |
-| version             | VARCHAR(20)  | NOT NULL                        | Date-based version (`YYYY.MM.DD_N`)              |
-| content_hash        | VARCHAR(64)  | NULLABLE                        | SHA-256 hash for change detection                |
-| status              | VARCHAR(20)  | NOT NULL, DEFAULT 'active', CHECK IN ('draft','active','deprecated','deleted') | Lifecycle status (state machine; transitions go through dedicated endpoints) |
-| author              | VARCHAR(200) | NULLABLE                        | Attribution (e.g., "Platform Team")              |
-| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Creation timestamp                               |
-| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()         | Last update timestamp                            |
+| id           | UUID         | PRIMARY KEY                                                                    | Unique platform skill identifier                                             |
+| slug         | VARCHAR(100) | NOT NULL, UNIQUE                                                               | Global URL-safe identifier (kebab-case)                                      |
+| name         | VARCHAR(200) | NOT NULL                                                                       | Display name shown in template library                                       |
+| description  | TEXT         | NULLABLE                                                                       | Short description for template browsing                                      |
+| content      | TEXT         | NOT NULL                                                                       | Full SKILL.md content                                                        |
+| version      | VARCHAR(20)  | NOT NULL                                                                       | Date-based version (`YYYY.MM.DD_N`)                                          |
+| content_hash | VARCHAR(64)  | NULLABLE                                                                       | SHA-256 hash for change detection                                            |
+| status       | VARCHAR(20)  | NOT NULL, DEFAULT 'active', CHECK IN ('draft','active','deprecated','deleted') | Lifecycle status (state machine; transitions go through dedicated endpoints) |
+| author       | VARCHAR(200) | NULLABLE                                                                       | Attribution (e.g., "Platform Team")                                          |
+| created_at   | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                                                        | Creation timestamp                                                           |
+| updated_at   | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                                                        | Last update timestamp                                                        |
 
 **Status state machine**:
 
@@ -2358,16 +2481,16 @@ Immutable skill templates controlled by the platform. These are the source of tr
 
 Default reference files bundled with a platform skill. These files are copied to the organization skill on fork.
 
-| Column              | Type         | Constraints                             | Description                     |
+| Column       | Type        | Constraints                       | Description                       |
 | ------------ | ----------- | --------------------------------- | --------------------------------- |
-| id                  | UUID         | PRIMARY KEY                             | Unique file identifier          |
-| skill_id            | UUID         | NOT NULL, FK → platform_skills.id       | Parent platform skill           |
-| file_path           | TEXT         | NOT NULL                                | e.g., "references/policies.md" |
-| content             | TEXT         | NOT NULL                                | File content                    |
-| file_kind           | VARCHAR(50)  | NOT NULL, DEFAULT 'reference'           | 'reference', 'script', 'asset'  |
-| content_hash        | VARCHAR(64)  | NULLABLE                                | SHA-256 hash for change detection |
-| created_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Creation timestamp              |
-| updated_at          | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Last update timestamp           |
+| id           | UUID        | PRIMARY KEY                       | Unique file identifier            |
+| skill_id     | UUID        | NOT NULL, FK → platform_skills.id | Parent platform skill             |
+| file_path    | TEXT        | NOT NULL                          | e.g., "references/policies.md"    |
+| content      | TEXT        | NOT NULL                          | File content                      |
+| file_kind    | VARCHAR(50) | NOT NULL, DEFAULT 'reference'     | 'reference', 'script', 'asset'    |
+| content_hash | VARCHAR(64) | NULLABLE                          | SHA-256 hash for change detection |
+| created_at   | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()           | Creation timestamp                |
+| updated_at   | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()           | Last update timestamp             |
 
 **Unique Constraint**: (skill_id, file_path)  
 **Access**: No RLS. Platform admin only.
@@ -2376,14 +2499,14 @@ Default reference files bundled with a platform skill. These files are copied to
 
 Audit trail for refresh operations. Each time an organization refreshes a forked skill from its platform source, a log entry is created.
 
-| Column              | Type         | Constraints                             | Description                     |
+| Column             | Type        | Constraints                           | Description                     |
 | ------------------ | ----------- | ------------------------------------- | ------------------------------- |
-| id                  | UUID         | PRIMARY KEY                             | Unique log entry identifier     |
-| org_skill_id        | UUID         | NOT NULL, FK → organization_skills.id   | Forked skill that was refreshed |
-| old_source_version  | VARCHAR(20)  | NULLABLE                                | Platform version before refresh   |
-| new_source_version  | VARCHAR(20)  | NULLABLE                                | Platform version after refresh  |
-| performed_by        | UUID         | NULLABLE, FK → auth.users.id            | User who triggered the refresh  |
-| performed_at        | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                 | Timestamp of the refresh        |
+| id                 | UUID        | PRIMARY KEY                           | Unique log entry identifier     |
+| org_skill_id       | UUID        | NOT NULL, FK → organization_skills.id | Forked skill that was refreshed |
+| old_source_version | VARCHAR(20) | NULLABLE                              | Platform version before refresh |
+| new_source_version | VARCHAR(20) | NULLABLE                              | Platform version after refresh  |
+| performed_by       | UUID        | NULLABLE, FK → auth.users.id          | User who triggered the refresh  |
+| performed_at       | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()               | Timestamp of the refresh        |
 
 ## Master Data Seed Tables
 
@@ -2393,19 +2516,19 @@ Audit ledger for explicit platform master-data seed operations.
 Only the backend service-role CLI path writes this table; it is not exposed as a
 browser-facing admin API.
 
-| Column | Type | Constraints | Description |
+| Column             | Type         | Constraints                                                            | Description                                                    |
 | ------------------ | ------------ | ---------------------------------------------------------------------- | -------------------------------------------------------------- |
-| id | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Seed operation identifier |
-| domain | VARCHAR(100) | NOT NULL | Catalog domain, e.g. `platform_skills` or `system_pricing` |
-| definition_version | VARCHAR(100) | NOT NULL | Version of the operator-facing source catalog |
-| definition_hash | VARCHAR(128) | NOT NULL | Hash of the source definition used for the run |
-| operation | VARCHAR(20) | NOT NULL, DEFAULT `seed`, CHECK `seed` or `reset` | Requested operation |
-| status | VARCHAR(20) | NOT NULL, DEFAULT `running`, CHECK `running`, `completed`, or `failed` | Operation lifecycle |
-| triggered_by | UUID | NULLABLE | Platform-admin user ID when applicable; NULL for CLI execution |
-| details | JSONB | NOT NULL, DEFAULT `{}` | Provider result details and changed counts |
-| error_message | TEXT | NULLABLE | Safe error summary for a failed run |
-| started_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Operation start |
-| completed_at | TIMESTAMPTZ | NULLABLE | Completion time for completed or failed runs |
+| id                 | UUID         | PRIMARY KEY, DEFAULT `gen_random_uuid()`                               | Seed operation identifier                                      |
+| domain             | VARCHAR(100) | NOT NULL                                                               | Catalog domain, e.g. `platform_skills` or `system_pricing`     |
+| definition_version | VARCHAR(100) | NOT NULL                                                               | Version of the operator-facing source catalog                  |
+| definition_hash    | VARCHAR(128) | NOT NULL                                                               | Hash of the source definition used for the run                 |
+| operation          | VARCHAR(20)  | NOT NULL, DEFAULT `seed`, CHECK `seed` or `reset`                      | Requested operation                                            |
+| status             | VARCHAR(20)  | NOT NULL, DEFAULT `running`, CHECK `running`, `completed`, or `failed` | Operation lifecycle                                            |
+| triggered_by       | UUID         | NULLABLE                                                               | Platform-admin user ID when applicable; NULL for CLI execution |
+| details            | JSONB        | NOT NULL, DEFAULT `{}`                                                 | Provider result details and changed counts                     |
+| error_message      | TEXT         | NULLABLE                                                               | Safe error summary for a failed run                            |
+| started_at         | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()                                                | Operation start                                                |
+| completed_at       | TIMESTAMPTZ  | NULLABLE                                                               | Completion time for completed or failed runs                   |
 
 **Indexes:** `ix_master_data_seed_runs_domain_completed` on `(domain, status,
 completed_at)` and partial unique `ux_master_data_seed_runs_running_domain` on

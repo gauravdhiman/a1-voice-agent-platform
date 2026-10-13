@@ -449,6 +449,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Sign in with Google Identity Services ID token
   const signInWithGoogleIdToken = withTelemetrySignInWithGoogleIdToken(
     async (data: GoogleIdTokenSignInData) => {
+      // Client-side guard for this popup surface: the token exchange happens
+      // directly with Supabase, so there is no backend route where acceptance
+      // can be enforced server-side. Keep this guard in sync with the signup
+      // and OAuth redirect surfaces.
+      if (!data.termsAccepted) {
+        recordMetric(authFailureCounter, 1, {
+          operation: "google_id_token_signin",
+          error: "terms_not_accepted",
+        });
+        throw new Error(
+          "You must accept the Terms & Conditions and Privacy Policy to sign in.",
+        );
+      }
       recordMetric(authAttemptsCounter, 1, {
         operation: "google_id_token_signin",
         source: "frontend",

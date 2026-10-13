@@ -50,6 +50,13 @@ class SignUpRequest(BaseModel):
         max_length=2048,
         description="Cloudflare Turnstile token (required when enforced)",
     )
+    terms_accepted: bool = Field(
+        default=False,
+        description=(
+            "Whether the user accepted the Terms & Conditions and Privacy Policy. "
+            "Signup is rejected when false."
+        ),
+    )
 
     @field_validator("password")
     @classmethod
@@ -256,7 +263,9 @@ class UserProfile(BaseModel):
 class EmailAvailabilityResponse(BaseModel):
     """Public signup helper indicating whether an email is already registered."""
 
-    exists: bool = Field(..., description="True when an auth user already uses this email")
+    exists: bool = Field(
+        ..., description="True when an auth user already uses this email"
+    )
     sign_in_methods: list[str] = Field(
         default_factory=list,
         description="Linked sign-in methods when exists=true (email, google, linkedin)",

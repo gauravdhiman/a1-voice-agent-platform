@@ -54,6 +54,10 @@ Comprehensive documentation organized by feature.
 
 - **[Role-aware product walkthrough](02_features/user_onboarding/product_tour.md)** - First-login tour, role-specific steps, skip/restart behavior, and extension guidance
 
+#### Legal Documents
+
+- **[Legal Documents](02_features/legal-documents.md)** - Versioned Terms & Conditions and Privacy Policy, signup/OAuth acceptance capture, platform-admin draft/publish UI, and publish-time user notification emails
+
 #### Voice Agents
 
 1. **[Voice Agents Overview](02_features/voice_agents/overview.md)** - Voice agent system and lifecycle

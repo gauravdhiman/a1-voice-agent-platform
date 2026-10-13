@@ -74,6 +74,16 @@ describe("public SEO routes", () => {
         changeFrequency: "monthly",
         priority: 0.8,
       },
+      {
+        url: "https://www.247ai.live/terms",
+        changeFrequency: "monthly",
+        priority: 0.5,
+      },
+      {
+        url: "https://www.247ai.live/privacy",
+        changeFrequency: "monthly",
+        priority: 0.5,
+      },
     ]);
   });
 

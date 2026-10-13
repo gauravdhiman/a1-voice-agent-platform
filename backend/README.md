@@ -186,6 +186,31 @@ persistence lives in `shared/voice_agents/callback_service.py`;
 storage is documented under `docs/DATABASE_SCHEMA.md#callback_escalations`.
 Deterministic coverage: `evals/callback.py` (`--suite callback`).
 
+### Legal documents (Terms & Conditions / Privacy Policy)
+
+Versioned legal documents with platform-admin draft/publish management and
+publish-time user notification emails. See
+[Legal Documents](../docs/02_features/legal-documents.md) and
+`docs/DATABASE_SCHEMA.md#legal-document-tables` (migration `20261012000001`).
+
+| Endpoint                                    | Method | Description                                                  |
+| ------------------------------------------- | ------ | ------------------------------------------------------------ |
+| `/api/v1/legal/{terms\|privacy}`            | GET    | Latest published version (public)                            |
+| `/api/v1/admin/legal/{key}/versions`        | GET    | Version history (platform admins)                            |
+| `/api/v1/admin/legal/versions/{id}`         | GET    | Version detail (platform admins)                             |
+| `/api/v1/admin/legal/{key}/draft`           | POST   | Create the next draft, copying the published content (201)   |
+| `/api/v1/admin/legal/versions/{id}`         | PUT    | Edit a draft (409 when published)                            |
+| `/api/v1/admin/legal/versions/{id}`         | DELETE | Delete a draft (409 when published)                          |
+| `/api/v1/admin/legal/versions/{id}/publish` | POST   | Publish a draft; optionally enqueue user notification emails |
+
+Implementation lives in `src/legal/` (models, service, public/admin routes,
+`update_outbox.py`). Signups require `terms_accepted` and record acceptance
+rows (`legal_document_acceptances`); OAuth signups carry the acknowledgement
+through the signed state and reject new users without it. The
+`legal_update_notification_outbox` is drained by the notification scheduler
+(`src/notifications/retry_scheduler.py`) using the `legal.documents_updated`
+event.
+
 ### Example Response
 
 ```bash
