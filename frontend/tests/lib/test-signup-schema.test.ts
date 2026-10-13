@@ -8,6 +8,7 @@ const validPayload = {
   email: "jane@example.com",
   password: "Password123!",
   passwordConfirm: "Password123!",
+  terms_accepted: true,
 };
 
 describe("signUpSchema", () => {
@@ -23,9 +24,11 @@ describe("signUpSchema", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues.some((issue) => issue.path[0] === "passwordConfirm")).toBe(
-        true,
-      );
+      expect(
+        result.error.issues.some(
+          (issue) => issue.path[0] === "passwordConfirm",
+        ),
+      ).toBe(true);
     }
   });
 
@@ -37,9 +40,25 @@ describe("signUpSchema", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues.some((issue) => issue.message === "Passwords don't match")).toBe(
-        true,
-      );
+      expect(
+        result.error.issues.some(
+          (issue) => issue.message === "Passwords don't match",
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it("rejects a signup without terms acceptance", () => {
+    const result = signUpSchema.safeParse({
+      ...validPayload,
+      terms_accepted: false,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some((issue) => issue.path[0] === "terms_accepted"),
+      ).toBe(true);
     }
   });
 
@@ -47,11 +66,12 @@ describe("signUpSchema", () => {
     expect(
       signUpSchema.safeParse({ ...validPayload, firstName: "" }).success,
     ).toBe(false);
-    expect(signUpSchema.safeParse({ ...validPayload, lastName: "" }).success).toBe(
-      false,
-    );
     expect(
-      signUpSchema.safeParse({ ...validPayload, email: "not-an-email" }).success,
+      signUpSchema.safeParse({ ...validPayload, lastName: "" }).success,
+    ).toBe(false);
+    expect(
+      signUpSchema.safeParse({ ...validPayload, email: "not-an-email" })
+        .success,
     ).toBe(false);
   });
 });

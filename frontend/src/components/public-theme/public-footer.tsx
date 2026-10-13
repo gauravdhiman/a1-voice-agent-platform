@@ -17,6 +17,8 @@ export function PublicFooter() {
           <Link href="/#demos">Live demos</Link>
           <Link href="/#pricing">Pricing</Link>
           <Link href="/auth/signin">Sign in</Link>
+          <Link href="/terms">Terms &amp; Conditions</Link>
+          <Link href="/privacy">Privacy Policy</Link>
         </div>
       </div>
       <div className={styles.footerBottom}>

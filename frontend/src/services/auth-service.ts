@@ -54,7 +54,8 @@ class AuthService {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unable to check email.",
+        error:
+          error instanceof Error ? error.message : "Unable to check email.",
       };
     }
   }
@@ -84,6 +85,7 @@ class AuthService {
         password_confirm: data.passwordConfirm,
         first_name: data.firstName,
         last_name: data.lastName,
+        terms_accepted: data.terms_accepted,
         invitation_token: data.invitationToken,
         captcha_token: data.captchaToken,
       });
@@ -199,7 +201,8 @@ class AuthService {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to resend email.",
+        error:
+          error instanceof Error ? error.message : "Failed to resend email.",
       };
     }
   }
@@ -210,10 +213,10 @@ class AuthService {
     message?: string;
   }> {
     try {
-      const response = await apiClient.post<{ success: boolean; message: string }>(
-        `${this.baseUrl}/verify-email`,
-        { token },
-      );
+      const response = await apiClient.post<{
+        success: boolean;
+        message: string;
+      }>(`${this.baseUrl}/verify-email`, { token });
       return {
         success: response.data.success,
         message: response.data.message,

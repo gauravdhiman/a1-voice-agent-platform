@@ -16,6 +16,7 @@ describe("withTelemetrySignUp", () => {
       passwordConfirm: "Password123!",
       firstName: "Test",
       lastName: "User",
+      terms_accepted: true,
     });
 
     expect(result.emailVerificationRequired).toBe(true);

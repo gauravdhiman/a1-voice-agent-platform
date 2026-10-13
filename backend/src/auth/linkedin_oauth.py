@@ -37,6 +37,7 @@ class LinkedInVerifiedIdentity:
     last_name: str
     linkedin_sub: str
     picture: str | None
+    terms_accepted: bool = False
 
 
 class LinkedInOAuthConfigurationError(RuntimeError):
@@ -73,12 +74,12 @@ class LinkedInOAuthService:
     @property
     def redirect_uri(self) -> str:
         """Return the registered backend callback URL for LinkedIn."""
-        return (
-            f"{self.settings.api_base_url.rstrip('/')}/api/v1/auth/linkedin/callback"
-        )
+        return f"{self.settings.api_base_url.rstrip('/')}/api/v1/auth/linkedin/callback"
 
     def create_authorization_url(
-        self, invitation_token: str | None = None
+        self,
+        invitation_token: str | None = None,
+        terms_accepted: bool = False,
     ) -> tuple[str, str]:
         """Create a direct LinkedIn authorization URL and signed state value."""
         self._ensure_configuration()
@@ -87,6 +88,7 @@ class LinkedInOAuthService:
             redirect_uri=self.redirect_uri,
             jwt_secret_key=self.settings.jwt_secret_key,
             invitation_token=invitation_token,
+            terms_accepted=terms_accepted,
         )
         query = urlencode(
             {
@@ -186,7 +188,9 @@ class LinkedInOAuthService:
 
             picture = userinfo.get("picture")
             normalized_picture = (
-                picture.strip() if isinstance(picture, str) and picture.strip() else None
+                picture.strip()
+                if isinstance(picture, str) and picture.strip()
+                else None
             )
             invitation_token = state_payload.get("invitation_token")
             normalized_invitation = (
@@ -202,6 +206,7 @@ class LinkedInOAuthService:
                 provider_sub=linkedin_sub,
                 picture=normalized_picture,
                 invitation_token=normalized_invitation,
+                terms_accepted=bool(state_payload.get("terms_accepted", False)),
             )
 
     def _ensure_configuration(self) -> None:
@@ -214,9 +219,7 @@ class LinkedInOAuthService:
             "jwt_secret_key": getattr(self.settings, "jwt_secret_key", None),
         }
         if any(not value for value in required_values.values()):
-            missing = [
-                name for name, value in required_values.items() if not value
-            ]
+            missing = [name for name, value in required_values.items() if not value]
             env_hint = (
                 "Set LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in the root "
                 ".env file, or use SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID "

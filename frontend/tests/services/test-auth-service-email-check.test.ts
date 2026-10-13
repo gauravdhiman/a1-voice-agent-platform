@@ -27,12 +27,15 @@ describe("authService email availability", () => {
       data: {
         exists: true,
         sign_in_methods: ["google", "email"],
-        message: "An account with this email already exists. Sign in with Google or Email and password.",
+        message:
+          "An account with this email already exists. Sign in with Google or Email and password.",
       },
     });
 
     const { authService } = await import("@/services/auth-service");
-    const result = await authService.checkEmailAvailability("existing@example.com");
+    const result = await authService.checkEmailAvailability(
+      "existing@example.com",
+    );
 
     expect(result.success).toBe(true);
     expect(result.data?.exists).toBe(true);
@@ -59,6 +62,7 @@ describe("authService email availability", () => {
       passwordConfirm: "Password123!",
       firstName: "Existing",
       lastName: "User",
+      terms_accepted: true,
     });
 
     expect(result.success).toBe(false);

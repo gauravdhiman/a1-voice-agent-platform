@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -13,10 +14,7 @@ import { OAuthRedirectButton } from "@/components/auth/oauth-redirect-button";
 import { ExistingAccountHint } from "@/components/auth/existing-account-hint";
 import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 import { authService } from "@/services/auth-service";
-import {
-  signUpSchema,
-  type SignUpFormData,
-} from "@/lib/auth/signup-schema";
+import { signUpSchema, type SignUpFormData } from "@/lib/auth/signup-schema";
 import type { SignInMethod } from "@/types/auth";
 
 export function SignUpForm() {
@@ -57,41 +55,40 @@ export function SignUpForm() {
       email: "",
       password: "",
       passwordConfirm: "",
+      terms_accepted: false,
     },
   });
 
   const password = watch("password");
   const passwordConfirm = watch("passwordConfirm");
   const emailValue = watch("email");
+  const termsAccepted = watch("terms_accepted");
 
-  const checkEmailAvailability = useCallback(
-    async (email: string) => {
-      const trimmedEmail = email.trim();
-      if (!trimmedEmail || !z.string().email().safeParse(trimmedEmail).success) {
+  const checkEmailAvailability = useCallback(async (email: string) => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !z.string().email().safeParse(trimmedEmail).success) {
+      setExistingAccountMessage(null);
+      setExistingSignInMethods([]);
+      return;
+    }
+
+    setIsCheckingEmail(true);
+    try {
+      const result = await authService.checkEmailAvailability(trimmedEmail);
+      if (result.success && result.data?.exists) {
+        setExistingAccountMessage(
+          result.data.message ||
+            "An account with this email already exists. Please sign in instead.",
+        );
+        setExistingSignInMethods(result.data.signInMethods);
+      } else {
         setExistingAccountMessage(null);
         setExistingSignInMethods([]);
-        return;
       }
-
-      setIsCheckingEmail(true);
-      try {
-        const result = await authService.checkEmailAvailability(trimmedEmail);
-        if (result.success && result.data?.exists) {
-          setExistingAccountMessage(
-            result.data.message ||
-              "An account with this email already exists. Please sign in instead.",
-          );
-          setExistingSignInMethods(result.data.signInMethods);
-        } else {
-          setExistingAccountMessage(null);
-          setExistingSignInMethods([]);
-        }
-      } finally {
-        setIsCheckingEmail(false);
-      }
-    },
-    [],
-  );
+    } finally {
+      setIsCheckingEmail(false);
+    }
+  }, []);
 
   // Re-validate confirm password when either password field changes.
   React.useEffect(() => {
@@ -104,6 +101,7 @@ export function SignUpForm() {
     !!isLoading ||
     !!existingAccountMessage ||
     isCheckingEmail ||
+    !termsAccepted ||
     !isValid;
 
   const getPasswordStrength = (password: string) => {
@@ -146,6 +144,7 @@ export function SignUpForm() {
         passwordConfirm: data.passwordConfirm,
         firstName: data.firstName,
         lastName: data.lastName,
+        terms_accepted: data.terms_accepted,
         invitationToken: invitationToken || undefined,
         captchaToken: captchaToken || undefined,
       });
@@ -395,6 +394,44 @@ export function SignUpForm() {
           )}
         </div>
 
+        <div className="space-y-2">
+          <label className="flex items-start gap-2 text-sm text-muted-foreground">
+            <input
+              id="terms_accepted"
+              type="checkbox"
+              {...register("terms_accepted")}
+              disabled={!!isLoading}
+              className="mt-0.5 h-4 w-4 cursor-pointer"
+            />
+            <span>
+              I agree to the{" "}
+              <Link
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline underline-offset-2 hover:text-primary"
+              >
+                Terms &amp; Conditions
+              </Link>{" "}
+              and{" "}
+              <Link
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline underline-offset-2 hover:text-primary"
+              >
+                Privacy Policy
+              </Link>
+              .
+            </span>
+          </label>
+          {errors.terms_accepted && (
+            <p className="text-sm text-destructive">
+              {errors.terms_accepted.message}
+            </p>
+          )}
+        </div>
+
         <Button
           id="create-account-button"
           type="submit"
@@ -433,7 +470,8 @@ export function SignUpForm() {
           provider="google"
           text="signup_with"
           invitationToken={invitationToken || undefined}
-          disabled={!!isLoading}
+          termsAccepted={termsAccepted}
+          disabled={!!isLoading || !termsAccepted}
           className="w-full"
         />
 
@@ -441,7 +479,8 @@ export function SignUpForm() {
           provider="linkedin"
           text="signup_with"
           invitationToken={invitationToken || undefined}
-          disabled={!!isLoading}
+          termsAccepted={termsAccepted}
+          disabled={!!isLoading || !termsAccepted}
           className="w-full"
         />
       </div>

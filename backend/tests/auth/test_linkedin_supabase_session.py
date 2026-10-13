@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
+
 try:
     from supabase_auth.errors import AuthApiError
 except ImportError:  # pragma: no cover - compatibility with older supabase-py
@@ -11,7 +12,6 @@ except ImportError:  # pragma: no cover - compatibility with older supabase-py
 
 from src.auth.linkedin_oauth import LinkedInVerifiedIdentity
 from src.auth.linkedin_supabase_session import LinkedInSupabaseSessionService
-
 
 USER_ID = UUID("12345678-1234-5678-1234-567812345678")
 
@@ -24,6 +24,7 @@ def identity() -> LinkedInVerifiedIdentity:
         last_name="Lovelace",
         linkedin_sub="linkedin-sub-123",
         picture="https://cdn.example/avatar.png",
+        terms_accepted=True,
     )
 
 

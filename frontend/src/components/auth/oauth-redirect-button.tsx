@@ -14,6 +14,8 @@ interface OAuthRedirectButtonProps {
   provider: OAuthProvider;
   text: OAuthRedirectButtonText;
   invitationToken?: string;
+  /** Signup legal acceptance; appends `terms_accepted=true` to the authorize URL. */
+  termsAccepted?: boolean;
   disabled?: boolean;
   className?: string;
 }
@@ -21,16 +23,23 @@ interface OAuthRedirectButtonProps {
 function buildAuthorizeUrl(
   provider: OAuthProvider,
   invitationToken?: string,
+  termsAccepted?: boolean,
 ): string {
-  const base = `${API_BASE_URL.replace(/\/$/, "")}/api/v1/auth/${provider}/authorize`;
-  if (!invitationToken) {
-    return base;
-  }
-  const params = new URLSearchParams({ invitation_token: invitationToken });
-  return `${base}?${params.toString()}`;
+  const base = `${API_BASE_URL.replace(
+    /\/$/,
+    "",
+  )}/api/v1/auth/${provider}/authorize`;
+  const params = new URLSearchParams();
+  if (invitationToken) params.append("invitation_token", invitationToken);
+  if (termsAccepted) params.append("terms_accepted", "true");
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
 }
 
-function buttonLabel(provider: OAuthProvider, text: OAuthRedirectButtonText): string {
+function buttonLabel(
+  provider: OAuthProvider,
+  text: OAuthRedirectButtonText,
+): string {
   const action = text === "signin_with" ? "Sign in" : "Sign up";
   return `${action} with ${provider === "google" ? "Google" : "LinkedIn"}`;
 }
@@ -42,10 +51,11 @@ export function OAuthRedirectButton({
   provider,
   text,
   invitationToken,
+  termsAccepted,
   disabled = false,
   className,
 }: OAuthRedirectButtonProps) {
-  const href = buildAuthorizeUrl(provider, invitationToken);
+  const href = buildAuthorizeUrl(provider, invitationToken, termsAccepted);
   const label = buttonLabel(provider, text);
 
   return (

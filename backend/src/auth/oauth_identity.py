@@ -19,3 +19,4 @@ class OAuthVerifiedIdentity:
     provider_sub: str
     picture: Optional[str] = None
     invitation_token: Optional[str] = None
+    terms_accepted: bool = False

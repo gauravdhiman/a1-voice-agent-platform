@@ -22,6 +22,8 @@ from src.call_artifacts import call_artifacts_router
 from src.call_logs import call_logs_router
 from src.escalations.routes import escalations_router
 from src.leads.routes import admin_leads_router, public_leads_router
+from src.legal.admin_routes import router as admin_legal_router
+from src.legal.public_routes import router as public_legal_router
 from src.notifications.routes import router as notification_router
 from src.organization.public_routes import public_org_router
 from src.organization.routes import organization_router
@@ -150,6 +152,10 @@ def create_app() -> FastAPI:
     app.include_router(billing_router)
     app.include_router(admin_plan_router)
 
+    # Include legal document routes (public read + platform-admin management)
+    app.include_router(public_legal_router)
+    app.include_router(admin_legal_router)
+
     # Include notification routes
     app.include_router(notification_router)
 
@@ -220,9 +226,7 @@ async def lifespan(app: FastAPI):
     setup_manual_opentelemetry("247ai-backend")
     # Emit startup telemetry after the SDK providers are installed. Emitting
     # at module import would cache no-op instruments before the provider exists.
-    emit_log(
-        "Backend application started", "INFO", {"service": "247ai-backend"}
-    )
+    emit_log("Backend application started", "INFO", {"service": "247ai-backend"})
     emit_metric("backend.app.start", 1, {"service": "247ai-backend"})
     # Startup — fail fast if required secrets are not configured
     if not settings.jwt_secret_key:

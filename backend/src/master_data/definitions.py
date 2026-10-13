@@ -65,6 +65,12 @@ def build_master_data_catalog(
     """
     from src.billing.credit_catalog import CREDIT_PACKS
     from src.billing.system_pricing import SYSTEM_PRICING
+    from src.legal.content import (
+        PRIVACY_V1_MARKDOWN,
+        PRIVACY_V1_SUMMARY,
+        TERMS_V1_MARKDOWN,
+        TERMS_V1_SUMMARY,
+    )
     from src.notifications.templates import TEMPLATE_REGISTRY
     from src.voice_agents.skill_seeds import PLATFORM_SKILL_TEMPLATES
 
@@ -92,6 +98,22 @@ def build_master_data_catalog(
             f"${pack['price_usd']:.2f}",
         )
         for pack in CREDIT_PACKS
+    ]
+    legal_documents_payload = [
+        {
+            "document_key": "terms",
+            "content_markdown": TERMS_V1_MARKDOWN,
+            "summary_of_changes": TERMS_V1_SUMMARY,
+        },
+        {
+            "document_key": "privacy",
+            "content_markdown": PRIVACY_V1_MARKDOWN,
+            "summary_of_changes": PRIVACY_V1_SUMMARY,
+        },
+    ]
+    legal_document_items = [
+        ("terms", "Terms & Conditions", TERMS_V1_SUMMARY),
+        ("privacy", "Privacy Policy", PRIVACY_V1_SUMMARY),
     ]
 
     return (
@@ -158,6 +180,23 @@ def build_master_data_catalog(
                 key: {"name": value["name"], "variables": value.get("variables", [])}
                 for key, value in sorted(TEMPLATE_REGISTRY.items())
             },
+        ),
+        MasterDataDefinition(
+            key="legal_documents",
+            display_name="Legal documents (initial published versions)",
+            category="operations",
+            description=(
+                "Initial published Terms & Conditions and Privacy Policy content. "
+                "Later versions are managed by platform admins through the Legal "
+                "Documents UI."
+            ),
+            source="backend/src/legal/content.py",
+            expected_count=len(legal_document_items),
+            seedable=True,
+            requires_review=False,
+            migration_managed=False,
+            items=_items(legal_document_items),
+            payload=legal_documents_payload,
         ),
         MasterDataDefinition(
             key="plan_catalog",

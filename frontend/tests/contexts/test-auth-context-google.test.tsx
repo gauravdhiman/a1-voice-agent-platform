@@ -24,9 +24,11 @@ import { authService } from "@/services/auth-service";
 function GoogleAuthInvoker({
   invitationToken,
   includeNonce = true,
+  termsAccepted = true,
 }: {
   invitationToken?: string;
   includeNonce?: boolean;
+  termsAccepted?: boolean;
 }) {
   const { signInWithGoogleIdToken } = useAuth();
   const [status, setStatus] = useState("");
@@ -39,6 +41,7 @@ function GoogleAuthInvoker({
           try {
             const credentials = {
               token: "google-id-token",
+              termsAccepted,
               ...(includeNonce ? { nonce: "google-raw-nonce" } : {}),
               ...(invitationToken ? { invitationToken } : {}),
             };
@@ -114,6 +117,27 @@ describe("AuthProvider Google ID-token sign-in", () => {
       });
     });
     expect(screen.getByText("success")).toBeInTheDocument();
+  });
+
+  it("rejects the exchange when legal acceptance is missing", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AuthProvider>
+        <GoogleAuthInvoker termsAccepted={false} />
+      </AuthProvider>,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Continue with Google" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "You must accept the Terms & Conditions and Privacy Policy to sign in.",
+      ),
+    ).toBeInTheDocument();
+    expect(signInWithIdToken).not.toHaveBeenCalled();
   });
 
   it("supports exchanges without a nonce", async () => {

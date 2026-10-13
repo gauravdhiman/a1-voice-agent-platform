@@ -56,6 +56,7 @@ describe("authService.signUp", () => {
       passwordConfirm: "Password123!",
       firstName: "New",
       lastName: "User",
+      terms_accepted: true,
     });
 
     expect(postMock).toHaveBeenCalledWith("/api/v1/auth/signup", {
@@ -64,7 +65,9 @@ describe("authService.signUp", () => {
       password_confirm: "Password123!",
       first_name: "New",
       last_name: "User",
+      terms_accepted: true,
       invitation_token: undefined,
+      captcha_token: undefined,
     });
     expect(setSessionMock).toHaveBeenCalledWith({
       access_token: "access-token",
@@ -106,6 +109,7 @@ describe("authService.signUp", () => {
       passwordConfirm: "Password123!",
       firstName: "New",
       lastName: "User",
+      terms_accepted: true,
     });
 
     expect(setSessionMock).not.toHaveBeenCalled();

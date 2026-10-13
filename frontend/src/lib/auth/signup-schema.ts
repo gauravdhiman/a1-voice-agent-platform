@@ -19,6 +19,12 @@ export const signUpSchema = z
       .regex(/\d/, "Must contain a number")
       .regex(/[!@#$%^&*(),.?":{}|<>]/, "Must contain special character"),
     passwordConfirm: z.string().min(1, "Please confirm your password"),
+    terms_accepted: z
+      .boolean()
+      .refine(
+        (value) => value,
+        "You must agree to the Terms & Conditions and Privacy Policy",
+      ),
   })
   .refine((data) => data.password === data.passwordConfirm, {
     message: "Passwords don't match",

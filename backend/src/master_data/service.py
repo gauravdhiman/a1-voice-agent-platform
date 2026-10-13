@@ -255,7 +255,61 @@ class MasterDataService:
         if domain == "notification_events":
             return await self._seed_notification_events(reset=reset)
 
+        if domain == "legal_documents":
+            return await self._seed_legal_documents()
+
         raise ValueError(f"No provider registered for master-data domain '{domain}'")
+
+    async def _seed_legal_documents(self) -> dict[str, Any]:
+        """Seed the initial published versions of each legal document.
+
+        Seeding is additive: a document key that already has any version row is
+        skipped entirely so admin-managed later versions are never overwritten
+        or republished. The seeded row is the current published v1.
+
+        Returns:
+            Counts of documents seeded and skipped.
+        """
+        from src.legal.content import (
+            PRIVACY_V1_MARKDOWN,
+            PRIVACY_V1_SUMMARY,
+            TERMS_V1_MARKDOWN,
+            TERMS_V1_SUMMARY,
+        )
+
+        documents = {
+            "terms": (TERMS_V1_MARKDOWN, TERMS_V1_SUMMARY),
+            "privacy": (PRIVACY_V1_MARKDOWN, PRIVACY_V1_SUMMARY),
+        }
+        now = datetime.now(timezone.utc).isoformat()
+        seeded = 0
+        skipped = 0
+        for document_key, (content_markdown, summary_of_changes) in documents.items():
+            existing = (
+                self.supabase.table("legal_document_versions")
+                .select("id")
+                .eq("document_key", document_key)
+                .limit(1)
+                .execute()
+            ).data or []
+            if existing:
+                skipped += 1
+                continue
+            self.supabase.table("legal_document_versions").insert(
+                {
+                    "document_key": document_key,
+                    "version_number": 1,
+                    "status": "published",
+                    "content_markdown": content_markdown,
+                    "summary_of_changes": summary_of_changes,
+                    "is_current": True,
+                    "published_at": now,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            ).execute()
+            seeded += 1
+        return {"changed": seeded, "skipped": skipped}
 
     async def _seed_system_pricing(self, *, reset: bool) -> dict[str, Any]:
         """Create missing usage prices and optionally restore source defaults."""
@@ -322,6 +376,7 @@ class MasterDataService:
             "billing.payment_failed": NotificationCategory.BILLING,
             "tools.oauth_reauthorization_required": NotificationCategory.AUTH,
             "lead.interest_submitted": NotificationCategory.SYSTEM,
+            "legal.documents_updated": NotificationCategory.SYSTEM,
         }
         changed = 0
         for event_key, template_data in TEMPLATE_REGISTRY.items():
@@ -370,6 +425,7 @@ class MasterDataService:
             "platform_tools": "platform_tools",
             "system_pricing": "credit_events",
             "notification_events": "notification_events",
+            "legal_documents": "legal_document_versions",
             "plan_catalog": "plan_products",
             "credit_products": "credit_products",
             "entitlement_definitions": "entitlement_definitions",
@@ -393,6 +449,8 @@ class MasterDataService:
                 from src.notifications.templates import TEMPLATE_REGISTRY
 
                 query = query.in_("event_key", list(TEMPLATE_REGISTRY))
+            elif definition.key == "legal_documents":
+                query = query.eq("is_current", True)
             return len(query.execute().data or [])
         except Exception:
             logger.warning("Unable to count master-data domain %s", definition.key)

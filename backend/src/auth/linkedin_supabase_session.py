@@ -41,6 +41,7 @@ class LinkedInSupabaseSessionService(OAuthSessionService):
                 last_name=identity.last_name,
                 provider_sub=identity.linkedin_sub,
                 picture=identity.picture,
+                terms_accepted=identity.terms_accepted,
             )
         return await self.complete_oauth_sign_in(identity)
 

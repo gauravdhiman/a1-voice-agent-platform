@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from fastapi import HTTPException
-
 from src.auth.models import SignUpRequest
 from src.auth.signup_gate import (
     SIGNUP_DISABLED_CODE,
@@ -32,9 +31,8 @@ def _invitation_client(rows=None, explode=False):
     if explode:
         execute.side_effect = RuntimeError("db down")
     client = MagicMock()
-    client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute = (
-        execute
-    )
+    chain = client.table.return_value.select.return_value.eq.return_value
+    chain.limit.return_value.execute = execute
     return client
 
 
@@ -176,6 +174,7 @@ def _signup_body(**overrides):
         "password_confirm": "Password123!",
         "first_name": "New",
         "last_name": "User",
+        "terms_accepted": True,
     }
     data.update(overrides)
     return SignUpRequest(**data)

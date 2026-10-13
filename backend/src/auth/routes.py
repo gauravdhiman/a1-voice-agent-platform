@@ -10,6 +10,17 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, s
 from fastapi.responses import JSONResponse, RedirectResponse
 from opentelemetry import trace
 from pydantic import BaseModel, Field
+from src.auth.audit import (
+    OAUTH_DENIED,
+    OAUTH_SIGNIN,
+    PASSWORD_RESET_REQUESTED,
+    SIGNIN,
+    SIGNIN_DENIED,
+    SIGNUP,
+    SIGNUP_DENIED,
+    log_auth_event,
+)
+from src.auth.dependencies import assert_platform_role
 from src.auth.google_oauth import (
     GoogleOAuthConfigurationError,
     GoogleOAuthError,
@@ -20,9 +31,6 @@ from src.auth.linkedin_oauth import (
     LinkedInOAuthError,
     linkedin_oauth_service,
 )
-from src.auth.oauth_handoff import consume_session_handoff_token
-from src.auth.oauth_redirect import oauth_error_redirect, oauth_session_redirect
-from src.auth.oauth_session import oauth_session_service
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import (
     AuthResponse,
@@ -37,24 +45,17 @@ from src.auth.models import (
     SignUpResponse,
     UserProfile,
 )
+from src.auth.oauth_handoff import consume_session_handoff_token
 from src.auth.oauth_identity import OAuthVerifiedIdentity
+from src.auth.oauth_redirect import oauth_error_redirect, oauth_session_redirect
+from src.auth.oauth_session import oauth_session_service
 from src.auth.service import auth_service
-from src.auth.audit import (
-    OAUTH_DENIED,
-    OAUTH_SIGNIN,
-    PASSWORD_RESET_REQUESTED,
-    SIGNIN,
-    SIGNIN_DENIED,
-    SIGNUP,
-    SIGNUP_DENIED,
-    log_auth_event,
-)
-from src.auth.dependencies import assert_platform_role
 from src.auth.signup_gate import (
     SIGNUP_DISABLED_CODE,
     SIGNUP_DISABLED_MESSAGE,
     is_signup_allowed,
 )
+from src.legal.service import legal_service
 from src.notifications.email_verification_service import email_verification_service
 from src.notifications.platform_settings_models import (
     ResendVerificationRequest,
@@ -135,6 +136,18 @@ async def sign_up(request: Request, body: SignUpRequest) -> SignUpResponse:
     current_span = trace.get_current_span()
     current_span.set_attribute("user.email", body.email)
 
+    if not body.terms_accepted:
+        current_span.set_attribute("error.type", "terms_not_accepted")
+        current_span.set_status(
+            trace.Status(trace.StatusCode.ERROR, "terms_not_accepted")
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "You must accept the Terms & Conditions and Privacy Policy to sign up."
+            ),
+        )
+
     if is_turnstile_configured():
         client_ip = request.client.host if request.client else None
         if not await verify_turnstile_token(body.captcha_token, client_ip):
@@ -183,6 +196,17 @@ async def sign_up(request: Request, body: SignUpRequest) -> SignUpResponse:
 
     current_span.set_attribute("user.id", str(auth_response.user.id))
     current_span.set_status(trace.Status(trace.StatusCode.OK))
+    try:
+        await legal_service.record_user_acceptance(
+            auth_response.user.id,
+            source="signup",
+            user_agent=request.headers.get("user-agent"),
+            ip_address=request.client.host if request.client else None,
+        )
+    except Exception:
+        # Acceptance capture must never fail a completed signup; the version
+        # history remains the source of truth for enforcement review.
+        logging.exception("Failed to record legal acceptance for new signup")
     return auth_response
 
 
@@ -444,12 +468,14 @@ async def list_audit_events(
 async def linkedin_authorize(
     request: Request,
     invitation_token: Optional[str] = Query(default=None),
+    terms_accepted: bool = Query(default=False),
 ) -> RedirectResponse:
     """Redirect the browser to LinkedIn for backend-managed OAuth sign-in."""
     del request
     try:
         authorization_url, _state = linkedin_oauth_service.create_authorization_url(
-            invitation_token=invitation_token
+            invitation_token=invitation_token,
+            terms_accepted=terms_accepted,
         )
         return RedirectResponse(authorization_url, status_code=status.HTTP_302_FOUND)
     except LinkedInOAuthConfigurationError as error:
@@ -597,12 +623,14 @@ async def linkedin_callback(
 async def google_authorize(
     request: Request,
     invitation_token: Optional[str] = Query(default=None),
+    terms_accepted: bool = Query(default=False),
 ) -> RedirectResponse:
     """Redirect the browser to Google for backend-managed OAuth sign-in."""
     del request
     try:
         authorization_url, _state = google_oauth_service.create_authorization_url(
-            invitation_token=invitation_token
+            invitation_token=invitation_token,
+            terms_accepted=terms_accepted,
         )
         return RedirectResponse(authorization_url, status_code=status.HTTP_302_FOUND)
     except GoogleOAuthConfigurationError as error:
