@@ -446,6 +446,107 @@
   gap: 12px;
 }
 
+.heroBottom .heroFilmLink {
+  gap: 9px;
+  color: var(--accent);
+  transition: color 0.2s ease;
+}
+
+.heroBottom .heroFilmLink:hover {
+  color: var(--ink);
+}
+
+.heroBottom .heroFilmLink .playCircle {
+  width: 19px;
+  height: 19px;
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+}
+
+/* Product film ---------------------------------------------------------- */
+
+.launchFilm {
+  padding: 100px 6.5%;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(60% 90% at 7% 50%, color-mix(in srgb, #284bd8 15%, transparent), transparent 74%),
+    radial-gradient(48% 90% at 100% 100%, color-mix(in srgb, #b7dfc5 10%, transparent), transparent 70%),
+    color-mix(in srgb, var(--panel) 28%, var(--surface));
+}
+
+.launchFilmInner {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.68fr) minmax(0, 1.32fr);
+  align-items: center;
+  gap: clamp(34px, 6vw, 88px);
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.launchFilmIntro {
+  max-width: 440px;
+}
+
+.launchFilmIntro h2 {
+  margin-top: 24px;
+  font-size: clamp(40px, 4.4vw, 68px);
+}
+
+.home .launchFilmCopy {
+  margin-top: 22px;
+  max-width: 390px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.launchFilmFrame {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, #a6d4fc);
+  border-radius: 18px;
+  background: #080e18;
+  box-shadow:
+    0 30px 90px -45px color-mix(in srgb, #284bd8 65%, transparent),
+    0 8px 24px -18px rgb(0 0 0 / 75%);
+}
+
+.launchFilmVideo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #080e18;
+  object-fit: contain;
+}
+
+.launchFilmCaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 54px;
+  padding: 12px 18px;
+  border-top: 1px solid rgb(255 255 255 / 12%);
+  color: #b7c4d9;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.launchFilmCaption a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #b7dfc5 !important;
+  white-space: nowrap;
+}
+
+.launchFilmCaption a:hover {
+  color: #fff !important;
+}
+
 /* Features --------------------------------------------------------------- */
 
 .features {
@@ -1409,6 +1510,15 @@
     margin-top: 22px;
   }
 
+  .launchFilmInner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+
+  .launchFilmIntro {
+    max-width: 620px;
+  }
+
   .setup {
     grid-template-columns: 1fr;
   }
@@ -1500,6 +1610,7 @@
 
   .features,
   .proof,
+  .launchFilm,
   .demos,
   .tourBand,
   .industries,
@@ -1522,6 +1633,21 @@
 
   .proofCard {
     min-height: auto;
+  }
+
+  .launchFilmInner {
+    gap: 26px;
+  }
+
+  .launchFilmIntro h2 {
+    font-size: clamp(38px, 10vw, 54px);
+  }
+
+  .launchFilmCaption {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+    padding: 14px 16px;
   }
 
   .demoArt {
@@ -1596,6 +1722,7 @@
 @media (min-width: 1600px) {
   .heroInner,
   .features,
+  .launchFilmInner,
   .demos,
   .industries,
   .footer,

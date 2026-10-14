@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>The moment</title></head><body><template>
+<style>@font-face{font-family:Geist;src:url("assets/fonts/geist.woff2");font-weight:100 900}@font-face{font-family:"Geist Mono";src:url("assets/fonts/geist-mono.woff2");font-weight:100 900}#s01-root{position:absolute;inset:0;width:100%;height:100%;overflow:hidden}</style>
+<div id="s01-root" data-composition-id="s01" data-width="1920" data-height="1080" data-duration="8">
+<div class="fill dark"><div class="smallbrand"><img data-layout-ignore src="assets/brand/mark-on-dark.svg" alt=""><span>24x7 AI</span></div><div class="fill grid"></div><div class="orb-light"></div>
+<div id="s01-copy" style="position:absolute;left:104px;top:290px;width:1030px;z-index:3">
+<div class="mask"><span id="s01-line1" class="head">Doors close.</span></div>
+<div class="mask"><span id="s01-line2" class="head" style="color:#a6d4fc">AI still answers.</span></div></div>
+<div id="s01-kicker" class="overline mono">The call after closing.</div>
+<div id="s01-phone" class="phone" style="left:1320px;top:165px">
+<div class="phone-screen"><div class="phone-notch"></div><div class="phone-label mono">Incoming call</div><div class="phone-title">After-hours caller</div>
+<div id="s01-circle" class="phone-circle"><img data-layout-ignore src="assets/brand/mark-on-dark.svg" alt=""></div>
+<div class="phone-actions"><div class="action">···</div><div class="action green">↗</div></div><div class="phone-home"></div></div></div>
+<svg class="line-art" viewBox="0 0 1920 1080"><circle id="s01-ring" cx="1515" cy="510" r="240" class="path" style="stroke:#a6d4fc;stroke-width:2"/><circle id="s01-ring2" cx="1515" cy="510" r="325" class="path" style="stroke:#284bd8;stroke-width:2"/></svg>
+<div id="s01-time" class="pill mono" style="position:absolute;left:105px;top:700px"><span class="dot"></span>After-hours calls answered.</div><div class="rail "><span class="mono">01 / The moment</span><span class="mono">Opportunity in motion</span></div></div></div>
+<script>(function(){const t01=gsap.timeline({paused:true});t01.fromTo("#s01-line1",{y:175,opacity:0},{y:0,opacity:1,duration:1,ease:"power3.out"},0.25);t01.fromTo("#s01-line2",{y:175,opacity:0},{y:0,opacity:1,duration:1,ease:"power3.out"},2.2);t01.fromTo("#s01-kicker",{opacity:0},{opacity:1,duration:0.5},0.1);t01.fromTo("#s01-phone",{rotationY:-35,rotationZ:10,y:220,opacity:0,transformPerspective:1600},{rotationY:-18,rotationZ:6,y:0,opacity:1,duration:1.8,ease:"power3.out"},2.6);{const path=document.querySelector("#s01-ring");const length=path.getTotalLength();t01.fromTo(path,{strokeDasharray:length,strokeDashoffset:length},{strokeDashoffset:0,duration:2,ease:"power3.inOut"},0.1);}{const path=document.querySelector("#s01-ring2");const length=path.getTotalLength();t01.fromTo(path,{strokeDasharray:length,strokeDashoffset:length},{strokeDashoffset:0,duration:2.5,ease:"power3.inOut"},1.5);}t01.fromTo("#s01-time",{y:35,opacity:0},{y:0,opacity:1,duration:0.8,ease:"power3.out"},4.3);t01.fromTo("#s01-circle",{scale:1},{scale:1.12,duration:.25,yoyo:true,repeat:3,ease:"sine.inOut"},5);t01.to("#s01-ring2",{scale:4,transformOrigin:"1515px 510px",opacity:.1,duration:.6,ease:"power3.in"},7.4);window.__timelines["s01"]=t01;})();</script>
+</template></body></html>

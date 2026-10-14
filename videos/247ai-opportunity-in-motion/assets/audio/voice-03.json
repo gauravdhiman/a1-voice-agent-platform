@@ -1,0 +1,295 @@
+[
+   {
+      "text": "On your phone. On your website. A real conversation, in real time.",
+      "pronounce_text": "On your phone. On your website. A real conversation, in real time.",
+      "time_begin": 0.0,
+      "time_end": 5400.0,
+      "text_begin": 0,
+      "text_end": 66,
+      "pronounce_text_begin": 0,
+      "pronounce_text_end": 66,
+      "is_final_segment": true,
+      "timestamped_words": [
+         {
+            "word": "On",
+            "word_begin": 0,
+            "word_end": 2,
+            "pronounce_word": "On",
+            "pronounce_word_begin": 0,
+            "pronounce_word_end": 2,
+            "time_begin": 44.44444444444444,
+            "time_end": 311.1111111111111
+         },
+         {
+            "word": " ",
+            "word_begin": 2,
+            "word_end": 3,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 2,
+            "pronounce_word_end": 3,
+            "time_begin": 311.1111111111111,
+            "time_end": 355.55555555555554
+         },
+         {
+            "word": "your",
+            "word_begin": 3,
+            "word_end": 7,
+            "pronounce_word": "your",
+            "pronounce_word_begin": 3,
+            "pronounce_word_end": 7,
+            "time_begin": 355.55555555555554,
+            "time_end": 488.8888888888889
+         },
+         {
+            "word": " ",
+            "word_begin": 7,
+            "word_end": 8,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 7,
+            "pronounce_word_end": 8,
+            "time_begin": 488.8888888888889,
+            "time_end": 533.3333333333334
+         },
+         {
+            "word": "phone",
+            "word_begin": 8,
+            "word_end": 13,
+            "pronounce_word": "phone",
+            "pronounce_word_begin": 8,
+            "pronounce_word_end": 13,
+            "time_begin": 533.3333333333334,
+            "time_end": 711.1111111111111
+         },
+         {
+            "word": ".",
+            "word_begin": 13,
+            "word_end": 14,
+            "pronounce_word": ".",
+            "pronounce_word_begin": 13,
+            "pronounce_word_end": 14,
+            "time_begin": 711.1111111111111,
+            "time_end": 977.7777777777778
+         },
+         {
+            "word": " ",
+            "word_begin": 14,
+            "word_end": 15,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 14,
+            "pronounce_word_end": 15,
+            "time_begin": 977.7777777777778,
+            "time_end": 1022.2222222222222
+         },
+         {
+            "word": "On",
+            "word_begin": 15,
+            "word_end": 17,
+            "pronounce_word": "On",
+            "pronounce_word_begin": 15,
+            "pronounce_word_end": 17,
+            "time_begin": 1022.2222222222222,
+            "time_end": 1288.8888888888891
+         },
+         {
+            "word": " ",
+            "word_begin": 17,
+            "word_end": 18,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 17,
+            "pronounce_word_end": 18,
+            "time_begin": 1288.8888888888891,
+            "time_end": 1466.6666666666667
+         },
+         {
+            "word": "your",
+            "word_begin": 18,
+            "word_end": 22,
+            "pronounce_word": "your",
+            "pronounce_word_begin": 18,
+            "pronounce_word_end": 22,
+            "time_begin": 1466.6666666666667,
+            "time_end": 1600.0
+         },
+         {
+            "word": " ",
+            "word_begin": 22,
+            "word_end": 23,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 22,
+            "pronounce_word_end": 23,
+            "time_begin": 1600.0,
+            "time_end": 1644.4444444444446
+         },
+         {
+            "word": "website",
+            "word_begin": 23,
+            "word_end": 30,
+            "pronounce_word": "website",
+            "pronounce_word_begin": 23,
+            "pronounce_word_end": 30,
+            "time_begin": 1644.4444444444446,
+            "time_end": 1822.2222222222222
+         },
+         {
+            "word": ".",
+            "word_begin": 30,
+            "word_end": 31,
+            "pronounce_word": ".",
+            "pronounce_word_begin": 30,
+            "pronounce_word_end": 31,
+            "time_begin": 1822.2222222222222,
+            "time_end": 2088.8888888888887
+         },
+         {
+            "word": " ",
+            "word_begin": 31,
+            "word_end": 32,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 31,
+            "pronounce_word_end": 32,
+            "time_begin": 2088.8888888888887,
+            "time_end": 2133.3333333333335
+         },
+         {
+            "word": "A",
+            "word_begin": 32,
+            "word_end": 33,
+            "pronounce_word": "A",
+            "pronounce_word_begin": 32,
+            "pronounce_word_end": 33,
+            "time_begin": 2133.3333333333335,
+            "time_end": 2444.4444444444443
+         },
+         {
+            "word": " ",
+            "word_begin": 33,
+            "word_end": 34,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 33,
+            "pronounce_word_end": 34,
+            "time_begin": 2444.4444444444443,
+            "time_end": 2577.7777777777783
+         },
+         {
+            "word": "real",
+            "word_begin": 34,
+            "word_end": 38,
+            "pronounce_word": "real",
+            "pronounce_word_begin": 34,
+            "pronounce_word_end": 38,
+            "time_begin": 2577.7777777777783,
+            "time_end": 2755.5555555555557
+         },
+         {
+            "word": " ",
+            "word_begin": 38,
+            "word_end": 39,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 38,
+            "pronounce_word_end": 39,
+            "time_begin": 2755.5555555555557,
+            "time_end": 2799.9999999999995
+         },
+         {
+            "word": "convers",
+            "word_begin": 39,
+            "word_end": 46,
+            "pronounce_word": "convers",
+            "pronounce_word_begin": 39,
+            "pronounce_word_end": 46,
+            "time_begin": 2799.9999999999995,
+            "time_end": 3111.111111111111
+         },
+         {
+            "word": "ation",
+            "word_begin": 46,
+            "word_end": 51,
+            "pronounce_word": "ation",
+            "pronounce_word_begin": 46,
+            "pronounce_word_end": 51,
+            "time_begin": 3111.111111111111,
+            "time_end": 3377.777777777778
+         },
+         {
+            "word": ",",
+            "word_begin": 51,
+            "word_end": 52,
+            "pronounce_word": ",",
+            "pronounce_word_begin": 51,
+            "pronounce_word_end": 52,
+            "time_begin": 3377.777777777778,
+            "time_end": 3644.4444444444443
+         },
+         {
+            "word": " ",
+            "word_begin": 52,
+            "word_end": 53,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 52,
+            "pronounce_word_end": 53,
+            "time_begin": 3644.4444444444443,
+            "time_end": 3688.8888888888887
+         },
+         {
+            "word": "in",
+            "word_begin": 53,
+            "word_end": 55,
+            "pronounce_word": "in",
+            "pronounce_word_begin": 53,
+            "pronounce_word_end": 55,
+            "time_begin": 3688.8888888888887,
+            "time_end": 3955.555555555555
+         },
+         {
+            "word": " ",
+            "word_begin": 55,
+            "word_end": 56,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 55,
+            "pronounce_word_end": 56,
+            "time_begin": 3955.555555555555,
+            "time_end": 4222.222222222222
+         },
+         {
+            "word": "real",
+            "word_begin": 56,
+            "word_end": 60,
+            "pronounce_word": "real",
+            "pronounce_word_begin": 56,
+            "pronounce_word_end": 60,
+            "time_begin": 4222.222222222222,
+            "time_end": 4444.444444444445
+         },
+         {
+            "word": " ",
+            "word_begin": 60,
+            "word_end": 61,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 60,
+            "pronounce_word_end": 61,
+            "time_begin": 4444.444444444445,
+            "time_end": 4488.888888888889
+         },
+         {
+            "word": "time",
+            "word_begin": 61,
+            "word_end": 65,
+            "pronounce_word": "time",
+            "pronounce_word_begin": 61,
+            "pronounce_word_end": 65,
+            "time_begin": 4488.888888888889,
+            "time_end": 4711.111111111111
+         },
+         {
+            "word": ".",
+            "word_begin": 65,
+            "word_end": 66,
+            "pronounce_word": ".",
+            "pronounce_word_begin": 65,
+            "pronounce_word_end": 66,
+            "time_begin": 4711.111111111111,
+            "time_end": 5111.11111111111
+         }
+      ]
+   }
+]
