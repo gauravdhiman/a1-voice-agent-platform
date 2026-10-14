@@ -30,8 +30,12 @@ import { PublicHeader } from "@/components/public-theme/public-header";
 import { ScrollCue } from "@/components/public-theme/scroll-cue";
 import { AuroraField } from "./aurora-field";
 import { ConcurrencyDiagram } from "./concurrency-diagram";
+import { getLaunchFilmAssetUrl } from "./launch-film-assets";
 import { Reveal } from "./reveal";
 import styles from "./home-page.module.css";
+
+const launchFilmMediaBaseUrl =
+  process.env.NEXT_PUBLIC_LAUNCH_FILM_MEDIA_BASE_URL ?? "";
 
 const industries = [
   {
@@ -164,10 +168,75 @@ export function HomePage() {
               className={styles.homeScrollCue}
             />
             <span className={styles.heroBottomRight}>
-              <span className={styles.heroBottomTag}>
-                HUMAN CONNECTION. MEET ALWAYS ON.
-              </span>
+              <a className={styles.heroFilmLink} href="#launch-film">
+                <span className={styles.playCircle}>
+                  <Play size={10} fill="currentColor" />
+                </span>
+                <span>WATCH THE 72-SECOND FILM</span>
+                <ArrowUpRight size={12} />
+              </a>
             </span>
+          </div>
+        </section>
+
+        {/* ── Product film ─────────────────────────────────── */}
+        <section
+          id="launch-film"
+          className={styles.launchFilm}
+          aria-labelledby="launch-film-heading"
+        >
+          <div className={styles.launchFilmInner}>
+            <Reveal>
+              <div className={styles.launchFilmIntro}>
+                <p className={styles.eyebrow}>THE 24x7 AI FILM · 01:12</p>
+                <h2 id="launch-film-heading">
+                  Opportunity in <span>motion.</span>
+                </h2>
+                <p className={styles.launchFilmCopy}>
+                  From the first ring to the next booked customer, see how your
+                  AI front desk keeps business moving around the clock.
+                </p>
+              </div>
+            </Reveal>
+            <Reveal delay={100}>
+              <figure className={styles.launchFilmFrame}>
+                <video
+                  className={styles.launchFilmVideo}
+                  controls
+                  playsInline
+                  preload="none"
+                  crossOrigin="anonymous"
+                  poster={getLaunchFilmAssetUrl("poster", launchFilmMediaBaseUrl)}
+                  aria-label="24x7 AI product launch film: Opportunity in motion"
+                  aria-describedby="launch-film-caption"
+                >
+                  <source
+                    src={getLaunchFilmAssetUrl("video", launchFilmMediaBaseUrl)}
+                    type="video/mp4"
+                  />
+                  <track
+                    kind="captions"
+                    src={getLaunchFilmAssetUrl(
+                      "captions",
+                      launchFilmMediaBaseUrl,
+                    )}
+                    srcLang="en"
+                    label="English"
+                    default
+                  />
+                  Your browser does not support video playback.
+                </video>
+                <figcaption
+                  className={styles.launchFilmCaption}
+                  id="launch-film-caption"
+                >
+                  <span>Original product film · 72 seconds</span>
+                  <a href="#demos">
+                    Try a live conversation <ArrowUpRight size={15} />
+                  </a>
+                </figcaption>
+              </figure>
+            </Reveal>
           </div>
         </section>
 

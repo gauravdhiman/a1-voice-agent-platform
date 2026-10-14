@@ -1,0 +1,215 @@
+[
+   {
+      "text": "Your hours. Your services. Your way of doing things.",
+      "pronounce_text": "Your hours. Your services. Your way of doing things.",
+      "time_begin": 0.0,
+      "time_end": 4600.0,
+      "text_begin": 0,
+      "text_end": 52,
+      "pronounce_text_begin": 0,
+      "pronounce_text_end": 52,
+      "is_final_segment": true,
+      "timestamped_words": [
+         {
+            "word": "Your",
+            "word_begin": 0,
+            "word_end": 4,
+            "pronounce_word": "Your",
+            "pronounce_word_begin": 0,
+            "pronounce_word_end": 4,
+            "time_begin": 44.44444444444444,
+            "time_end": 311.1111111111111
+         },
+         {
+            "word": " ",
+            "word_begin": 4,
+            "word_end": 5,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 4,
+            "pronounce_word_end": 5,
+            "time_begin": 311.1111111111111,
+            "time_end": 355.55555555555554
+         },
+         {
+            "word": "hours",
+            "word_begin": 5,
+            "word_end": 10,
+            "pronounce_word": "hours",
+            "pronounce_word_begin": 5,
+            "pronounce_word_end": 10,
+            "time_begin": 355.55555555555554,
+            "time_end": 666.6666666666667
+         },
+         {
+            "word": ".",
+            "word_begin": 10,
+            "word_end": 11,
+            "pronounce_word": ".",
+            "pronounce_word_begin": 10,
+            "pronounce_word_end": 11,
+            "time_begin": 666.6666666666667,
+            "time_end": 1066.6666666666667
+         },
+         {
+            "word": " ",
+            "word_begin": 11,
+            "word_end": 12,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 11,
+            "pronounce_word_end": 12,
+            "time_begin": 1066.6666666666667,
+            "time_end": 1111.1111111111113
+         },
+         {
+            "word": "Your",
+            "word_begin": 12,
+            "word_end": 16,
+            "pronounce_word": "Your",
+            "pronounce_word_begin": 12,
+            "pronounce_word_end": 16,
+            "time_begin": 1111.1111111111113,
+            "time_end": 1511.111111111111
+         },
+         {
+            "word": " ",
+            "word_begin": 16,
+            "word_end": 17,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 16,
+            "pronounce_word_end": 17,
+            "time_begin": 1511.111111111111,
+            "time_end": 1688.888888888889
+         },
+         {
+            "word": "services",
+            "word_begin": 17,
+            "word_end": 25,
+            "pronounce_word": "services",
+            "pronounce_word_begin": 17,
+            "pronounce_word_end": 25,
+            "time_begin": 1688.888888888889,
+            "time_end": 2044.4444444444443
+         },
+         {
+            "word": ".",
+            "word_begin": 25,
+            "word_end": 26,
+            "pronounce_word": ".",
+            "pronounce_word_begin": 25,
+            "pronounce_word_end": 26,
+            "time_begin": 2044.4444444444443,
+            "time_end": 2400.0
+         },
+         {
+            "word": " ",
+            "word_begin": 26,
+            "word_end": 27,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 26,
+            "pronounce_word_end": 27,
+            "time_begin": 2400.0,
+            "time_end": 2444.4444444444443
+         },
+         {
+            "word": "Your",
+            "word_begin": 27,
+            "word_end": 31,
+            "pronounce_word": "Your",
+            "pronounce_word_begin": 27,
+            "pronounce_word_end": 31,
+            "time_begin": 2444.4444444444443,
+            "time_end": 2888.888888888889
+         },
+         {
+            "word": " ",
+            "word_begin": 31,
+            "word_end": 32,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 31,
+            "pronounce_word_end": 32,
+            "time_begin": 2888.888888888889,
+            "time_end": 3022.222222222222
+         },
+         {
+            "word": "way",
+            "word_begin": 32,
+            "word_end": 35,
+            "pronounce_word": "way",
+            "pronounce_word_begin": 32,
+            "pronounce_word_end": 35,
+            "time_begin": 3022.222222222222,
+            "time_end": 3288.888888888889
+         },
+         {
+            "word": " ",
+            "word_begin": 35,
+            "word_end": 36,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 35,
+            "pronounce_word_end": 36,
+            "time_begin": 3288.888888888889,
+            "time_end": 3333.333333333333
+         },
+         {
+            "word": "of",
+            "word_begin": 36,
+            "word_end": 38,
+            "pronounce_word": "of",
+            "pronounce_word_begin": 36,
+            "pronounce_word_end": 38,
+            "time_begin": 3333.333333333333,
+            "time_end": 3555.555555555555
+         },
+         {
+            "word": " ",
+            "word_begin": 38,
+            "word_end": 39,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 38,
+            "pronounce_word_end": 39,
+            "time_begin": 3555.555555555555,
+            "time_end": 3600.0
+         },
+         {
+            "word": "doing",
+            "word_begin": 39,
+            "word_end": 44,
+            "pronounce_word": "doing",
+            "pronounce_word_begin": 39,
+            "pronounce_word_end": 44,
+            "time_begin": 3600.0,
+            "time_end": 3688.8888888888887
+         },
+         {
+            "word": " ",
+            "word_begin": 44,
+            "word_end": 45,
+            "pronounce_word": " ",
+            "pronounce_word_begin": 44,
+            "pronounce_word_end": 45,
+            "time_begin": 3688.8888888888887,
+            "time_end": 3733.3333333333335
+         },
+         {
+            "word": "things",
+            "word_begin": 45,
+            "word_end": 51,
+            "pronounce_word": "things",
+            "pronounce_word_begin": 45,
+            "pronounce_word_end": 51,
+            "time_begin": 3733.3333333333335,
+            "time_end": 3955.555555555555
+         },
+         {
+            "word": ".",
+            "word_begin": 51,
+            "word_end": 52,
+            "pronounce_word": ".",
+            "pronounce_word_begin": 51,
+            "pronounce_word_end": 52,
+            "time_begin": 3955.555555555555,
+            "time_end": 4355.555555555556
+         }
+      ]
+   }
+]

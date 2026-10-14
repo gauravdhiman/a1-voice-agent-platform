@@ -127,6 +127,12 @@ flow, rotation, and the staged organization-credential migration.
 | `RECORDING_ENCRYPTION_MODE`                          | `provider_managed`                                                                                           | No                                    |
 | `RECORDING_RETENTION_DAYS`                           | Recording retention window, default 90                                                                       | No                                    |
 
+The homepage launch film can use a public, versioned R2 custom-domain URL
+through `NEXT_PUBLIC_LAUNCH_FILM_MEDIA_BASE_URL`. Leave it empty to use the
+frontend's packaged `/videos` assets (local development and fallback). Public
+marketing media belongs in a dedicated public-media bucket; never expose the
+private call-recording buckets through this setting.
+
 ## Production observability
 
 The application sends all three OTLP signals to the single authenticated

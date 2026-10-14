@@ -1,0 +1,33 @@
+
+@font-face{font-family:Geist;src:url('fonts/geist.woff2') format('woff2');font-weight:100 900;font-display:block}
+@font-face{font-family:'Geist Mono';src:url('fonts/geist-mono.woff2') format('woff2');font-weight:100 900;font-display:block}
+*{box-sizing:border-box}body{margin:0;background:#080e18;color:#f7faff;font-family:Geist,sans-serif}
+h1,h2,h3,p{margin:0}svg{display:block}img{display:block}button{font:inherit}
+:root{--night:#080e18;--paper:#f7faff;--ink:#172033;--blue:#284bd8;--sky:#a6d4fc;--mint:#b7dfc5;--muted:#9aa7b8}
+.fill{position:absolute;inset:0}.dark{background:var(--night);color:var(--paper)}.light{background:var(--paper);color:var(--ink)}.blue{background:var(--blue);color:var(--paper)}
+.grid{background-image:linear-gradient(#a6d4fc0a 1px,transparent 1px),linear-gradient(90deg,#a6d4fc0a 1px,transparent 1px);background-size:96px 96px}
+.orb-light{position:absolute;inset:0;background:radial-gradient(ellipse at 76% 50%,#284bd832 0%,transparent 54%);pointer-events:none}
+.mono{font-family:'Geist Mono',monospace;font-size:22px;letter-spacing:.1em;text-transform:uppercase;line-height:1.4}
+.overline{position:absolute;left:104px;top:162px;color:var(--sky)}
+.head{font-size:150px;line-height:.98;letter-spacing:-.065em;font-weight:650}
+.display{font-size:205px;line-height:.95;letter-spacing:-.07em;font-weight:650}
+.mask{overflow:hidden;padding-bottom:.08em}.mask>span{display:block}
+.rail{position:absolute;left:104px;right:104px;bottom:64px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #a6d4fc33;padding-top:22px;color:#9aa7b8}
+.rail.light-rail{border-color:#17203326;color:#526175}.rail.blue-rail{border-color:#ffffff3b;color:#dce6ff}
+.smallbrand{position:absolute;top:64px;left:104px;display:flex;align-items:center;gap:13px;font-size:27px;letter-spacing:-.04em;font-weight:600}
+.smallbrand img{width:32px;height:32px}.chapter{position:absolute;top:70px;right:104px;color:#9aa7b8}
+.line-art{position:absolute;inset:0;pointer-events:none;overflow:visible}.path{fill:none;stroke:var(--sky);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
+.phone{width:390px;height:700px;position:absolute;border:3px solid #7890b8;border-radius:64px;padding:14px;background:linear-gradient(130deg,#a7bce1,#182238 9%,#07101c 85%,#667c9b);box-shadow:0 60px 110px #0009,18px 15px 0 -10px #121d30;transform-style:preserve-3d}
+.phone-screen{width:100%;height:100%;border:1px solid #34445f;border-radius:48px;background:radial-gradient(ellipse at 50% 28%,#244b9045,transparent 60%),#0b1421;position:relative;overflow:hidden}
+.phone-notch{width:130px;height:28px;position:absolute;left:115px;top:20px;border-radius:30px;background:#03070e}
+.phone-label{position:absolute;top:115px;width:100%;text-align:center;font-size:21px;color:#a6d4fc}
+.phone-title{position:absolute;top:157px;width:100%;text-align:center;font-size:42px;letter-spacing:-.05em;font-weight:550}
+.phone-circle{position:absolute;left:104px;top:274px;width:150px;height:150px;border-radius:50%;display:grid;place-items:center;background:#183251;border:1px solid #4d79aa}
+.phone-circle img{width:75px;height:75px}.phone-actions{position:absolute;bottom:65px;left:52px;right:52px;display:flex;justify-content:space-between}
+.action{width:78px;height:78px;border-radius:50%;display:grid;place-items:center;font-size:31px;background:#ffffff12;border:1px solid #ffffff24}
+.action.green{background:#b7dfc5;color:#172033;border:0}.phone-home{position:absolute;bottom:17px;left:122px;width:112px;height:5px;border-radius:4px;background:#ebf4ff}
+.signal-bar{width:10px;height:120px;background:var(--sky);border-radius:12px;transform-origin:center}.wave{display:flex;gap:10px;align-items:center;height:150px}
+.pill{border:1px solid #a6d4fc55;border-radius:99px;padding:14px 24px;font-size:23px;display:inline-flex;gap:12px;align-items:center}
+.dot{display:inline-block;width:10px;height:10px;background:var(--mint);border-radius:50%}
+.workflow-label{position:absolute;bottom:116px;left:104px;font-family:'Geist Mono',monospace;font-size:17px;color:#9aa7b8;letter-spacing:.08em;text-transform:uppercase}
+.panel{background:#101a28;border:1px solid #a6d4fc35;border-radius:36px;box-shadow:0 35px 85px #0005;overflow:hidden}
