@@ -106,7 +106,36 @@ const content: IndustryPageContent = {
   ],
 };
 
+const breadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "Home",
+      item: "https://www.247ai.live",
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "AI Receptionist for Dental Appointment Booking",
+      item: "https://www.247ai.live/dental-appointment-booking",
+    },
+  ],
+};
+
 /** Dental vertical landing page (SEO: AI receptionist for dentists). */
 export default function DentalPage() {
-  return <IndustryPage content={content} />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbJsonLd),
+        }}
+      />
+      <IndustryPage content={content} />
+    </>
+  );
 }

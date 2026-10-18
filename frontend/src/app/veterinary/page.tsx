@@ -105,7 +105,36 @@ const content: IndustryPageContent = {
   ],
 };
 
+const breadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "Home",
+      item: "https://www.247ai.live",
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "AI Receptionist for Veterinary Appointment Booking",
+      item: "https://www.247ai.live/veterinary-appointment-booking",
+    },
+  ],
+};
+
 /** Veterinary vertical landing page (SEO: AI receptionist for vet clinics). */
 export default function VeterinaryPage() {
-  return <IndustryPage content={content} />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbJsonLd),
+        }}
+      />
+      <IndustryPage content={content} />
+    </>
+  );
 }

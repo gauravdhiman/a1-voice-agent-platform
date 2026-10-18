@@ -106,7 +106,36 @@ const content: IndustryPageContent = {
   ],
 };
 
+const breadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "Home",
+      item: "https://www.247ai.live",
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "AI Receptionist for Salon Appointment Booking",
+      item: "https://www.247ai.live/salon-appointment-booking",
+    },
+  ],
+};
+
 /** Salon and spa vertical landing page (SEO: AI receptionist for salons). */
 export default function SalonsPage() {
-  return <IndustryPage content={content} />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbJsonLd),
+        }}
+      />
+      <IndustryPage content={content} />
+    </>
+  );
 }

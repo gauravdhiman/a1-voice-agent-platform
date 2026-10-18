@@ -126,7 +126,7 @@ export function HomePage() {
           <div className={styles.heroInner}>
             <div className={styles.heroCopy}>
               <p className={styles.eyebrow}>
-                <span className={styles.statusDot} /> AI FRONT DESK FOR LOCAL
+                <span className={styles.statusDot} /> AI RECEPTIONIST FOR SMALL
                 BUSINESSES · LIVE IN 48 HOURS
               </p>
               <h1 id="hero-heading">

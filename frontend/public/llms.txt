@@ -1,0 +1,43 @@
+# 24x7 AI
+
+24x7 AI is a 24/7 AI phone assistant (AI receptionist / AI front desk) for small
+businesses. It answers every call on the business's own phone number and through
+an embeddable voice button on the business website. It answers routine questions
+(hours, prices, services, orders, directions), books and reschedules appointments
+to the business calendar, takes orders, captures lead details and callback
+requests, and flags urgent calls. No press-1 phone menus, no hold music, no
+missed calls after hours.
+
+## Key facts
+
+- Audience: local small businesses (dental practices, HVAC and home services,
+  restaurants, plumbing, auto repair, veterinary clinics, salons, real estate,
+  and other trades), US-focused.
+- Pricing: monthly plans from $49/month, including up to 250 call minutes.
+- Setup: concierge setup with the business; the business tests and approves
+  before go-live; live in about 48 hours. No coding required.
+- Integrations: business calendars (Google Calendar, Microsoft Outlook, Cal.com),
+  email, records/CRM (Google Sheets, HubSpot), the business's existing phone
+  number, and website voice button. Custom integrations scoped during setup.
+- Brand: "24x7 AI" is the brand mark; "24/7" is used in descriptive copy.
+
+## Pages
+
+- Home: https://www.247ai.live
+- How it works: https://www.247ai.live/how-it-works
+- Request a demo: https://www.247ai.live/request-demo
+- Contact: https://www.247ai.live/contact
+- AI receptionist for dental practices: https://www.247ai.live/dental-appointment-booking
+- AI receptionist for HVAC service calls: https://www.247ai.live/hvac-service-call-answering
+- AI voice agent for restaurant orders: https://www.247ai.live/restaurant-order-taking
+- AI voice agent for plumbing service requests: https://www.247ai.live/plumbing-service-requests
+- AI receptionist for auto repair booking: https://www.247ai.live/auto-repair-service-booking
+- AI receptionist for veterinary appointments: https://www.247ai.live/veterinary-appointment-booking
+- AI receptionist for salon appointments: https://www.247ai.live/salon-appointment-booking
+- AI voice agent for real estate lead capture: https://www.247ai.live/real-estate-lead-capture
+- Privacy: https://www.247ai.live/privacy
+- Terms: https://www.247ai.live/terms
+
+## Related
+
+- CogniEnts (parent company, custom AI solutions and consulting): https://cognients.com
