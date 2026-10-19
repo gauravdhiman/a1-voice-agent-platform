@@ -1,8 +1,8 @@
 /** Static filenames used by the homepage launch film. */
 export const LAUNCH_FILM_ASSET_FILES = {
-  video: "247ai-opportunity-in-motion.mp4",
-  captions: "247ai-opportunity-in-motion-en.vtt",
-  poster: "247ai-opportunity-in-motion-poster.jpg",
+  video: "247ai-always-open.mp4",
+  captions: "247ai-always-open-en.vtt",
+  poster: "247ai-always-open-poster.jpg",
 } as const;
 
 export type LaunchFilmAssetName = keyof typeof LAUNCH_FILM_ASSET_FILES;

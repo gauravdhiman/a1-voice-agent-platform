@@ -172,7 +172,7 @@ export function HomePage() {
                 <span className={styles.playCircle}>
                   <Play size={10} fill="currentColor" />
                 </span>
-                <span>WATCH THE 72-SECOND FILM</span>
+                <span>WATCH THE 80-SECOND FILM</span>
                 <ArrowUpRight size={12} />
               </a>
             </span>
@@ -188,9 +188,9 @@ export function HomePage() {
           <div className={styles.launchFilmInner}>
             <Reveal>
               <div className={styles.launchFilmIntro}>
-                <p className={styles.eyebrow}>THE 24x7 AI FILM · 01:12</p>
+                <p className={styles.eyebrow}>THE 24x7 AI FILM · 01:20</p>
                 <h2 id="launch-film-heading">
-                  Opportunity in <span>motion.</span>
+                  Always <span>open.</span>
                 </h2>
                 <p className={styles.launchFilmCopy}>
                   From the first ring to the next booked customer, see how your
@@ -207,7 +207,7 @@ export function HomePage() {
                   preload="none"
                   crossOrigin="anonymous"
                   poster={getLaunchFilmAssetUrl("poster", launchFilmMediaBaseUrl)}
-                  aria-label="24x7 AI product launch film: Opportunity in motion"
+                  aria-label="24x7 AI product launch film: Always open"
                   aria-describedby="launch-film-caption"
                 >
                   <source
@@ -230,7 +230,7 @@ export function HomePage() {
                   className={styles.launchFilmCaption}
                   id="launch-film-caption"
                 >
-                  <span>Original product film · 72 seconds</span>
+                  <span>Original product film · 80 seconds</span>
                   <a href="#demos">
                     Try a live conversation <ArrowUpRight size={15} />
                   </a>
