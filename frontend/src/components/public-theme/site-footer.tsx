@@ -1,5 +1,7 @@
 "use client";
 
+import type * as React from "react";
+
 import Link from "next/link";
 import { ArrowUpRight, Moon, MoveUpRight, Sun } from "lucide-react";
 import { usePublicTheme } from "./public-theme-context";
@@ -19,7 +21,15 @@ export function SiteFooter() {
   const { theme, toggleTheme } = usePublicTheme();
 
   return (
-    <footer className={styles.footer}>
+    <div
+      style={
+        {
+          "--muted": "var(--public-muted)",
+          "--accent": "var(--public-accent)",
+        } as React.CSSProperties
+      }
+    >
+      <footer className={styles.footer}>
       <div className={styles.footerTop}>
         <Link className={styles.brand} href="/">
           {SITE_NAME}
@@ -56,6 +66,7 @@ export function SiteFooter() {
         </div>
         <span>ALWAYS ON. ALWAYS YOURS.</span>
       </div>
-    </footer>
+      </footer>
+    </div>
   );
 }

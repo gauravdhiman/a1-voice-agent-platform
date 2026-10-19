@@ -27,14 +27,22 @@ export function BlogCTA({
   href = "/request-demo",
 }: BlogCTAProps) {
   return (
-    <div className="not-prose my-10 overflow-hidden rounded-2xl border border-[var(--button)]/25 bg-gradient-to-br from-[var(--button)]/10 via-[var(--button)]/5 to-transparent p-8 text-center md:p-10">
+    <div
+      className="not-prose my-10 overflow-hidden rounded-2xl border p-8 text-center md:p-10"
+      style={{
+        borderColor: "color-mix(in srgb, var(--button) 25%, transparent)",
+        background:
+          "linear-gradient(to bottom right, color-mix(in srgb, var(--button) 10%, transparent), color-mix(in srgb, var(--button) 5%, transparent), transparent)",
+      }}
+    >
       <h3 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
         {title}
       </h3>
       <p className="mx-auto mt-3 max-w-xl text-muted-foreground">{description}</p>
       <Link
         href={href}
-        className="mt-6 inline-flex items-center justify-center rounded-full bg-[var(--button)] px-7 py-3 text-sm font-semibold text-[var(--button-ink)] shadow-sm transition hover:opacity-90"
+        style={{ backgroundColor: "var(--button)", color: "var(--button-ink)" }}
+        className="mt-6 inline-flex items-center justify-center rounded-full px-7 py-3 text-sm font-semibold shadow-sm transition hover:opacity-90"
       >
         {buttonText}
       </Link>
