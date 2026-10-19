@@ -60,6 +60,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.6,
     },
+    {
+      path: "/blog/ai-receptionist-vs-answering-service",
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
   ];
   return pages.map((page) => ({
     url: `${SITE_URL}${page.path}`,
