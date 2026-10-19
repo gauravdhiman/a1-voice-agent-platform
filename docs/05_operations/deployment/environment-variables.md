@@ -132,12 +132,17 @@ through `NEXT_PUBLIC_LAUNCH_FILM_MEDIA_BASE_URL`. Leave it empty to use the
 frontend's packaged `/videos` assets (local development and fallback). Public
 marketing media belongs in a dedicated public-media bucket; never expose the
 private call-recording buckets through this setting.
-Production uses `https://media.247ai.live/247ai-launch-film-2b838a5653ff` so
-homepage video traffic is served from the public media origin.
-The `247ai-public-media` bucket custom domain must remain publicly enabled,
-with CORS allowing `GET`/`HEAD` and byte-range requests from `https://247ai.live`
-and `https://www.247ai.live`. The Cloudflare Configuration Rule
-`Allow public launch film media` disables Hotlink Protection only for
+The current **Always open** film is packaged with the frontend, so production
+leaves this variable empty and serves the 80-second MP4, poster, and English
+captions from the frontend origin. To move the film to the public media origin,
+upload the new files under a **new versioned prefix**, verify CORS, range
+requests, and hotlink protection, then set the base URL. Do not point this
+setting at an older prefix: the previous `247ai-launch-film-2b838a5653ff`
+objects are the retired 72-second film.
+If R2 is used, the `247ai-public-media` bucket custom domain must remain
+publicly enabled, with CORS allowing `GET`/`HEAD` and byte-range requests from
+`https://247ai.live` and `https://www.247ai.live`. The Cloudflare Configuration
+Rule `Allow public launch film media` disables Hotlink Protection only for
 `media.247ai.live`, which allows cross-origin video playback from the homepage.
 
 ## Production observability

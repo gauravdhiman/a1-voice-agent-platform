@@ -20,12 +20,12 @@ customer results.
   `components/home/home-page-legacy.tsx` and served at `/home-classic`
   (kept out of the sitemap) as a fallback while the new presentation rolls out.
 - Primary actions lead to `/request-demo`; sign-in leads to `/auth/signin`.
-- The 72-second 24x7 AI launch film sits immediately below the hero, before
+- The 80-second 24x7 AI launch film sits immediately below the hero, before
   the feature story. Visitors start it with native video controls; English
   captions are available, and the video is not preloaded before playback.
-  Its MP4, poster, and captions can be served from a versioned public media
-  origin; an empty `NEXT_PUBLIC_LAUNCH_FILM_MEDIA_BASE_URL` uses the packaged
-  local assets.
+  Its MP4, poster, and captions are packaged under `frontend/public/videos`.
+  A versioned public media origin can still be configured through
+  `NEXT_PUBLIC_LAUNCH_FILM_MEDIA_BASE_URL` after those assets are uploaded.
 - The appointment, service-request, and restaurant-order demos keep their
   dedicated routes. The homepage itself does not request microphone
   access or start calls.
