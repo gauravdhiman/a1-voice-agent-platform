@@ -1,4 +1,5 @@
 import { BlogCTA } from "@/components/blog/blog-cta";
+import { BlogFaq } from "@/components/blog/blog-faq";
 import { BlogTable } from "@/components/blog/blog-table";
 
 export const metadata = {
@@ -97,31 +98,34 @@ For an AI receptionist: what is included in the monthly plan, and what does over
 
 The vendors who answer these clearly are the ones worth your money. The ones who dodge them are telling you something too.
 
-## Common questions
-
-**Is an AI receptionist just a fancy voicemail?**
-
-No, and this is the most common misunderstanding. Voicemail records a message and hopes someone listens. An AI receptionist holds a conversation: it greets the caller, answers questions, books appointments, takes orders, and sends you a summary. The caller gets what they needed during the call itself, not a promise of a callback.
-
-**Will my customers know it is AI?**
-
-Probably, and that is fine. Good systems do not pretend to be human. They introduce themselves as the business's AI assistant and get to work. In my experience, most callers care far more about getting helped quickly than about who, or what, is helping them. The data backs this up: fast, competent help beats a slow human hold queue every time.
-
-**What happens if the AI cannot handle a call?**
-
-It hands off. Any system worth using has clear escalation rules: confused caller, angry caller, or a request outside its training goes straight to you or your team, with a note about what the caller needs. You should test this during any trial before you trust it with real calls.
-
-**Can an answering service book appointments?**
-
-Some can, if you give them access to a shared calendar, but it is manual and error-prone. The agent has to flip between your script, the caller's request, and a calendar view they do not fully understand. Most answering service interactions still end with "we will have someone call you back." If booking is important to you, this is the gap to focus on.
-
-**Which is cheaper?**
-
-It depends on call volume. At very low volume, an answering service's base tier can be under 100 dollars a month, slightly cheaper than most AI receptionist plans. But costs cross over fast. Once you are taking dozens of calls a week, per-call billing on answering services typically lands at 200 to 500 dollars a month, while AI receptionist plans stay flat. Do the math on your actual numbers, not the brochure numbers.
-
-**Can I switch later if I pick wrong?**
-
-Yes, easily. Neither option requires long contracts from the good vendors, and your phone number stays yours. Many businesses start with an AI receptionist pilot during their busiest season, which is honestly the best possible test, since that is when the difference shows up most.
+<BlogFaq
+  items={[
+    {
+      q: "Is an AI receptionist just a fancy voicemail?",
+      a: "No, and this is the most common misunderstanding. Voicemail records a message and hopes someone listens. An AI receptionist holds a conversation: it greets the caller, answers questions, books appointments, takes orders, and sends you a summary. The caller gets what they needed during the call itself, not a promise of a callback.",
+    },
+    {
+      q: "Will my customers know it is AI?",
+      a: "Probably, and that is fine. Good systems do not pretend to be human. They introduce themselves as the business's AI assistant and get to work. In my experience, most callers care far more about getting helped quickly than about who, or what, is helping them. The data backs this up: fast, competent help beats a slow human hold queue every time.",
+    },
+    {
+      q: "What happens if the AI cannot handle a call?",
+      a: "It hands off. Any system worth using has clear escalation rules: confused caller, angry caller, or a request outside its training goes straight to you or your team, with a note about what the caller needs. You should test this during any trial before you trust it with real calls.",
+    },
+    {
+      q: "Can an answering service book appointments?",
+      a: "Some can, if you give them access to a shared calendar, but it is manual and error-prone. The agent has to flip between your script, the caller's request, and a calendar view they do not fully understand. Most answering service interactions still end with \"we will have someone call you back.\" If booking is important to you, this is the gap to focus on.",
+    },
+    {
+      q: "Which is cheaper?",
+      a: "It depends on call volume. At very low volume, an answering service's base tier can be under 100 dollars a month, slightly cheaper than most AI receptionist plans. But costs cross over fast. Once you are taking dozens of calls a week, per-call billing on answering services typically lands at 200 to 500 dollars a month, while AI receptionist plans stay flat. Do the math on your actual numbers, not the brochure numbers.",
+    },
+    {
+      q: "Can I switch later if I pick wrong?",
+      a: "Yes, easily. Neither option requires long contracts from the good vendors, and your phone number stays yours. Many businesses start with an AI receptionist pilot during their busiest season, which is honestly the best possible test, since that is when the difference shows up most.",
+    },
+  ]}
+/>
 
 ## The bottom line
 

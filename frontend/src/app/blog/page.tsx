@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getAllPostMetas } from "@/lib/blog";
+import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
+import { PublicHeader } from "@/components/public-theme/public-header";
+import { PublicFooter } from "@/components/public-theme/public-footer";
 
 export const metadata: Metadata = {
   title: "24x7 AI Blog: AI Receptionist Tips for Small Business",
@@ -12,37 +15,41 @@ export default async function BlogIndexPage() {
   const posts = await getAllPostMetas();
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-16 md:py-24">
-      <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-        24x7 AI blog
-      </p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-        Never miss a customer again
-      </h1>
-      <p className="mt-4 text-lg text-muted-foreground">
-        Practical tips on AI receptionists, missed calls, and getting more
-        business from the phone you already have.
-      </p>
+    <PublicThemeRoot>
+      <PublicHeader />
+      <main className="mx-auto w-full max-w-3xl px-4 py-16 md:py-24">
+        <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
+          24x7 AI blog
+        </p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+          Never miss a customer again
+        </h1>
+        <p className="mt-4 text-lg text-muted-foreground">
+          Practical tips on AI receptionists, missed calls, and getting more
+          business from the phone you already have.
+        </p>
 
-      <div className="mt-12 space-y-10">
-        {posts.map((post) => (
-          <article key={post.slug}>
-            <p className="text-sm text-muted-foreground">{post.date}</p>
-            <Link href={`/blog/${post.slug}`}>
-              <h2 className="mt-1 text-2xl font-semibold text-foreground hover:underline">
-                {post.title}
-              </h2>
-            </Link>
-            <p className="mt-2 text-muted-foreground">{post.description}</p>
-            <Link
-              href={`/blog/${post.slug}`}
-              className="mt-3 inline-block font-medium text-primary hover:underline"
-            >
-              Read more
-            </Link>
-          </article>
-        ))}
-      </div>
-    </main>
+        <div className="mt-12 space-y-10">
+          {posts.map((post) => (
+            <article key={post.slug}>
+              <p className="text-sm text-muted-foreground">{post.date}</p>
+              <Link href={`/blog/${post.slug}`}>
+                <h2 className="mt-1 text-2xl font-semibold text-foreground hover:underline">
+                  {post.title}
+                </h2>
+              </Link>
+              <p className="mt-2 text-muted-foreground">{post.description}</p>
+              <Link
+                href={`/blog/${post.slug}`}
+                className="mt-3 inline-block font-medium text-primary hover:underline"
+              >
+                Read more
+              </Link>
+            </article>
+          ))}
+        </div>
+      </main>
+      <PublicFooter />
+    </PublicThemeRoot>
   );
 }

@@ -1,3 +1,5 @@
+import { BlogFaq } from "@/components/blog/blog-faq";
+
 export const metadata = {
   title: "An AI receptionist, explained for busy business owners",
   description: "What an AI receptionist actually is, what it sounds like, and the six questions every business owner asks before getting one.",
@@ -66,21 +68,23 @@ The setup speed matters more than people think. Most business software asks you
 to change how you work. This one adapts to how you already work, which is why
 it can go live in two days.
 
-## FAQ
-
-**Will it work for my industry?**
-We have dedicated guides for dental, home services, and restaurants live
-today. Every other trade gets a concierge setup built around how that
-business works.
-
-**Can it handle multiple calls at once?**
-Yes. That is the whole point. Three callers at 6pm on a Friday all get
-answered immediately.
-
-**Do I need new phone numbers or equipment?**
-No. It answers on your current business number, and there is an optional
-voice button for your website. Nothing to install.
-
-**What if I want to change what it says?**
-Tell us and we update it. Your instructions drive everything it says and
-does.
+<BlogFaq
+  items={[
+    {
+      q: "Will it work for my industry?",
+      a: "We have dedicated guides for dental, home services, and restaurants live today. Every other trade gets a concierge setup built around how that business works.",
+    },
+    {
+      q: "Can it handle multiple calls at once?",
+      a: "Yes. That is the whole point. Three callers at 6pm on a Friday all get answered immediately.",
+    },
+    {
+      q: "Do I need new phone numbers or equipment?",
+      a: "No. It answers on your current business number, and there is an optional voice button for your website. Nothing to install.",
+    },
+    {
+      q: "What if I want to change what it says?",
+      a: "Tell us and we update it. Your instructions drive everything it says and does.",
+    },
+  ]}
+/>

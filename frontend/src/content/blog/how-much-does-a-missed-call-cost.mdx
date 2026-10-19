@@ -1,3 +1,5 @@
+import { BlogFaq } from "@/components/blog/blog-faq";
+
 export const metadata = {
   title: "How much does one missed call actually cost your business?",
   description: "A missed call is not a minor inconvenience. For most small businesses it is the most expensive thing that happens in a week. Here is the math.",
@@ -62,20 +64,23 @@ months of that. I am not saying this to be clever about pricing. I am saying
 it because once you do the math above, the question flips: it is not whether
 you can afford to answer every call, it is whether you can afford not to.
 
-## FAQ
-
-**How fast does an AI receptionist answer?**
-In about four seconds, any time of day or night, including weekends and
-holidays.
-
-**What if the caller wants a real person?**
-Then they get one. The assistant captures their name, number, and reason, and
-flags it to you immediately so you can call back with full context.
-
-**Does it work with my current business number?**
-Yes. It answers on the number your customers already call, plus a voice
-button on your website. No new line to advertise.
-
-**How long does setup take?**
-We do a concierge setup with you, you test it and approve it, and it goes
-live within 48 hours.
+<BlogFaq
+  items={[
+    {
+      q: "How fast does an AI receptionist answer?",
+      a: "In about four seconds, any time of day or night, including weekends and holidays.",
+    },
+    {
+      q: "What if the caller wants a real person?",
+      a: "Then they get one. The assistant captures their name, number, and reason, and flags it to you immediately so you can call back with full context.",
+    },
+    {
+      q: "Does it work with my current business number?",
+      a: "Yes. It answers on the number your customers already call, plus a voice button on your website. No new line to advertise.",
+    },
+    {
+      q: "How long does setup take?",
+      a: "We do a concierge setup with you, you test it and approve it, and it goes live within 48 hours.",
+    },
+  ]}
+/>

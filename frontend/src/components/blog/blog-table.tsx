@@ -1,3 +1,13 @@
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+} from "@/components/ui/table";
+
 interface BlogTableProps {
   headers: string[];
   rows: string[][];
@@ -6,6 +16,7 @@ interface BlogTableProps {
 
 /**
  * Reusable styled table for blog posts (and anywhere on the marketing site).
+ * Thin MDX-friendly facade over the shared ui/table primitives.
  * Markdown tables are NOT supported by the MDX setup, so use this component
  * for all tabular data in posts.
  *
@@ -21,43 +32,36 @@ interface BlogTableProps {
  */
 export function BlogTable({ headers, rows, caption }: BlogTableProps) {
   return (
-    <div className="not-prose my-8 overflow-x-auto rounded-xl border border-border">
-      <table className="w-full border-collapse text-left text-sm">
-        {caption ? (
-          <caption className="px-4 py-3 text-left font-medium text-muted-foreground">
-            {caption}
-          </caption>
-        ) : null}
-        <thead>
-          <tr className="bg-muted/60">
+    <div className="not-prose my-8 overflow-hidden rounded-xl border border-border">
+      <Table className="table-auto">
+        {caption ? <TableCaption>{caption}</TableCaption> : null}
+        <TableHeader>
+          <TableRow className="bg-muted/60 hover:bg-muted/60">
             {headers.map((h, i) => (
-              <th
-                key={i}
-                className="border-b border-border px-4 py-3 font-semibold text-foreground"
-              >
+              <TableHead key={i} className="font-semibold text-foreground">
                 {h}
-              </th>
+              </TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((row, i) => (
-            <tr
+            <TableRow
               key={i}
-              className={i % 2 === 1 ? "bg-muted/25" : "bg-transparent"}
+              className={i % 2 === 1 ? "bg-muted/25" : undefined}
             >
               {row.map((cell, j) => (
-                <td
+                <TableCell
                   key={j}
-                  className="border-b border-border/50 px-4 py-3 align-top text-muted-foreground last:border-b-0"
+                  className="whitespace-normal align-top text-muted-foreground"
                 >
                   {cell}
-                </td>
+                </TableCell>
               ))}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
