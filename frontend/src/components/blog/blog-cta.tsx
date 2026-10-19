@@ -11,6 +11,10 @@ interface BlogCTAProps {
  * Reusable blog call-to-action card. Drop it at the end of a blog post
  * (or anywhere on the marketing site) to convert readers into demo requests.
  *
+ * The button uses the public theme's --button / --button-ink CSS variables
+ * (the same ones the homepage CTA button uses) so it renders correctly in
+ * both day and night modes. These variables are provided by PublicThemeRoot.
+ *
  * Usage in MDX:
  *   import { BlogCTA } from "@/components/blog/blog-cta";
  *   <BlogCTA />
@@ -23,14 +27,14 @@ export function BlogCTA({
   href = "/request-demo",
 }: BlogCTAProps) {
   return (
-    <div className="not-prose my-10 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-8 text-center md:p-10">
+    <div className="not-prose my-10 overflow-hidden rounded-2xl border border-[var(--button)]/25 bg-gradient-to-br from-[var(--button)]/10 via-[var(--button)]/5 to-transparent p-8 text-center md:p-10">
       <h3 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
         {title}
       </h3>
       <p className="mx-auto mt-3 max-w-xl text-muted-foreground">{description}</p>
       <Link
         href={href}
-        className="mt-6 inline-flex items-center justify-center rounded-full bg-primary px-7 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
+        className="mt-6 inline-flex items-center justify-center rounded-full bg-[var(--button)] px-7 py-3 text-sm font-semibold text-[var(--button-ink)] shadow-sm transition hover:opacity-90"
       >
         {buttonText}
       </Link>

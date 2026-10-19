@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getAllPostMetas } from "@/lib/blog";
 import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
 import { PublicHeader } from "@/components/public-theme/public-header";
-import { PublicFooter } from "@/components/public-theme/public-footer";
+import { SiteFooter } from "@/components/public-theme/site-footer";
 
 export const metadata: Metadata = {
   title: "24x7 AI Blog: AI Receptionist Tips for Small Business",
@@ -49,7 +49,7 @@ export default async function BlogIndexPage() {
           ))}
         </div>
       </main>
-      <PublicFooter />
+      <SiteFooter />
     </PublicThemeRoot>
   );
 }

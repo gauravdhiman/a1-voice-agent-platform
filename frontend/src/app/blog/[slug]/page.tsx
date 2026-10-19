@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { getPostSlugs, getPostMeta } from "@/lib/blog";
 import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
 import { PublicHeader } from "@/components/public-theme/public-header";
-import { PublicFooter } from "@/components/public-theme/public-footer";
+import { SiteFooter } from "@/components/public-theme/site-footer";
 
 export async function generateStaticParams() {
   return getPostSlugs().map((slug) => ({ slug }));
@@ -57,7 +57,7 @@ export default async function BlogPostPage({
           <Post />
         </article>
       </main>
-      <PublicFooter />
+      <SiteFooter />
     </PublicThemeRoot>
   );
 }

@@ -27,6 +27,7 @@ import {
 } from "@/lib/site-config";
 import { usePublicTheme } from "@/components/public-theme/public-theme-context";
 import { PublicHeader } from "@/components/public-theme/public-header";
+import { SiteFooter } from "@/components/public-theme/site-footer";
 import { ScrollCue } from "@/components/public-theme/scroll-cue";
 import { AuroraField } from "./aurora-field";
 import { ConcurrencyDiagram } from "./concurrency-diagram";
@@ -844,44 +845,7 @@ export function HomePage() {
         </section>
       </main>
 
-      <footer className={styles.footer}>
-        <div className={styles.footerTop}>
-          <Link className={styles.brand} href="/">
-            {SITE_NAME}
-            <span className={styles.statusDot} />
-          </Link>
-          <p>Always there for your business.</p>
-          <a href={`mailto:${SITE_SALES_EMAIL}`}>
-            Say hello <MoveUpRight size={15} />
-          </a>
-        </div>
-        <div className={styles.footerBottom}>
-          <span>
-            © {new Date().getFullYear()} {SITE_NAME}
-          </span>
-          <span className={styles.footerAttribution}>
-            Built by an AI solutions company:{" "}
-            <a
-              href={SITE_AI_SERVICES_URL}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Visit Cognitive Entities LLC"
-            >
-              Cognitive Entities LLC <ArrowUpRight size={12} aria-hidden="true" />
-            </a>
-          </span>
-          <div>
-            <a href="#demos">Live demos</a>
-            <a href="#pricing">Pricing</a>
-            <Link href="/auth/signin">Sign in</Link>
-            <button onClick={toggleTheme}>
-              {theme === "night" ? <Sun size={13} /> : <Moon size={13} />}{" "}
-              {theme === "night" ? "Try the day shift" : "Try the night shift"}
-            </button>
-          </div>
-          <span>ALWAYS ON. ALWAYS YOURS.</span>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
