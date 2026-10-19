@@ -54,6 +54,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     { path: "/terms", changeFrequency: "monthly", priority: 0.5 },
     { path: "/privacy", changeFrequency: "monthly", priority: 0.5 },
+    { path: "/blog", changeFrequency: "weekly", priority: 0.7 },
+    {
+      path: "/blog/how-much-does-one-missed-call-cost",
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
   ];
   return pages.map((page) => ({
     url: `${SITE_URL}${page.path}`,
