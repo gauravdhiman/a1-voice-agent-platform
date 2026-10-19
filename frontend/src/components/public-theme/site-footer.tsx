@@ -46,8 +46,8 @@ export function SiteFooter() {
           </a>
         </span>
         <div>
-          <a href="#demos">Live demos</a>
-          <a href="#pricing">Pricing</a>
+          <a href="/#demos">Live demos</a>
+          <a href="/#pricing">Pricing</a>
           <Link href="/auth/signin">Sign in</Link>
           <button onClick={toggleTheme}>
             {theme === "night" ? <Sun size={13} /> : <Moon size={13} />}{" "}
