@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import sitemap from "@/app/sitemap";
 import { SITE_URL } from "@/lib/site-config";
+import { TOOL_CATEGORIES, TOOLS } from "@/content/ai-tools/tools";
 
 describe("sitemap", () => {
-  it("lists the launch funnel and vertical pages", () => {
+  it("lists the launch funnel, vertical, blog, and ai-tools pages", () => {
     const urls = sitemap().map((entry) => entry.url);
     expect(urls).toEqual([
       `${SITE_URL}`,
@@ -19,6 +20,34 @@ describe("sitemap", () => {
       `${SITE_URL}/real-estate-lead-capture`,
       `${SITE_URL}/terms`,
       `${SITE_URL}/privacy`,
+      `${SITE_URL}/blog`,
+      `${SITE_URL}/blog/how-much-does-one-missed-call-cost`,
+      `${SITE_URL}/blog/ai-receptionist-vs-answering-service`,
+      `${SITE_URL}/blog/ai-receptionist-explained`,
+      `${SITE_URL}/blog/how-much-does-a-missed-call-cost`,
+      `${SITE_URL}/ai-tools`,
+      ...TOOL_CATEGORIES.map(
+        (category) => `${SITE_URL}/ai-tools/${category.slug}`,
+      ),
+      ...TOOLS.map(
+        (tool) => `${SITE_URL}/ai-tools/${tool.category}/${tool.slug}`,
+      ),
     ]);
+  });
+
+  it("includes every tool category and tool exactly once", () => {
+    const urls = sitemap().map((entry) => entry.url);
+    for (const category of TOOL_CATEGORIES) {
+      const matches = urls.filter(
+        (url) => url === `${SITE_URL}/ai-tools/${category.slug}`,
+      );
+      expect(matches).toHaveLength(1);
+    }
+    for (const tool of TOOLS) {
+      const matches = urls.filter(
+        (url) => url === `${SITE_URL}/ai-tools/${tool.category}/${tool.slug}`,
+      );
+      expect(matches).toHaveLength(1);
+    }
   });
 });

@@ -1,14 +1,36 @@
 import type { MetadataRoute } from "next";
 
 import { SITE_URL } from "@/lib/site-config";
+import { TOOL_CATEGORIES, TOOLS } from "@/content/ai-tools/tools";
+
+type SitemapPage = {
+  path: string;
+  changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
+  priority: number;
+};
+
+/** Directory pages generated from the AI tools data. */
+const aiToolsPages: SitemapPage[] = [
+  { path: "/ai-tools", changeFrequency: "weekly", priority: 0.7 },
+  ...TOOL_CATEGORIES.map(
+    (category): SitemapPage => ({
+      path: `/ai-tools/${category.slug}`,
+      changeFrequency: "weekly",
+      priority: 0.6,
+    }),
+  ),
+  ...TOOLS.map(
+    (tool): SitemapPage => ({
+      path: `/ai-tools/${tool.category}/${tool.slug}`,
+      changeFrequency: "monthly",
+      priority: 0.5,
+    }),
+  ),
+];
 
 /** Return the canonical public URLs that search engines should crawl. */
 export default function sitemap(): MetadataRoute.Sitemap {
-  const pages: Array<{
-    path: string;
-    changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
-    priority: number;
-  }> = [
+  const pages: SitemapPage[] = [
     { path: "", changeFrequency: "weekly", priority: 1 },
     { path: "/request-demo", changeFrequency: "monthly", priority: 0.9 },
     { path: "/how-it-works", changeFrequency: "monthly", priority: 0.9 },
@@ -65,6 +87,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.6,
     },
+    {
+      path: "/blog/ai-receptionist-explained",
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
+    {
+      path: "/blog/how-much-does-a-missed-call-cost",
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
+    ...aiToolsPages,
   ];
   return pages.map((page) => ({
     url: `${SITE_URL}${page.path}`,

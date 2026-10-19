@@ -54,6 +54,7 @@ export function PublicHeader() {
         <Link href="/#integrations">Integrations</Link>
         <Link href="/#pricing">Pricing</Link>
         <Link href="/blog">Blog</Link>
+        <Link href="/ai-tools">AI Tools</Link>
       </nav>
       <div className={styles.headerActions}>
         <ThemeSwitch dark={theme === "night"} onToggle={toggleTheme} />
@@ -109,6 +110,9 @@ export function PublicHeader() {
             </Link>
             <Link href="/blog" onClick={closeMenu}>
               Blog
+            </Link>
+            <Link href="/ai-tools" onClick={closeMenu}>
+              AI Tools
             </Link>
             <Link href="/auth/signin" onClick={closeMenu}>
               Sign in
