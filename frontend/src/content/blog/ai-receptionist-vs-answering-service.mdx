@@ -1,4 +1,5 @@
 import { BlogCTA } from "@/components/blog/blog-cta";
+import { BlogTable } from "@/components/blog/blog-table";
 
 export const metadata = {
   title: "AI Receptionist vs Answering Service: Which Is Right?",
@@ -38,16 +39,19 @@ The honest limitations: it is still software. If a caller is crying, angry, or d
 
 Here is how they stack up on the things that actually matter day to day.
 
-| | Answering service | AI receptionist |
-|---|---|---|
-| Cost | 60 to 500+ dollars a month depending on call volume | 49 to 349 dollars a month, usually flat |
-| Availability | 24/7, but quality varies by shift and staffing | 24/7, every call, no shifts or sick days |
-| Answering questions | Follows a script, limited knowledge of your business | Answers from your actual service and pricing info |
-| Booking appointments | Usually takes a message for you to call back | Books directly into your live calendar |
-| After-hours emergencies | Takes a message or pages you per script | Qualifies urgency and routes or dispatches per your rules |
-| Response time | Fast pickup, but agents juggle many businesses | Picks up in seconds, dedicated to your caller |
-| Scalability | Costs rise with every call | Flat pricing regardless of volume |
-| Caller experience | A human, but generic and sometimes rushed | A natural conversation, but still a machine |
+<BlogTable
+  headers={["", "Answering service", "AI receptionist"]}
+  rows={[
+    ["Cost", "60 to 500+ dollars a month depending on call volume", "49 to 349 dollars a month, usually flat"],
+    ["Availability", "24/7, but quality varies by shift and staffing", "24/7, every call, no shifts or sick days"],
+    ["Answering questions", "Follows a script, limited knowledge of your business", "Answers from your actual service and pricing info"],
+    ["Booking appointments", "Usually takes a message for you to call back", "Books directly into your live calendar"],
+    ["After-hours emergencies", "Takes a message or pages you per script", "Qualifies urgency and routes or dispatches per your rules"],
+    ["Response time", "Fast pickup, but agents juggle many businesses", "Picks up in seconds, dedicated to your caller"],
+    ["Scalability", "Costs rise with every call", "Flat pricing regardless of volume"],
+    ["Caller experience", "A human, but generic and sometimes rushed", "A natural conversation, but still a machine"],
+  ]}
+/>
 
 A few of these deserve more explanation, because the table hides the nuance.
 
