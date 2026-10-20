@@ -8,6 +8,12 @@ OpenAI/Cerebras/OpenRouter → Cartesia/Fish pipeline (direct providers only).
 The legacy LiveKit **`worker/`** package was removed from the repo; git history
 retains it for reference only.
 
+At startup, both standard Python logging and Pipecat's separate Loguru sinks
+use the shared content-free console boundary. Provider messages, transcripts,
+token-bearing URLs and exception payloads are suppressed even when OTLP is off;
+allowlisted operational events remain available. Configure sinks before
+accepting sessions, rather than adding an unfiltered provider console sink.
+
 The Python voice runtime pins `pipecat-ai` to `1.11.0` for Gemini 3.8 Live
 support. The browser packages
 (`@pipecat-ai/client-js` and `@pipecat-ai/websocket-transport`) are versioned

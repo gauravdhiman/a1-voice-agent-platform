@@ -184,3 +184,26 @@ deployment has been performed. Launch status remains
 **NO-GO** while the confirmed database access exposure remains uncontained.
 After containment, assess the small-pilot criteria above against the offered
 customer journey; the entire hardening backlog is not a launch gate.
+
+### Subsequent shared-staging acceptance
+
+The preparation record above describes its original validation boundary. PRs
+#164 and #165 subsequently merged the remediation and current-main sitemap test
+alignment. All application and agent checks passed on merged commit
+`a30eb31ffb113710619f0abd4e7455aa57ce0448`.
+
+Shared staging was upgraded to `20261019000005`; the read-only Data API security
+guard reported zero violations in all five categories. A synthetic organization
+and real Gemini voice calls verified authenticated browser audio, finalized call
+logs, exactly-once credit settlement and recording storage. A fresh browser call
+also returned non-silent audio over a restricted public WSS tunnel. No customer
+data was used. Provider receipt of email/Telegram and end-to-end PSTN audio are
+still unverified. A controlled call used only the platform-owned phone number;
+its original provider routing and the existing inactive staging record were
+restored and verified. The temporary tunnel and ingress were removed.
+
+Live inspection found that Pipecat's Loguru sinks bypass standard Python logging
+filters. The follow-up applies the same content-free policy to those sinks and
+adds direct regression coverage for messages, extras, exceptions and repeated
+initialization. Production deployment and post-deployment acceptance remain
+separate required steps; merging a fix does not establish live containment.
