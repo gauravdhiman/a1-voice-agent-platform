@@ -32,6 +32,18 @@ export interface ComparisonRow {
   difference: string;
 }
 
+export interface GoingDeeper {
+  /** Direct/native integrations, plain English. */
+  integrations: string[];
+  /** API availability, plain English. Omit when none is published. */
+  api?: string;
+  /** Data privacy and security facts, plain English, verified only. */
+  privacy: string[];
+  /** One advanced workflow idea, concrete and buildable. */
+  advancedWorkflowTitle: string;
+  advancedWorkflow: string;
+}
+
 export interface Tool {
   name: string;
   slug: string;
@@ -71,6 +83,8 @@ export interface Tool {
   whoShouldSkip?: string[];
   /** Mini comparison table vs alternatives. */
   comparison?: ComparisonRow[];
+  /** "Going deeper" section for tech-curious readers. Rendered only when present. */
+  goingDeeper?: GoingDeeper;
 }
 
 export interface ToolCategory {
@@ -363,6 +377,21 @@ export const TOOLS: Tool[] = [
         difference: "Our own AI front desk with concierge setup; compare it honestly in our full review",
       },
     ],
+    goingDeeper: {
+      integrations: [
+        "Direct connections, no extra tools needed: Google Calendar and Outlook for appointment booking, instant email and text notifications after every call, native iPhone and Android apps, and Google Voice.",
+        "Everything else runs through Zapier. Rosie has an official Zapier app with New Call and New Booking triggers, which connects it to 1,000+ apps: log calls to Google Sheets, create customers in Jobber or Housecall Pro, ping a Slack channel, add leads to HubSpot. There are no native CRM integrations inside Rosie itself; Zapier is the bridge.",
+      ],
+      api: "Rosie does not publish a public developer API. If you are technical, the practical route is Zapier's webhooks, which can push Rosie call data into your own systems.",
+      privacy: [
+        "Every call is recorded and transcribed, and recordings live in your Rosie calls inbox. The recordings and transcripts belong to you, not Rosie: you decide how they are used and how long they are kept.",
+        "From Rosie's own privacy notice: deidentified call data may be used to train and improve their AI. Rosie never collects or stores payment information; payments go through a PCI-compliant processor.",
+        "The legal part is on you. You are responsible for telling callers they are being recorded and for complying with your state's recording-consent laws. Rosie provides template recording notices you can switch on in settings; you decide whether to use them.",
+      ],
+      advancedWorkflowTitle: "Hands-free call log with emergency alerts",
+      advancedWorkflow:
+        "Connect Rosie's New Call trigger in Zapier to Google Sheets: every call lands as a row with the caller, time, and summary, no data entry, giving you a searchable history of every conversation. Add a second step that posts to a Slack channel only when the summary mentions words like emergency or urgent. You get instant alerts for the calls that matter and a full log of the rest, without listening to a single recording.",
+    },
     faqs: [
       {
         q: "How many minutes do I actually get for $49?",

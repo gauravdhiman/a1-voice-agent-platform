@@ -377,6 +377,70 @@ export default async function AiToolReviewPage({
           <BlogFaq items={data.faqs} />
         </section>
 
+        {data.goingDeeper ? (
+          <section aria-label="Going deeper" className="mt-10">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              Going deeper
+            </h2>
+            <p className="mt-3 text-muted-foreground">
+              For the tech-curious: what {data.name} connects to, and what
+              happens to your data.
+            </p>
+            <h3 className="mt-6 text-lg font-semibold text-foreground">
+              Integrations
+            </h3>
+            <ul className="mt-3 space-y-2">
+              {data.goingDeeper.integrations.map((item, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-muted-foreground"
+                >
+                  <Check
+                    className="mt-0.5 h-4 w-4 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
+                  {item}
+                </li>
+              ))}
+            </ul>
+            {data.goingDeeper.api ? (
+              <>
+                <h3 className="mt-6 text-lg font-semibold text-foreground">
+                  Developer API
+                </h3>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {data.goingDeeper.api}
+                </p>
+              </>
+            ) : null}
+            <h3 className="mt-6 text-lg font-semibold text-foreground">
+              Data and privacy
+            </h3>
+            <ul className="mt-3 space-y-2">
+              {data.goingDeeper.privacy.map((item, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-muted-foreground"
+                >
+                  <Check
+                    className="mt-0.5 h-4 w-4 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-6 rounded-xl border border-border bg-muted/50 p-5">
+              <h3 className="font-semibold text-foreground">
+                Advanced workflow: {data.goingDeeper.advancedWorkflowTitle}
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {data.goingDeeper.advancedWorkflow}
+              </p>
+            </div>
+          </section>
+        ) : null}
+
         <p className="mt-8 text-xs text-muted-foreground">
           Pricing researched October 2026 and summarized here — vendors change
           pricing often, so confirm on the official site before you buy. No
