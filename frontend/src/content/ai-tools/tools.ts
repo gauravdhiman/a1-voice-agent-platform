@@ -12,6 +12,26 @@ export interface ToolFaq {
   a: string;
 }
 
+export interface QuickFacts {
+  /** e.g. "From $49/mo (250 min); most service businesses need $149/mo" */
+  price: string;
+  /** Free trial / free plan details, plain English. */
+  freeTier: string;
+  /** Setup difficulty in plain English. */
+  setup: string;
+}
+
+export interface BusinessScenario {
+  title: string;
+  description: string;
+}
+
+export interface ComparisonRow {
+  tool: string;
+  price: string;
+  difference: string;
+}
+
 export interface Tool {
   name: string;
   slug: string;
@@ -30,6 +50,27 @@ export interface Tool {
   faqs: ToolFaq[];
   /** Featured tools render first with an "Our pick" badge. */
   featured?: boolean;
+  // ---- Deep template fields (all optional; pages without them render the classic layout) ----
+  /** 2-3 sentence verdict box. Falls back to `verdict`. */
+  verdictBox?: string;
+  /** Quick-facts grid (price / free tier / setup). Rendered with `bestFor` as the 4th card. */
+  quickFacts?: QuickFacts;
+  /** "What is it" in plain English, one paragraph per entry. */
+  whatIsIt?: string[];
+  /** Concrete "what it will do for your business" scenarios. */
+  businessScenarios?: BusinessScenario[];
+  /** Numbered "how it works" steps. */
+  howItWorks?: string[];
+  /** Pricing explained in plain English, catches included. */
+  pricingExplained?: string[];
+  /** Specific catches/limits called out as a list. */
+  pricingCatches?: string[];
+  /** Who should get it. */
+  whoShouldGet?: string[];
+  /** Who should skip it. */
+  whoShouldSkip?: string[];
+  /** Mini comparison table vs alternatives. */
+  comparison?: ComparisonRow[];
 }
 
 export interface ToolCategory {
@@ -219,30 +260,137 @@ export const TOOLS: Tool[] = [
     category: "ai-receptionists",
     pricing: "From $49/mo (250 minutes included)",
     pros: [
-      "Dead-simple setup aimed at contractors and home services",
-      "250 minutes included at the entry tier",
-      "Bilingual English/Spanish answering",
+      "Cheapest credible entry point: $49 a month is less than one decent job for most trades",
+      "Setup genuinely takes under 30 minutes: Rosie reads your website and Google profile herself",
+      "Bilingual English/Spanish on every call, included, not an add-on",
+      "Handles unlimited simultaneous calls, so there is no busy signal during your busiest hour",
+      "No contracts, cancel anytime, 7-day free trial with all features",
     ],
     cons: [
-      "Message-taking focus; booking depth varies by plan",
-      "Call transfer to your team requires higher tiers",
+      "The $49 plan is basic on purpose: no direct calendar booking, no live transfers, which means most service businesses need the $149 plan",
+      "Minutes are metered and round up to 60 seconds; heavy months push you into higher tiers",
+      "No published overage rate, so you have to ask what over-limit minutes cost",
+      "No native CRM integrations and only two languages; inbound calls only, no outbound",
+      "Young company with no G2, Capterra, or Trustpilot track record yet",
     ],
-    bestFor: "Solo operators and contractors who want basic call coverage cheap",
+    bestFor: "Solo owners and small shops replacing voicemail with real 24/7 coverage",
     url: "https://heyrosie.com",
     verdict:
       "Rosie is the value pick for simple coverage: $49 gets you 250 minutes and a setup a contractor can finish between jobs. If you need deep calendar booking or complex call flows, look upmarket.",
+    verdictBox:
+      "Rosie is the cheapest way to make sure a real-sounding voice answers your business phone around the clock: $49 a month gets you 250 minutes, setup takes under 30 minutes, and there is no contract. The catch is that the $49 plan is deliberately basic: no direct calendar booking or live call transfers, so most service businesses will realistically land on the $149 plan. If your needs are simple and your call volume is light, it is genuinely hard to beat on price.",
+    quickFacts: {
+      price: "From $49/mo (250 min); most service businesses need $149/mo",
+      freeTier: "7-day free trial with all features; no free plan",
+      setup: "Under 30 minutes, no tech skills needed",
+    },
+    whatIsIt: [
+      "Rosie is an AI answering service for your business phone. When you cannot pick up because you are on a job, it is after hours, or you are already on another call, Rosie answers instead.",
+      "She talks with your customer in a natural voice, in English or Spanish, figures out what they need, takes a detailed message or books them in, and then texts or emails you a summary. Your customers call the same number they have always called; from their side, nothing changes except someone always picks up.",
+    ],
+    businessScenarios: [
+      {
+        title: "Never lose the after-hours caller",
+        description:
+          "It is 8pm, you are at dinner, and a homeowner's AC just died. They call you, Rosie answers, learns it is an emergency, and texts you the details instantly. Without Rosie, that caller leaves no voicemail and calls your competitor.",
+      },
+      {
+        title: "Book jobs while you are on a job",
+        description:
+          "You are under a sink and cannot answer. Rosie takes the call and, on the Scale plan and up, puts the appointment straight on your calendar. You finish the job, check your phone, and there is a new booking waiting.",
+      },
+      {
+        title: "Stop the spam from reaching you",
+        description:
+          "Robocalls and telemarketers get filtered out automatically before they ever bother you. You only hear about real customers.",
+      },
+      {
+        title: "Sound bigger than you are",
+        description:
+          "Every call answered professionally, 24/7, even when it is just you. Customers cannot tell whether you have a front office or a phone in your truck.",
+      },
+      {
+        title: "Know what happened without listening to voicemails",
+        description:
+          "After every call you get a text or email with a summary, a transcript, and a recording. Scan it in ten seconds between jobs instead of playing phone tag with your voicemail.",
+      },
+    ],
+    howItWorks: [
+      "Rosie gives you a phone number, and you forward your business calls to it. You keep your existing number, so customers notice nothing. You choose when Rosie picks up: all calls, only when you are busy, or only after hours, and you can change this anytime.",
+      "You teach Rosie about your business. She reads your website and Google Business Profile herself, then you answer a few questions about your services, hours, and pricing. Most owners finish in under 30 minutes, and there is a free setup call if you want help.",
+      "Connect your calendar (Scale plan and up). Link Google Calendar or Outlook once, and Rosie can book appointments directly into your real availability.",
+      "Rosie answers, and you get a text after every call. She handles the conversation, takes messages using the specific questions you chose, transfers urgent calls to you live (Scale plan and up), and sends you a summary by text or email the moment the call ends.",
+    ],
+    pricingExplained: [
+      "Rosie sells minutes, not seats: it does not matter whether it is just you or five techs; what matters is how long callers talk to the AI. Three plans: Professional at $49 a month for 250 minutes, Scale at $149 for 1,000 minutes, Growth at $299 for 2,000 minutes. Pay yearly and you save about two months. Every plan includes a 7-day free trial with all features, and there are no contracts.",
+      "A typical service call runs 2 to 4 minutes, so 250 minutes covers roughly 60 to 120 calls a month: plenty for a solo operator, tight for a busy shop.",
+    ],
+    pricingCatches: [
+      "The $49 plan does not include direct calendar booking or live call transfers. Instead, it sends the customer a booking link by text. If you want Rosie to put jobs directly on your calendar or patch urgent calls through live, that is the $149 plan.",
+      "Minutes round up to the full minute, so a 20-second call still costs you a minute.",
+      "Rosie does not publish what happens when you go over your minutes. Ask that question during your trial week, not after your first busy month.",
+      "The only paid add-on is Website Texting at $50 a month; the website chat widget is free.",
+    ],
+    whoShouldGet: [
+      "Solo owners and contractors who currently send everything to voicemail",
+      "Shops losing after-hours and weekend calls to competitors",
+      "Anyone who wants the cheapest real 24/7 coverage and is comfortable with simple, predictable call flows",
+    ],
+    whoShouldSkip: [
+      "Businesses that need direct calendar booking on day one but will not pay $149 a month",
+      "Teams that need deep CRM integration, more than two languages, or outbound calling",
+      "Anyone who wants a human backup for tricky calls (Rosie is AI-only)",
+    ],
+    comparison: [
+      {
+        tool: "Rosie",
+        price: "$49/mo (250 min)",
+        difference: "Cheapest entry; metered minutes; booking and live transfers need the $149 tier",
+      },
+      {
+        tool: "Goodcall",
+        price: "$79/mo per agent",
+        difference: "Unlimited minutes per agent, which is better if your phone never stops ringing; priced per agent though",
+      },
+      {
+        tool: "Smith.ai",
+        price: "From $150/mo",
+        difference: "AI plus real human receptionists as backup. Costs more, but handles the tricky calls",
+      },
+      {
+        tool: "24x7 AI (our product)",
+        price: "From $49/mo",
+        difference: "Our own AI front desk with concierge setup; compare it honestly in our full review",
+      },
+    ],
     faqs: [
       {
-        q: "How many minutes do I get for $49?",
-        a: "250 minutes per month on the entry plan.",
+        q: "How many minutes do I actually get for $49?",
+        a: "250 minutes a month. A typical service call runs 2 to 4 minutes, so that is roughly 60 to 120 calls: plenty for a solo operator, tight for a busy shop. And remember: minutes round up to the full minute.",
       },
       {
-        q: "Can Rosie book appointments?",
-        a: "Rosie sends appointment links and takes messages; direct calendar booking depth depends on your plan.",
+        q: "Can Rosie book appointments directly on my calendar?",
+        a: "Only on the Scale plan ($149 a month) and up. The $49 Professional plan sends the customer a booking link by text instead, so they book themselves. If direct booking matters to you, start your trial on Scale.",
       },
       {
-        q: "Does Rosie speak Spanish?",
-        a: "Yes — bilingual English/Spanish answering is included.",
+        q: "Do I have to change my business phone number?",
+        a: "No. Rosie gives you a new number and you forward your existing business line to it. Your customers call the same number they always have, and you control when Rosie answers: all calls, only when you are busy, or only after hours.",
+      },
+      {
+        q: "What happens when Rosie cannot answer a question?",
+        a: "She says so honestly instead of guessing, takes a detailed message using the questions you chose, and texts or emails you immediately so you can follow up.",
+      },
+      {
+        q: "Does Rosie work in Spanish?",
+        a: "Yes. Every call can be handled in English or Spanish, on all plans, at no extra charge.",
+      },
+      {
+        q: "What happens if I go over my minutes?",
+        a: "Rosie does not publish an overage rate, which is the one thing to pin down during your 7-day trial. Ask support directly what a minute costs past your allowance before your first busy month.",
+      },
+      {
+        q: "Is there a contract or a setup fee?",
+        a: "No contract, no setup fee, cancel anytime. There is a 7-day free trial with all features, and they offer a free setup consultation when you sign up.",
       },
     ],
   },

@@ -11,6 +11,7 @@ import { SiteFooter } from "@/components/public-theme/site-footer";
 import { Badge } from "@/components/ui/badge";
 import { BlogFaq } from "@/components/blog/blog-faq";
 import { BlogCTA } from "@/components/blog/blog-cta";
+import { BlogTable } from "@/components/blog/blog-table";
 
 export async function generateStaticParams() {
   return getAllTools().map((tool) => ({
@@ -70,7 +71,7 @@ export default async function AiToolReviewPage({
       name: "24x7 AI",
       url: SITE_URL,
     },
-    reviewBody: data.verdict,
+    reviewBody: data.verdictBox ?? data.verdict,
   };
 
   return (
@@ -116,12 +117,145 @@ export default async function AiToolReviewPage({
           <h2 className="text-2xl font-semibold tracking-tight text-foreground">
             Our take
           </h2>
-          <p className="mt-3 text-muted-foreground">{data.verdict}</p>
+          <div className="mt-4 rounded-xl border border-border bg-muted/50 p-5">
+            <p className="text-foreground">{data.verdictBox ?? data.verdict}</p>
+          </div>
           <p className="mt-3 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">Best for: </span>
             {data.bestFor}
           </p>
         </section>
+
+        {data.quickFacts ? (
+          <section aria-label="Quick facts" className="mt-10">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              Quick facts
+            </h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl border border-border p-5">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Price
+                </h3>
+                <p className="mt-2 text-sm text-foreground">
+                  {data.quickFacts.price}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border p-5">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Free trial
+                </h3>
+                <p className="mt-2 text-sm text-foreground">
+                  {data.quickFacts.freeTier}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border p-5">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Setup
+                </h3>
+                <p className="mt-2 text-sm text-foreground">
+                  {data.quickFacts.setup}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border p-5">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Best for
+                </h3>
+                <p className="mt-2 text-sm text-foreground">{data.bestFor}</p>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {data.whatIsIt ? (
+          <section aria-label="What it is" className="mt-10">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              What is {data.name}, in plain English
+            </h2>
+            {data.whatIsIt.map((para, i) => (
+              <p key={i} className="mt-3 text-muted-foreground">
+                {para}
+              </p>
+            ))}
+          </section>
+        ) : null}
+
+        {data.businessScenarios ? (
+          <section aria-label="What it will do for your business" className="mt-10">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              What will it actually do for your business
+            </h2>
+            <div className="mt-4 space-y-4">
+              {data.businessScenarios.map((scenario, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl border border-border p-5"
+                >
+                  <h3 className="font-semibold text-foreground">
+                    {scenario.title}
+                  </h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {scenario.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {data.howItWorks ? (
+          <section aria-label="How it works" className="mt-10">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              How it works
+            </h2>
+            <ol className="mt-4 space-y-4">
+              {data.howItWorks.map((step, i) => (
+                <li key={i} className="flex items-start gap-4">
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
+                    aria-hidden="true"
+                  >
+                    {i + 1}
+                  </span>
+                  <p className="pt-1 text-muted-foreground">{step}</p>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
+
+        {data.pricingExplained ? (
+          <section aria-label="Pricing explained" className="mt-10">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              Pricing, explained honestly
+            </h2>
+            {data.pricingExplained.map((para, i) => (
+              <p key={i} className="mt-3 text-muted-foreground">
+                {para}
+              </p>
+            ))}
+            {data.pricingCatches ? (
+              <div className="mt-4 rounded-xl border border-border bg-muted/50 p-5">
+                <h3 className="font-semibold text-foreground">
+                  Catches worth knowing
+                </h3>
+                <ul className="mt-3 space-y-2">
+                  {data.pricingCatches.map((catchItem, i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-2 text-sm text-muted-foreground"
+                    >
+                      <X
+                        className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      {catchItem}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         <section aria-label="Pros and cons" className="mt-10">
           <h2 className="text-2xl font-semibold tracking-tight text-foreground">
@@ -164,6 +298,77 @@ export default async function AiToolReviewPage({
             </div>
           </div>
         </section>
+
+        {data.whoShouldGet || data.whoShouldSkip ? (
+          <section aria-label="Who should get it" className="mt-10">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              Should you get it
+            </h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {data.whoShouldGet ? (
+                <div className="rounded-xl border border-border p-5">
+                  <h3 className="font-semibold text-foreground">
+                    Get it if you are
+                  </h3>
+                  <ul className="mt-3 space-y-2">
+                    {data.whoShouldGet.map((item, i) => (
+                      <li
+                        key={i}
+                        className="flex items-start gap-2 text-sm text-muted-foreground"
+                      >
+                        <Check
+                          className="mt-0.5 h-4 w-4 shrink-0 text-primary"
+                          aria-hidden="true"
+                        />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {data.whoShouldSkip ? (
+                <div className="rounded-xl border border-border p-5">
+                  <h3 className="font-semibold text-foreground">
+                    Skip it if you are
+                  </h3>
+                  <ul className="mt-3 space-y-2">
+                    {data.whoShouldSkip.map((item, i) => (
+                      <li
+                        key={i}
+                        className="flex items-start gap-2 text-sm text-muted-foreground"
+                      >
+                        <X
+                          className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {data.comparison ? (
+          <section aria-label="Comparison" className="mt-10">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              How {data.name} compares
+            </h2>
+            <div className="mt-4">
+              <BlogTable
+                headers={["", "Starts at", "The key difference"]}
+                rows={data.comparison.map((row) => [
+                  row.tool,
+                  row.price,
+                  row.difference,
+                ])}
+                caption={`${data.name} vs alternatives, pricing researched October 2026`}
+              />
+            </div>
+          </section>
+        ) : null}
 
         <section aria-label="Frequently asked questions" className="mt-10">
           <h2 className="text-2xl font-semibold tracking-tight text-foreground">
