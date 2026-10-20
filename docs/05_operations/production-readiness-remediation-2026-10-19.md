@@ -45,18 +45,18 @@ permissions therefore remain the first task; this is not a hypothetical risk.
 
 ## Prepared implementation
 
-| Audit items | Change | Launch closure still required |
-| --- | --- | --- |
-| R01–R02 | Revoke client table/sequence/RPC grants and global/schema defaults, enable RLS, replace private Realtime feeds with tenant-scoped IDs, add a read-only security release gate | Review/apply coordinated migrations and frontend/backend/voice release; repeat direct Data API checks in staging/production |
-| R04–R05 | Require production email verification independently of sender completeness; add platform and org saved-destination email/Telegram tests with backend role/tenant enforcement and safe provider errors | Configure sender/destinations; prove domain verification and actual receipts for both roles |
-| R11 | Share HTTP quotas through backend Redis, protect Redis URL as a managed secret, clear copied Redis settings in isolated worktrees | Provision authenticated TLS Redis and Turnstile widget/keys; prove distributed limits and challenge behavior in deployed environments |
-| R12 | Patch Python runtime/migration dependencies, Next/sharp, vulnerable transitive frontend packages and OpenTelemetry SDK; patch pytest/Black; bound Twilio URL-encoded parsing and reject unsigned/multipart/oversized traffic before parsing | Rebuild/deploy all runtimes; retain scans with the release SHA |
-| R13/R20 | Broad application CI, real migration/concurrency fixtures, immutable-main promotion with successful exact-SHA checks, Data API postcondition gate, fail release when voice SSH config is missing; repair stale tests and runtime test-package isolation | Enable account-level protection/reviewers; successful CI and staging evidence for the integrated SHA |
-| R14–R15 | Fail closed before provider startup if tracking fails; atomic slot admission and single-use sessions; worker leases/crash recovery; durable pending settlement with atomic ledger linkage and concurrent retry safety | Drain before rollout; run browser/PSTN faults and live accounting checks; choose normal-call duration cap |
-| R16 | Deny expired playback/links/availability; bounded idempotent deletion with audited tombstones and retry; expiry index | Verify private bucket policy, lifecycle/backups and actual cleanup on deployed storage |
-| R18 | Content-free console handlers even with OTLP disabled, including safe Uvicorn access formatting; retain only allowlisted events/fields | Inspect deployed logs and verify the chosen operational alerts still contain useful safe signals |
-| R21 | HSTS, nosniff, referrer/permissions policy and CSP framing/object/base restrictions; preserve microphone access and call iframes | Verify deployed headers and customer embed/audio/OAuth flows |
-| R22/R24 | Move Stripe SDK, JWT/JWKS verification and entitlement reads off the event loop; bounded Stripe timeout; pin compatible Node 22 Docker manifest and use lockfile installs | Other async database paths and production capacity/probes remain operational validation work |
+| Audit items | Change                                                                                                                                                                                                                                                  | Launch closure still required                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| R01–R02     | Revoke client table/sequence/RPC grants and global/schema defaults, enable RLS, replace private Realtime feeds with tenant-scoped IDs, add a read-only security release gate                                                                            | Review/apply coordinated migrations and frontend/backend/voice release; repeat direct Data API checks in staging/production           |
+| R04–R05     | Require production email verification independently of sender completeness; add platform and org saved-destination email/Telegram tests with backend role/tenant enforcement and safe provider errors                                                   | Configure sender/destinations; prove domain verification and actual receipts for both roles                                           |
+| R11         | Share HTTP quotas through backend Redis, protect Redis URL as a managed secret, clear copied Redis settings in isolated worktrees                                                                                                                       | Provision authenticated TLS Redis and Turnstile widget/keys; prove distributed limits and challenge behavior in deployed environments |
+| R12         | Patch Python runtime/migration dependencies, Next/sharp, vulnerable transitive frontend packages and OpenTelemetry SDK; patch pytest/Black; bound Twilio URL-encoded parsing and reject unsigned/multipart/oversized traffic before parsing             | Rebuild/deploy all runtimes; retain scans with the release SHA                                                                        |
+| R13/R20     | Broad application CI, real migration/concurrency fixtures, immutable-main promotion with successful exact-SHA checks, Data API postcondition gate, fail release when voice SSH config is missing; repair stale tests and runtime test-package isolation | Enable account-level protection/reviewers; successful CI and staging evidence for the integrated SHA                                  |
+| R14–R15     | Fail closed before provider startup if tracking fails; atomic slot admission and single-use sessions; worker leases/crash recovery; durable pending settlement with atomic ledger linkage and concurrent retry safety                                   | Drain before rollout; run browser/PSTN faults and live accounting checks; choose normal-call duration cap                             |
+| R16         | Deny expired playback/links/availability; bounded idempotent deletion with audited tombstones and retry; expiry index                                                                                                                                   | Verify private bucket policy, lifecycle/backups and actual cleanup on deployed storage                                                |
+| R18         | Content-free console handlers even with OTLP disabled, including safe Uvicorn access formatting; retain only allowlisted events/fields                                                                                                                  | Inspect deployed logs and verify the chosen operational alerts still contain useful safe signals                                      |
+| R21         | HSTS, nosniff, referrer/permissions policy and CSP framing/object/base restrictions; preserve microphone access and call iframes                                                                                                                        | Verify deployed headers and customer embed/audio/OAuth flows                                                                          |
+| R22/R24     | Move Stripe SDK, JWT/JWKS verification and entitlement reads off the event loop; bounded Stripe timeout; pin compatible Node 22 Docker manifest and use lockfile installs                                                                               | Other async database paths and production capacity/probes remain operational validation work                                          |
 
 Changes are regression-tested in isolated environments. Detailed final results
 are recorded below; passing deterministic tests does not prove live provider
@@ -73,7 +73,7 @@ availability, voice latency, external delivery or production account settings.
    browser's private subscriptions intentionally stop after lockdown.
 3. After explicit release ownership/approval, run the documented staging
    validator, then `python scripts/deploy/verify_data_api_security.py --env-file
-   .env.staging`. The validator now includes this read-only guard.
+.env.staging`. The validator now includes this read-only guard.
 4. Run the staging release journey: invitation/verification, founder onboarding,
    tenant-denial matrix, browser audio, PSTN ingress/audio, recordings, billing,
    notification probes/receipt, credit limits and provider failure/recovery.
@@ -105,22 +105,22 @@ This is a reference list, not the next-cycle task list. Work one item at a time,
 starting with database access containment. Some items require account access;
 others are engineering follow-ups that the agent should handle independently.
 
-| Priority | Needed action | Evidence to finish |
-| --- | --- | --- |
-| Next | Authorize the reviewed integration/release operations once checks pass | Exact approved SHA, staging owner, protected production approval |
-| Before exposing signup | Align invitation-only policy and Supabase Auth, including email and new OAuth users | A fresh uninvited direct Auth signup is denied while a valid invited email/OAuth signup works. Do not blindly disable all signup and break invited OAuth registration; use a verified server-side Auth boundary. |
-| Before email-dependent onboarding | Verify the sending domain in Resend, complete DNS/sender settings and save platform alert recipient plus verification From email/name | Actual verification email and platform/org test email received; provider dashboard confirms accepted/delivered state; domain API access or dashboard evidence |
-| When used by the pilot | Save/enable platform Telegram bot+chat; save organization bot+chat and shared email inbox | Platform and org Telegram tests received; wrong/missing credentials produce actionable failure, never a success claim |
-| Before offering PSTN | Upgrade/approve the production Twilio account and number route | Actual PSTN call reaches production webhook and `/twilio`, returns audio and completes one accounted call log |
-| Before charging | Complete Stripe live activation in the separate billing workstream | Approved plans and prices in staging/production; live webhook, successful payment, failed payment, replay/idempotency and portal checks |
-| Before customer onboarding | Approve and publish Terms/Privacy versions and support identity/contact | Public documents load, signup acceptance persists, customer promises match product behavior |
-| Before public self-service | Provision TLS Redis and Turnstile keys/widget; opt REDIS_URL into managed deployment config | Two deployed instances share one quota; bot challenge validates server-side and denies invalid tokens |
-| Later; manual checks for pilot | Choose telemetry backend credentials, enable application export and own actionable alert destinations | A synthetic service/voice/provider/queue failure is visible and the alert is received |
-| Basic backups before customer data; drill later | Confirm backup/PITR coverage and schedule an isolated restore drill | Verified backup coverage initially; timestamped restore/application results and recovery expectations in the later drill |
-| Later; retain manual review | Configure GitHub environment reviewers and main protection (may require an account-plan change) | Wrong/no approvals and failing/missing required checks demonstrably block promotion |
-| Before sale | Reauthorize affected Google tool connections and resolve OAuth app approval/restricted-scope requirements | Approved tenant completes the intended Calendar/Gmail/CRM workflow without unverified-app blockers |
-| Small limits now; scale testing later | Set supported pilot concurrency, bound spending and keep support promises modest | Known customer/usage limits, practical cost controls and an owner; validate wider capacity before selling it |
-| Before offering the affected journey | Run controlled production acceptance with a synthetic test organization | Only the offered browser/PSTN journey, credits, required notifications, storage, legal acceptance and payment paths need initial live evidence |
+| Priority                                        | Needed action                                                                                                                         | Evidence to finish                                                                                                                                                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Next                                            | Authorize the reviewed integration/release operations once checks pass                                                                | Exact approved SHA, staging owner, protected production approval                                                                                                                                                 |
+| Before exposing signup                          | Align invitation-only policy and Supabase Auth, including email and new OAuth users                                                   | A fresh uninvited direct Auth signup is denied while a valid invited email/OAuth signup works. Do not blindly disable all signup and break invited OAuth registration; use a verified server-side Auth boundary. |
+| Before email-dependent onboarding               | Verify the sending domain in Resend, complete DNS/sender settings and save platform alert recipient plus verification From email/name | Actual verification email and platform/org test email received; provider dashboard confirms accepted/delivered state; domain API access or dashboard evidence                                                    |
+| When used by the pilot                          | Save/enable platform Telegram bot+chat; save organization bot+chat and shared email inbox                                             | Platform and org Telegram tests received; wrong/missing credentials produce actionable failure, never a success claim                                                                                            |
+| Before offering PSTN                            | Upgrade/approve the production Twilio account and number route                                                                        | Actual PSTN call reaches production webhook and `/twilio`, returns audio and completes one accounted call log                                                                                                    |
+| Before charging                                 | Complete Stripe live activation in the separate billing workstream                                                                    | Approved plans and prices in staging/production; live webhook, successful payment, failed payment, replay/idempotency and portal checks                                                                          |
+| Before customer onboarding                      | Approve and publish Terms/Privacy versions and support identity/contact                                                               | Public documents load, signup acceptance persists, customer promises match product behavior                                                                                                                      |
+| Before public self-service                      | Provision TLS Redis and Turnstile keys/widget; opt REDIS_URL into managed deployment config                                           | Two deployed instances share one quota; bot challenge validates server-side and denies invalid tokens                                                                                                            |
+| Later; manual checks for pilot                  | Choose telemetry backend credentials, enable application export and own actionable alert destinations                                 | A synthetic service/voice/provider/queue failure is visible and the alert is received                                                                                                                            |
+| Basic backups before customer data; drill later | Confirm backup/PITR coverage and schedule an isolated restore drill                                                                   | Verified backup coverage initially; timestamped restore/application results and recovery expectations in the later drill                                                                                         |
+| Later; retain manual review                     | Configure GitHub environment reviewers and main protection (may require an account-plan change)                                       | Wrong/no approvals and failing/missing required checks demonstrably block promotion                                                                                                                              |
+| Before sale                                     | Reauthorize affected Google tool connections and resolve OAuth app approval/restricted-scope requirements                             | Approved tenant completes the intended Calendar/Gmail/CRM workflow without unverified-app blockers                                                                                                               |
+| Small limits now; scale testing later           | Set supported pilot concurrency, bound spending and keep support promises modest                                                      | Known customer/usage limits, practical cost controls and an owner; validate wider capacity before selling it                                                                                                     |
+| Before offering the affected journey            | Run controlled production acceptance with a synthetic test organization                                                               | Only the offered browser/PSTN journey, credits, required notifications, storage, legal acceptance and payment paths need initial live evidence                                                                   |
 
 ## Explicit residual engineering/validation work
 
@@ -150,22 +150,22 @@ others are engineering follow-ups that the agent should handle independently.
 Validated on October 19, 2026, in this worktree; no shared staging or production
 database was used for mutation.
 
-| Check | Result and boundary |
-| --- | --- |
-| Backend, shared and deployment Python suites | **2,650 passed, 57 skipped**; includes real shared-Redis quota checks. Optional provider/database lanes do not become PASS from a skip. |
-| Voice runtime suite | **145 passed**, in its separate Python environment with the patched pytest/asyncio dependencies |
-| Frontend suite | **209 files / 1,297 tests passed** after rebasing onto current main and preserving its expanded sitemap coverage |
-| Fresh PostgreSQL migration/security tests | **6 passed** against the preceding schema; all five new migrations then applied to head `20261019000005`; all five read-only security violation counts were zero |
-| Real SQL financial/admission tests | **11 passed** against the final migration chain, including concurrent debit/admission, replay rejection, rollback, leases and recovery |
-| Deterministic agent evaluations | **34/34 passed**, across Calendar, callback, lead capture and Resend; no live provider delivery/latency claim |
-| Notification browser regression | **1 Playwright journey passed** for organization settings, saved reload, email/Telegram test requests and mobile layout; Auth/API/provider boundaries were mocked |
-| Interactive browser smoke | Signed into the isolated stack as platform admin and exercised the saved-destination validation error; no external notification was sent. Actual provider acceptance and receipt remain UNVERIFIED. |
-| TypeScript / frontend lint | Typecheck passed; lint had **zero errors and 14 existing warnings** |
-| Production frontend builds | Host Next build and clean Docker production build passed; built image runs **Node 22.23.3** |
-| Dependency audit | Installed backend environment, including development dependencies: **zero known advisories**. Frontend production dependency graph: **zero findings**; full development graph retains the upstream braces advisory described above. This is not a complete deployed OS/image vulnerability attestation. |
-| Changed Python formatting/lint | Black, isort and Flake8 passed for **51 changed Python files** |
-| Isolated worktree launcher | Shell configuration regression suite passed, including clearing a copied external Redis URL |
-| Repository/document checks | `git diff --check`, changed Python AST/YAML/JSON, shell syntax and changed Markdown relative links passed; updated database Mermaid diagram parsed successfully; no added credentials matched the checked token/private-key patterns |
+| Check                                        | Result and boundary                                                                                                                                                                                                                                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend, shared and deployment Python suites | **2,650 passed, 57 skipped**; includes real shared-Redis quota checks. Optional provider/database lanes do not become PASS from a skip.                                                                                                                                                                 |
+| Voice runtime suite                          | **145 passed**, in its separate Python environment with the patched pytest/asyncio dependencies                                                                                                                                                                                                         |
+| Frontend suite                               | **209 files / 1,297 tests passed** after rebasing onto current main and preserving its expanded sitemap coverage                                                                                                                                                                                        |
+| Fresh PostgreSQL migration/security tests    | **6 passed** against the preceding schema; all five new migrations then applied to head `20261019000005`; all five read-only security violation counts were zero                                                                                                                                        |
+| Real SQL financial/admission tests           | **11 passed** against the final migration chain, including concurrent debit/admission, replay rejection, rollback, leases and recovery                                                                                                                                                                  |
+| Deterministic agent evaluations              | **34/34 passed**, across Calendar, callback, lead capture and Resend; no live provider delivery/latency claim                                                                                                                                                                                           |
+| Notification browser regression              | **1 Playwright journey passed** for organization settings, saved reload, email/Telegram test requests and mobile layout; Auth/API/provider boundaries were mocked                                                                                                                                       |
+| Interactive browser smoke                    | Signed into the isolated stack as platform admin and exercised the saved-destination validation error; no external notification was sent. Actual provider acceptance and receipt remain UNVERIFIED.                                                                                                     |
+| TypeScript / frontend lint                   | Typecheck passed; lint had **zero errors and 14 existing warnings**                                                                                                                                                                                                                                     |
+| Production frontend builds                   | Host Next build and clean Docker production build passed; built image runs **Node 22.23.3**                                                                                                                                                                                                             |
+| Dependency audit                             | Installed backend environment, including development dependencies: **zero known advisories**. Frontend production dependency graph: **zero findings**; full development graph retains the upstream braces advisory described above. This is not a complete deployed OS/image vulnerability attestation. |
+| Changed Python formatting/lint               | Black, isort and Flake8 passed for **51 changed Python files**                                                                                                                                                                                                                                          |
+| Isolated worktree launcher                   | Shell configuration regression suite passed, including clearing a copied external Redis URL                                                                                                                                                                                                             |
+| Repository/document checks                   | `git diff --check`, changed Python AST/YAML/JSON, shell syntax and changed Markdown relative links passed; updated database Mermaid diagram parsed successfully; no added credentials matched the checked token/private-key patterns                                                                    |
 
 The repository-wide non-mutating pre-commit check remains **not green** because
 of existing Flake8 violations, a video script syntax error caught by the
@@ -184,3 +184,31 @@ deployment has been performed. Launch status remains
 **NO-GO** while the confirmed database access exposure remains uncontained.
 After containment, assess the small-pilot criteria above against the offered
 customer journey; the entire hardening backlog is not a launch gate.
+
+### Subsequent shared-staging acceptance
+
+The preparation record above describes its original validation boundary. PRs
+#164 and #165 subsequently merged the remediation and current-main sitemap test
+alignment. All application and agent checks passed on merged commit
+`a30eb31ffb113710619f0abd4e7455aa57ce0448`.
+
+Shared staging was upgraded to `20261019000005`; the read-only Data API security
+guard reported zero violations in all five categories. A synthetic organization
+and real Gemini voice calls verified authenticated browser audio, finalized call
+logs, exactly-once credit settlement and recording storage. A fresh browser call
+also returned non-silent audio over a restricted public WSS tunnel. No customer
+data was used. A controlled PSTN self-call used only the platform-owned phone
+number and completed in 19 seconds without provider stream errors. Its private
+16 kHz stereo recording had non-silent caller and agent channels; the call
+settled 10 credits with a linked ledger transaction. Original provider routing
+and the existing inactive staging record were restored and verified. The
+temporary tunnel and ingress were removed. Provider receipt of email/Telegram
+remains unverified; live model latency was not measured by this smoke test.
+
+Live inspection found that Pipecat's Loguru sinks bypass standard Python logging
+filters. The follow-up applies the same content-free policy in the voice runtime
+and adds direct regression coverage for messages, extras, exceptions and
+repeated initialization. The complete voice suite passes 147 tests; shared
+observability/privacy suites pass 48 tests. Production deployment and
+post-deployment acceptance remain
+separate required steps; merging a fix does not establish live containment.
