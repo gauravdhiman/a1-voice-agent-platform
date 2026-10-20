@@ -184,7 +184,7 @@ export default async function AiToolsCategoryPage({
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-border bg-card p-5">
                 <h3 className="text-lg font-semibold text-foreground">
-                  What {data.name.toLowerCase()} will do
+                  What {data.name.toLowerCase().replace(/\bai\b/g, "AI")} will do
                 </h3>
                 <ul className="mt-4 space-y-3">
                   {data.expectations.will.map((item, i) => (
