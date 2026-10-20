@@ -9,6 +9,8 @@ from uuid import UUID
 
 from shared.config import supabase_config
 
+from .retention import recording_expired
+
 logger = logging.getLogger(__name__)
 
 
@@ -76,6 +78,8 @@ class CallArtifactService:
             if not result.data:
                 return None, "Recording not found"
             row = result.data[0]
+            if recording_expired(row):
+                return None, "Recording retention period has expired"
             if row.get("status") != "completed" or not row.get("storage_path"):
                 return None, "Recording is not ready"
             return row, None

@@ -230,3 +230,17 @@ For local worktree setup see
 [Worktree Isolation and Release Promotion Strategy](worktree-and-release-strategy.md).
 For local staging setup see `docs/05_operations/staging_environment.md`.
 For migration and smoke-test recovery see [the runbook](runbook.md).
+
+## Exact-commit application gates
+
+`application-checks.yml` runs backend/shared/deployment suites, separate voice
+runtime tests, frontend lint/typecheck/Vitest/build, shared Redis quota tests,
+and the real security/admission/settlement migration tests on disposable
+Postgres. Agent evaluations remain a separate required workflow.
+
+Production promotion requires an immutable ancestor of main and successful main
+push runs of both workflows for that exact SHA. After approved migrations the
+read-only Data API security guard must pass. Missing voice deployment SSH
+configuration now fails the release. Configure GitHub environment reviewers and
+branch protection separately; workflow code cannot supply those account-level
+protections or prove live browser/PSTN/payment acceptance.

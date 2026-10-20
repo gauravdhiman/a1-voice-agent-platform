@@ -1,8 +1,12 @@
 import createMDX from "@next/mdx";
 import type { NextConfig } from "next";
+import { applicationSecurityHeaders } from "./src/lib/security-headers";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  async headers() {
+    return applicationSecurityHeaders(process.env.NODE_ENV === "production");
+  },
   async redirects() {
     return [
       {

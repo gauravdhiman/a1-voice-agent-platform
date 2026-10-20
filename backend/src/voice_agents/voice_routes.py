@@ -207,6 +207,31 @@ async def _handle_pipecat_incoming(
 
 async def _validated_form(request: Request) -> dict[str, str]:
     """Read a Twilio form and reject requests with an invalid signature."""
+    # Reject unsigned traffic before invoking a parser. Only Twilio's bounded
+    # URL-encoded format is supported; multipart files are never needed here.
+    validation_enabled = getattr(
+        settings, "twilio_webhook_signature_validation_enabled", True
+    )
+    signature = request.headers.get("X-Twilio-Signature")
+    auth_token = getattr(settings, "twilio_auth_token", None)
+    if validation_enabled and (not auth_token or not signature):
+        raise HTTPException(status_code=403, detail="Invalid Twilio webhook signature")
+    content_type = request.headers.get("content-type", "")
+    if (
+        content_type
+        and content_type.split(";", 1)[0].lower() != "application/x-www-form-urlencoded"
+    ):
+        raise HTTPException(status_code=415, detail="Unsupported webhook content type")
+    # Check the streamed body too; Content-Length can be absent or dishonest.
+    body_size = 0
+    if isinstance(content_type, str) and content_type:
+        chunks = []
+        async for chunk in request.stream():
+            body_size += len(chunk)
+            if body_size > 64 * 1024:
+                raise HTTPException(status_code=413, detail="Webhook body is too large")
+            chunks.append(chunk)
+        request._body = b"".join(chunks)
     form_data = await request.form()
     params = {str(key): str(value) for key, value in form_data.items()}
     if not getattr(settings, "twilio_webhook_signature_validation_enabled", True):

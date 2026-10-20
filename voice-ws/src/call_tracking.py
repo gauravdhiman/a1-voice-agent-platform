@@ -8,15 +8,30 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from shared.billing.voice_call_metering import (
-    DEFAULT_VOICE_CALL_EVENT,
-    calculate_voice_call_credits,
-)
+from shared.billing.voice_session_entitlement import resolve_voice_concurrency_limit
+from shared.billing.voice_settlement import settle_voice_call
 from shared.config import supabase_config
 from shared.observability.signals import failure, observed
 from shared.voice_agents.source_metadata import normalize_domain, normalize_source_url
 
 logger = logging.getLogger(__name__)
+
+
+async def renew_call_lease(call_log_id: str, session_id: str) -> bool:
+    """Renew only this active session's lease; expired/final sessions cannot revive."""
+    client = supabase_config.client
+    if client is None:
+        return False
+    response = await asyncio.to_thread(
+        lambda: client.rpc(
+            "touch_voice_call",
+            {
+                "p_call_log_id": call_log_id,
+                "p_session_id": session_id,
+            },
+        ).execute()
+    )
+    return response.data is True
 
 
 @observed("call.start")
@@ -63,56 +78,30 @@ async def start_call_tracking(
         if value is not None
     }
 
-    if call_sid:
-        try:
-            existing = await asyncio.to_thread(
-                lambda: client.table("call_logs")
-                .select("id")
-                .eq("call_sid", call_sid)
-                .limit(1)
-                .execute()
-            )
-            if existing.data:
-                existing_id = str(existing.data[0]["id"])
-                if source_fields:
-                    await asyncio.to_thread(
-                        lambda: client.table("call_logs")
-                        .update(source_fields)
-                        .eq("id", existing_id)
-                        .execute()
-                    )
-                return existing_id
-        except Exception:
-            logger.exception(
-                "Failed to find existing call log for provider call_sid=%s",
-                call_sid,
-            )
-
-    now = datetime.now(timezone.utc).isoformat()
-    row = {
-        "call_sid": call_sid or session_id,
-        "organization_id": str(organization_id),
-        "agent_id": str(agent_id),
-        "status": "initiated",
-        "duration": 0,
-        "started_at": now,
-        "created_at": now,
-        "updated_at": now,
-    }
-    row.update(source_fields)
     try:
+        limit = await resolve_voice_concurrency_limit(client, organization_id)
         result = await asyncio.to_thread(
-            lambda: client.table("call_logs").insert(row).execute()
+            lambda: client.rpc(
+                "admit_voice_call",
+                {
+                    "p_session_id": session_id,
+                    "p_call_sid": call_sid,
+                    "p_organization_id": str(organization_id),
+                    "p_agent_id": str(agent_id),
+                    "p_concurrent_limit": limit,
+                    "p_source_type": source_fields.get("source_type"),
+                    "p_source_url": source_fields.get("source_url"),
+                    "p_source_domain": source_fields.get("source_domain"),
+                },
+            ).execute()
         )
-        if result.data:
-            return str(result.data[0]["id"])
+        admission = result.data or {}
+        if admission.get("success") and admission.get("call_log_id"):
+            return str(admission["call_log_id"])
+        failure("CALL_ADMISSION_DENIED")
     except Exception:
         failure("CALL_START_FAILED")
-        logger.exception(
-            "Failed to create call log for session_id=%s org=%s",
-            session_id,
-            organization_id,
-        )
+        logger.exception("Failed to admit tracked voice session")
     return None
 
 
@@ -208,6 +197,7 @@ async def end_call_tracking(
             lambda: client.table("call_logs")
             .update(final_update)
             .eq("id", call_log_id)
+            .in_("status", ["initiated", "ringing", "answered"])
             .execute()
         )
 
@@ -232,119 +222,9 @@ async def _bill_completed_call(
     duration_seconds: int,
     agent_id: Optional[str] = None,
 ) -> None:
-    """Debit voice minutes and attach the ledger row to a completed call.
+    """Attempt atomic settlement; the database retains pending work on failure.
 
-    Billing is best-effort during websocket teardown: a ledger failure is
-    logged, but it must not keep the worker from closing the call cleanly.
-    The atomic RPC still prevents concurrent sessions from overspending.
-
-    Demo agents (``voice_agents.is_demo = true``) are not billed:
-    the call is recorded with ``credits_consumed=0`` and no ledger row.
+    Compatibility parameters are retained for callers; the service-only RPC
+    resolves the authoritative organization, duration and demo flag itself.
     """
-    try:
-        # Demo-agent fast-path: no debit, just mark zero consumption.
-        if agent_id:
-            try:
-                demo_result = await asyncio.to_thread(
-                    lambda: client.table("voice_agents")
-                    .select("is_demo")
-                    .eq("id", str(agent_id))
-                    .limit(1)
-                    .execute()
-                )
-                if demo_result.data and bool(demo_result.data[0].get("is_demo")):
-                    logger.info(
-                        "Skipping billing for demo agent agent_id=%s call_id=%s",
-                        agent_id,
-                        call_log_id,
-                    )
-                    await asyncio.to_thread(
-                        lambda: client.table("call_logs")
-                        .update({"credits_consumed": 0})
-                        .eq("id", call_log_id)
-                        .execute()
-                    )
-                    return
-            except Exception:
-                logger.debug(
-                    "Demo-agent check failed for agent_id=%s "
-                    "— proceeding to normal billing",
-                    agent_id,
-                    exc_info=True,
-                )
-
-        event_result = await asyncio.to_thread(
-            lambda: client.table("credit_events")
-            .select("id, credit_cost")
-            .eq("name", DEFAULT_VOICE_CALL_EVENT)
-            .eq("is_active", True)
-            .limit(1)
-            .execute()
-        )
-        if not event_result.data:
-            failure("BILLING_EVENT_MISSING")
-            logger.error("Missing active credit event %s", DEFAULT_VOICE_CALL_EVENT)
-            return
-
-        event = event_result.data[0]
-        credits_needed = calculate_voice_call_credits(
-            duration_seconds, int(event.get("credit_cost") or 0)
-        )
-        if credits_needed == 0:
-            await asyncio.to_thread(
-                lambda: client.table("call_logs")
-                .update({"credits_consumed": 0})
-                .eq("id", call_log_id)
-                .execute()
-            )
-            return
-
-        debit_result = await asyncio.to_thread(
-            lambda: client.rpc(
-                "consume_voice_call_credits",
-                {
-                    "p_organization_id": str(organization_id),
-                    "p_credit_event_id": str(event["id"]),
-                    "p_credits_needed": credits_needed,
-                    "p_call_log_id": call_log_id,
-                    "p_duration_seconds": duration_seconds,
-                },
-            ).execute()
-        )
-        debit = debit_result.data or {}
-        if not debit.get("success"):
-            failure("BILLING_DEBIT_FAILED")
-            logger.warning(
-                "Call %s completed without credit headroom (needed=%s)",
-                call_log_id,
-                credits_needed,
-            )
-            return
-
-        if int(debit.get("overdraft_used") or 0) > 0:
-            logger.warning(
-                "Call %s settled %s credits below zero; new calls will be blocked",
-                call_log_id,
-                debit["overdraft_used"],
-            )
-
-        transaction_id = debit.get("transaction_id")
-        if not transaction_id:
-            failure("BILLING_LEDGER_MISSING")
-            logger.error("Credit debit for call %s had no ledger row", call_log_id)
-            return
-
-        await asyncio.to_thread(
-            lambda: client.table("call_logs")
-            .update(
-                {
-                    "credits_consumed": credits_needed,
-                    "credit_transaction_id": transaction_id,
-                }
-            )
-            .eq("id", call_log_id)
-            .execute()
-        )
-    except Exception:
-        failure("BILLING_SETTLEMENT_FAILED")
-        logger.exception("Failed to bill completed call id=%s", call_log_id)
+    await settle_voice_call(client, call_log_id)

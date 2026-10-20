@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NotificationDeliveryTest } from "@/components/notifications/notification-delivery-test";
 import {
   notificationSettingsService,
   type OrganizationNotificationSettings,
@@ -320,6 +321,7 @@ export function OrganizationNotificationSettingsForm({
             </div>
           </section>
 
+          <NotificationDeliveryTest key={organizationId} organizationId={organizationId} disabled={saving} />
           <div className="flex justify-end border-t pt-5">
             <Button type="submit" disabled={saving}>
               {saving ? (

@@ -342,8 +342,9 @@ follow-up instead of weakening assertions.
 Fast commands:
 
 ~~~bash
-# Python backend, shared code, and voice-ws
+# Python backend and shared code
 pytest -q
+pytest -c voice-ws/pytest.ini voice-ws/tests -q
 pytest backend/tests/path/to/test_file.py -q
 pytest -m 'not slow' -q
 
@@ -373,6 +374,8 @@ Testing boundaries:
 
 - Backend pytest is configured by the root pytest.ini; backend/pytest.ini is
   useful when running from backend.
+- Run voice-ws tests in a separate pytest process with its own configuration:
+  backend and voice-ws both own a top-level `src` package.
 - Frontend uses Vitest, not Jest. Vitest 4 requires Node 20+; run it on the
   host rather than the Node 20 dev container if the container has incompatible
   dependencies.

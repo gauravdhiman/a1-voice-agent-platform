@@ -124,6 +124,7 @@ case "$COMPONENT" in
     ;;
   verify-data|verify-phone-numbers)
     python3 "${DEPLOY_DIR}/verify_phone_number_backfill.py" --env-file "$ENV_FILE"
+    python3 "${DEPLOY_DIR}/verify_data_api_security.py" --env-file "$ENV_FILE"
     ;;
   domains|dns)
     "${DEPLOY_DIR}/gcp-map-domains.sh"

@@ -83,3 +83,5 @@ provision the single production Grafana Cloud and Langfuse Cloud projects,
 configure authenticated collector ingress, set unique service/release
 attributes, and create owned Grafana Cloud alert routes. Verify traces, logs,
 metrics, dashboard queries and alert receipt alongside browser/PSTN release checks.
+
+See the [October 19 remediation release guide](../production-readiness-remediation-2026-10-19.md) before customer launch. It separates prepared code from applied production changes and account-level acceptance gates.

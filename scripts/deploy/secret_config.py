@@ -17,6 +17,7 @@ from pathlib import Path
 # consumes them explicitly as public browser configuration.
 SECRET_KEYS = frozenset(
     {
+        "REDIS_URL",
         "SUPABASE_SERVICE_KEY",
         "SUPABASE_ANON_KEY",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
@@ -52,6 +53,7 @@ SECRET_KEYS = frozenset(
 
 BACKEND_SECRET_KEYS = frozenset(
     {
+        "REDIS_URL",
         "SUPABASE_SERVICE_KEY",
         "SUPABASE_ANON_KEY",
         "DATABASE_URL",

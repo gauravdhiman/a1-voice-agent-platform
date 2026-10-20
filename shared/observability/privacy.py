@@ -3,6 +3,7 @@
 import logging
 import math
 import re
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -82,3 +83,35 @@ class TelemetryLogFilter(logging.Filter):
         record.stack_info = None
         record.pathname = Path(record.pathname).name
         return True
+
+
+def protect_console_logs() -> None:
+    """Apply content-free logging to console handlers, even with OTLP disabled.
+
+    Uvicorn access logs can contain session tokens in URLs. Free-form provider
+    errors and tracebacks can contain credentials or PII. Preserve logger,
+    severity, exception type and allowlisted operational fields instead.
+    """
+    loggers = [logging.getLogger()] + [
+        item
+        for item in logging.Logger.manager.loggerDict.values()
+        if isinstance(item, logging.Logger)
+    ]
+    for logger in loggers:
+        if not isinstance(logger, logging.Logger):
+            continue
+        for handler in logger.handlers:
+            stream = getattr(handler, "stream", None)
+            if not any(
+                stream is value
+                for value in (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
+            ):
+                continue
+            if not any(isinstance(f, TelemetryLogFilter) for f in handler.filters):
+                handler.addFilter(TelemetryLogFilter())
+            if logger.name == "uvicorn.access":
+                # AccessFormatter unpacks the original request arguments. Those
+                # arguments include token-bearing URLs and are removed above.
+                handler.setFormatter(
+                    logging.Formatter("%(levelname)s [%(name)s] %(message)s")
+                )

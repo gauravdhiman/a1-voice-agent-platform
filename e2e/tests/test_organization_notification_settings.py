@@ -25,6 +25,7 @@ def test_org_admin_can_save_oauth_notification_destinations(
         "updated_at": "2026-01-21T00:00:00Z",
     }
     saved_payloads = []
+    delivery_tests = []
 
     page.route(
         re.compile(r".*/api/v1/auth/me.*"),
@@ -111,6 +112,29 @@ def test_org_admin_can_save_oauth_notification_destinations(
         handle_settings,
     )
 
+    def handle_delivery_test(route):
+        payload = route.request.post_data_json
+        assert set(payload) == {"channel"}
+        delivery_tests.append(payload["channel"])
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "status": "accepted",
+                    "message": (
+                        "Provider accepted the test. Confirm receipt at the saved"
+                        " destination."
+                    ),
+                }
+            ),
+        )
+
+    page.route(
+        re.compile(rf".*/api/v1/notifications/organizations/{ORG_ID}/settings/test$"),
+        handle_delivery_test,
+    )
+
     step("Sign in as an organization administrator")
     signin_user(page, base_url, wait_for_dashboard=False)
     expect(page).to_have_url(re.compile(r"/dashboard$"), timeout=10000)
@@ -146,9 +170,9 @@ def test_org_admin_can_save_oauth_notification_destinations(
             "() => document.documentElement.scrollWidth <= window.innerWidth"
         ), f"Document overflows at viewport {viewport}"
         tab_list = page.get_by_role("tablist", name="Organization settings")
-        tab_metrics = tab_list.evaluate(
-            """element => {
-              const active = element.querySelector('[role="tab"][aria-selected="true"]');
+        tab_metrics = tab_list.evaluate("""element => {
+              const active = element.querySelector(
+                '[role="tab"][aria-selected="true"]');
               const listRect = element.getBoundingClientRect();
               const activeRect = active.getBoundingClientRect();
               return {
@@ -159,8 +183,7 @@ def test_org_admin_can_save_oauth_notification_destinations(
                 listLeft: listRect.left,
                 listRight: listRect.right,
               };
-            }"""
-        )
+            }""")
         assert tab_metrics["clientWidth"] <= viewport["width"]
         assert tab_metrics["scrollWidth"] == tab_metrics["clientWidth"], (
             f"Settings tabs should fit their responsive layout at {viewport}: "
@@ -209,6 +232,17 @@ def test_org_admin_can_save_oauth_notification_destinations(
     ).to_have_value("-1001234567890")
     expect(page.get_by_text("Token saved")).to_be_visible()
     expect(page.get_by_role("textbox", name="Telegram bot token")).to_have_value("")
+
+    step("Test the saved email and Telegram destinations")
+    for label in ("Send test email", "Send test Telegram"):
+        page.get_by_role("button", name=label, exact=True).click()
+        expect(
+            page.get_by_text(
+                "Provider accepted the test. Confirm receipt at the saved destination.",
+                exact=True,
+            )
+        ).to_be_visible()
+    assert delivery_tests == ["email", "telegram"]
 
     page.set_viewport_size({"width": 390, "height": 844})
     page.screenshot(path="/tmp/org-notification-settings-mobile.png", full_page=True)

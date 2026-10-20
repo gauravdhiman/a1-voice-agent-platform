@@ -180,6 +180,12 @@ class Settings(BaseSettings):
         default="noreply@example.com", description="Default sender email address"
     )
     resend_from_name: str = Field(default="24x7 AI", description="Default sender name")
+    email_verification_required: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Verification policy; defaults on in production, sender-based locally"
+        ),
+    )
     # Phone-number rental billing
     phone_number_billing_check_interval_hours: float = Field(
         default=24,
@@ -346,16 +352,20 @@ class Settings(BaseSettings):
         default=180,
         ge=180,
         le=600,
-        description="TTL (seconds) of the per-tool refresh lease lock. Must remain "
-        "at least 180 seconds to outlive the 105-second OAuth request deadline, "
-        "bounded DNS validation, and credential persistence (default: 180).",
+        description=(
+            "TTL (seconds) of the per-tool refresh lease lock. Must remain "
+            "at least 180 seconds to outlive the 105-second OAuth request deadline, "
+            "bounded DNS validation, and credential persistence (default: 180)."
+        ),
     )
     token_refresh_max_concurrent_refreshes: int = Field(
         default=5,
         ge=1,
         le=20,
-        description="Max number of OAuth refresh round-trips to run in parallel per "
-        "cycle. Higher values refresh faster but load providers more (default: 5).",
+        description=(
+            "Max number of OAuth refresh round-trips to run in parallel per "
+            "cycle. Higher values refresh faster but load providers more (default: 5)."
+        ),
     )
 
     # Twilio Settings

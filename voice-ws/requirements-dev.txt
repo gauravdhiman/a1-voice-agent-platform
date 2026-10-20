@@ -1,4 +1,4 @@
-# Dev / test extras for voice-ws (not required in the runtime image)
+# Keep voice tests in their own runtime environment, separate from backend/src.
 -r requirements.txt
-pytest>=8.0.0
-pytest-asyncio>=0.24.0,<2
+pytest==9.0.3
+pytest-asyncio==1.4.0

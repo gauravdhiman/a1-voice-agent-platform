@@ -71,8 +71,8 @@ class PlatformNotificationSettingsService:
             ),
             verification_from_email=from_email,
             verification_from_name=from_name,
-            email_verification_active=verification_sender_configured(
-                from_email, from_name
+            email_verification_active=self._verification_required(
+                verification_sender_configured(from_email, from_name)
             ),
             telegram_chat_id=row.get("telegram_chat_id"),
             telegram_notifications_enabled=bool(
@@ -149,6 +149,13 @@ class PlatformNotificationSettingsService:
         """Return whether signup/sign-in should enforce email verification."""
         settings = await self.get_settings()
         return settings.email_verification_active
+
+    @staticmethod
+    def _verification_required(sender_configured: bool) -> bool:
+        """Never auto-confirm production users because sender fields are empty."""
+        if settings.email_verification_required is not None:
+            return settings.email_verification_required
+        return settings.environment == "production" or sender_configured
 
     @staticmethod
     def _read_telegram_bot_id(token_encrypted: Optional[str]) -> Optional[str]:

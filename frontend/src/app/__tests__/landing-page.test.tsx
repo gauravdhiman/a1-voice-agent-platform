@@ -145,8 +145,9 @@ describe("Homepage experience", () => {
     const demoLinks = screen.getAllByRole("link", { name: "Live demos" });
     expect(demoLinks.length).toBeGreaterThanOrEqual(2);
     expect(
-      demoLinks.some((link) => link.getAttribute("href") === "#demos"),
+      demoLinks.some((link) => link.getAttribute("href") === "/#demos"),
     ).toBe(true);
+    expect(document.getElementById("demos")).toBeTruthy();
     for (const name of [
       /business calendar/i,
       /records & crm/i,

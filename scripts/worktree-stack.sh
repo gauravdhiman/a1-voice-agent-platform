@@ -463,6 +463,8 @@ prepare_app_env() {
   set_env_value "$APP_ENV" "ENV_FILE" "$APP_ENV"
   set_env_value "$APP_ENV" "ENVIRONMENT" "development"
   set_env_value "$APP_ENV" "DEBUG" "true"
+  # Local worktrees must never share a copied staging/production quota store.
+  set_env_value "$APP_ENV" "REDIS_URL" ""
   set_env_value "$APP_ENV" "PORT_OFFSET" "$PORT_OFFSET"
   set_env_value "$APP_ENV" "COMPOSE_PROJECT_SUFFIX" "$WORKTREE_ID"
   set_env_value "$APP_ENV" "HOST_FRONTEND_PORT" "$APP_FRONTEND_PORT"

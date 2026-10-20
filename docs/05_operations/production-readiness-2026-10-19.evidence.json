@@ -1,0 +1,1759 @@
+{
+  "review_date_local": "2026-10-19",
+  "timezone": "America/Phoenix",
+  "source_sha": "b7f8fc402893e9d1e2756ca0c04a251ecaa17a55",
+  "production_mutations_performed": false,
+  "methods": {
+    "database": "read-only transactions; metadata and aggregates only",
+    "anonymous_data_api": "zero-row reads only; no private records or writes",
+    "providers": "read-only metadata, no messages/payments/calls"
+  },
+  "observed_at_utc": [
+    "2026-10-19T20:39:12.250487+00:00",
+    "2026-10-19T20:43:01.775160+00:00"
+  ],
+  "cloud_run": {
+    "backend-247ai": {
+      "revision": "backend-247ai-00061-fhq",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "backend-247ai-00061-fhq"
+        }
+      ],
+      "annotations": {
+        "autoscaling.knative.dev/maxScale": "10",
+        "autoscaling.knative.dev/minScale": "1",
+        "run.googleapis.com/cpu-throttling": "false",
+        "run.googleapis.com/startup-cpu-boost": "true"
+      },
+      "resources": {
+        "limits": {
+          "cpu": "1",
+          "memory": "1Gi"
+        }
+      },
+      "concurrency": 80,
+      "timeout_seconds": 300,
+      "startup_probe": {
+        "failureThreshold": 1,
+        "periodSeconds": 240,
+        "tcpSocket": {
+          "port": 8000
+        },
+        "timeoutSeconds": 240
+      },
+      "liveness_probe": null,
+      "safe_settings": {
+        "DEBUG": "false",
+        "EMAIL_PROVIDER": "resend",
+        "ENVIRONMENT": "production",
+        "MCP_ALLOW_LOCAL_URLS": "false",
+        "NOTIFICATION_RETRY_CHECK_INTERVAL_MINUTES": "5",
+        "OTEL_ENABLED": "false",
+        "PUBLIC_SIGNUP_ENABLED": "false",
+        "RECORDING_RETENTION_DAYS": "90",
+        "RECORDING_STORAGE_BACKEND": "r2",
+        "RESEND_FROM_EMAIL": "team@247ai.live",
+        "RESEND_FROM_NAME": "24x7 AI",
+        "TWILIO_WEBHOOK_SIGNATURE_VALIDATION_ENABLED": "true"
+      }
+    },
+    "frontend-247ai": {
+      "revision": "frontend-247ai-00049-qps",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "frontend-247ai-00049-qps"
+        }
+      ],
+      "annotations": {
+        "autoscaling.knative.dev/maxScale": "10",
+        "run.googleapis.com/startup-cpu-boost": "true"
+      },
+      "resources": {
+        "limits": {
+          "cpu": "1",
+          "memory": "512Mi"
+        }
+      },
+      "concurrency": 80,
+      "timeout_seconds": 300,
+      "startup_probe": {
+        "failureThreshold": 1,
+        "periodSeconds": 240,
+        "tcpSocket": {
+          "port": 3000
+        },
+        "timeoutSeconds": 240
+      },
+      "liveness_probe": null,
+      "safe_settings": {}
+    }
+  },
+  "production_backend_turnstile_secret_present": false,
+  "voice": {
+    "safe_settings": {
+      "OTEL_ENABLED": "false",
+      "ENVIRONMENT": "production",
+      "VOICE_WS_WORKERS": null,
+      "VOICE_RECORDING_ENABLED": "true",
+      "RECORDING_RETENTION_DAYS": "90"
+    },
+    "matches_audit_source": {
+      "src/main.py": true,
+      "src/bot.py": true,
+      "src/call_tracking.py": true,
+      "shared/billing/voice_session_entitlement.py": true
+    }
+  },
+  "database_security": {
+    "migration_revision": [
+      [
+        "20261012000001"
+      ]
+    ],
+    "public_tables_without_rls": [
+      [
+        "agent_skills"
+      ],
+      [
+        "alembic_version"
+      ],
+      [
+        "call_artifacts"
+      ],
+      [
+        "call_logs"
+      ],
+      [
+        "entitlement_definitions"
+      ],
+      [
+        "organization_skill_files"
+      ],
+      [
+        "organization_subscription_migrations"
+      ],
+      [
+        "pipeline_presets"
+      ],
+      [
+        "plan_products"
+      ],
+      [
+        "plan_version_entitlements"
+      ],
+      [
+        "plan_version_publish_events"
+      ],
+      [
+        "plan_versions"
+      ],
+      [
+        "platform_skill_files"
+      ],
+      [
+        "platform_skills"
+      ],
+      [
+        "platform_tools"
+      ],
+      [
+        "skill_update_logs"
+      ],
+      [
+        "voice_templates"
+      ]
+    ],
+    "exposed_tables_without_rls": [
+      [
+        "agent_skills",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "agent_skills",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "alembic_version",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "alembic_version",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "call_artifacts",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "call_artifacts",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "call_logs",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "call_logs",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "entitlement_definitions",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "entitlement_definitions",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "organization_skill_files",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "organization_skill_files",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "organization_subscription_migrations",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "organization_subscription_migrations",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "pipeline_presets",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "pipeline_presets",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "plan_products",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "plan_products",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "plan_version_entitlements",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "plan_version_entitlements",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "plan_version_publish_events",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "plan_version_publish_events",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "plan_versions",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "plan_versions",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "platform_skill_files",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "platform_skill_files",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "platform_skills",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "platform_skills",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "platform_tools",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "platform_tools",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "skill_update_logs",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "skill_update_logs",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "voice_templates",
+        "anon",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ],
+      [
+        "voice_templates",
+        "authenticated",
+        [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ]
+      ]
+    ],
+    "public_functions_anon_execute": [
+      [
+        "claim_invitation",
+        true
+      ],
+      [
+        "consume_demo_voice_call",
+        true
+      ],
+      [
+        "reserve_demo_voice_call",
+        true
+      ]
+    ]
+  },
+  "global_authenticated_read_grants": [
+    [
+      "agent_tools",
+      true
+    ],
+    [
+      "voice_agents",
+      true
+    ]
+  ],
+  "global_authenticated_read_policies": [
+    {
+      "table": "agent_tools",
+      "name": "Allow authenticated users to subscribe to agent_tools changes",
+      "roles": [
+        "authenticated"
+      ],
+      "command": "SELECT",
+      "using": "true"
+    },
+    {
+      "table": "voice_agents",
+      "name": "Allow authenticated users to subscribe to voice_agents changes",
+      "roles": [
+        "authenticated"
+      ],
+      "command": "SELECT",
+      "using": "true"
+    }
+  ],
+  "anonymous_zero_row_statuses": {
+    "call_logs": 200,
+    "call_artifacts": 200,
+    "organization_skill_files": 200,
+    "agent_skills": 200,
+    "platform_tools": 200,
+    "plan_versions": 200
+  },
+  "notification_configuration": [
+    {
+      "platform_admin_email": false,
+      "verification_from_email": false,
+      "verification_from_name": false,
+      "telegram_notifications_enabled": false,
+      "telegram_chat_id": true,
+      "telegram_bot_token_encrypted": true,
+      "platform_admin_sms_notifications_enabled": false,
+      "platform_admin_whatsapp_notifications_enabled": false
+    }
+  ],
+  "organization_notification_settings_count": "0",
+  "email_failure_categories": [
+    [
+      "organization.invitation",
+      "domain_verification",
+      7,
+      0,
+      "2025-11-14"
+    ],
+    [
+      "user.email_verification",
+      "domain_verification",
+      6,
+      0,
+      "2025-10-29"
+    ]
+  ],
+  "oauth_attention_channel_states": {
+    "telegram_state": {
+      "skipped": 19
+    },
+    "sms_state": {
+      "skipped": 19
+    },
+    "organization_telegram_state": {
+      "skipped": 19
+    },
+    "organization_sms_state": {
+      "skipped": 19
+    }
+  },
+  "enabled_tool_auth_states": [
+    [
+      "ready",
+      11
+    ],
+    [
+      "reauth_required",
+      2
+    ]
+  ],
+  "notification_event_configuration": [
+    {
+      "event_key": "user.signup",
+      "is_enabled": true
+    },
+    {
+      "event_key": "user.password_reset",
+      "is_enabled": true
+    },
+    {
+      "event_key": "user.email_verification",
+      "is_enabled": true
+    },
+    {
+      "event_key": "subscription.created",
+      "is_enabled": true
+    },
+    {
+      "event_key": "subscription.cancelled",
+      "is_enabled": true
+    },
+    {
+      "event_key": "credits.purchased",
+      "is_enabled": true
+    },
+    {
+      "event_key": "organization.invitation",
+      "is_enabled": true
+    },
+    {
+      "event_key": "billing.payment_failed",
+      "is_enabled": true
+    },
+    {
+      "event_key": "credits.low_balance",
+      "is_enabled": true
+    },
+    {
+      "event_key": "tools.oauth_reauthorization_required",
+      "is_enabled": true
+    },
+    {
+      "event_key": "lead.interest_submitted",
+      "is_enabled": true
+    }
+  ],
+  "resend_domain_inspection": {
+    "http_status": 401,
+    "domains": [],
+    "error_code": "restricted_api_key"
+  },
+  "telegram_read_only_validation": {
+    "decryptable": true,
+    "token_field_present": true,
+    "get_me_status": 200,
+    "bot_ok": true,
+    "get_chat_status": 200,
+    "chat_accessible": true
+  },
+  "stripe": {
+    "secret_mode": "test",
+    "account": {
+      "http_status": 200,
+      "charges_enabled": false,
+      "payouts_enabled": false,
+      "details_submitted": false
+    },
+    "webhooks": {
+      "http_status": 200,
+      "endpoints": [
+        {
+          "url": "https://api.247ai.live/api/v1/billing/webhook/stripe",
+          "livemode": false,
+          "status": "enabled",
+          "enabled_events": [
+            "checkout.session.completed",
+            "customer.subscription.created",
+            "customer.subscription.updated",
+            "customer.subscription.deleted",
+            "invoice.payment_succeeded",
+            "invoice.payment_failed",
+            "payment_intent.succeeded",
+            "payment_intent.payment_failed"
+          ]
+        }
+      ]
+    }
+  },
+  "twilio": {
+    "http_status": 200,
+    "account_status": "active",
+    "account_type": "Trial",
+    "numbers": {
+      "http_status": 200,
+      "page_count": 1,
+      "has_more": false,
+      "correct_voice_webhook_count": 0,
+      "correct_status_webhook_count": 0
+    }
+  },
+  "twilio_routing_detail": [
+    {
+      "voice_host_category": "other_or_empty",
+      "voice_path_matches": true,
+      "status_host_category": "other_or_empty",
+      "status_path_matches": true,
+      "twiml_application_configured": false,
+      "sip_trunk_configured": false
+    }
+  ],
+  "supabase_auth_public_settings": {
+    "http_status": 200,
+    "disable_signup": false,
+    "mailer_autoconfirm": false,
+    "external_providers": {
+      "anonymous_users": false,
+      "apple": false,
+      "azure": false,
+      "bitbucket": false,
+      "discord": false,
+      "facebook": false,
+      "snapchat": false,
+      "figma": false,
+      "fly": false,
+      "github": false,
+      "gitlab": false,
+      "google": true,
+      "keycloak": false,
+      "kakao": false,
+      "linkedin": false,
+      "linkedin_oidc": true,
+      "notion": false,
+      "spotify": false,
+      "slack": false,
+      "slack_oidc": false,
+      "workos": false,
+      "twitch": false,
+      "twitter": false,
+      "email": true,
+      "phone": false,
+      "zoom": false
+    }
+  },
+  "legal": {
+    "legal_terms": {
+      "http_status": 404,
+      "version_number": null,
+      "has_content": false
+    },
+    "legal_privacy": {
+      "http_status": 404,
+      "version_number": null,
+      "has_content": false
+    }
+  },
+  "native_supabase_verified_mfa_factors": [],
+  "external_idp_mfa": "UNVERIFIED",
+  "backup_and_restore": "UNVERIFIED; no control-plane proof or restore performed",
+  "r2_lifecycle": "UNVERIFIED",
+  "github": {
+    "production_environment_protection_rules": [],
+    "production_environment_branch_policy": null,
+    "main_branch_protection_inspection_status": 403,
+    "main_branch_protection_inspection_reason": "repository-plan upgrade required; enforcement not established",
+    "latest_promotion_run": 39318381270,
+    "latest_promotion_voice_deployment_executed": true
+  },
+  "public_http": [
+    {
+      "url": "https://247ai.live/",
+      "status": 403,
+      "bytes": 17,
+      "headers": {
+        "Strict-Transport-Security": null,
+        "Content-Security-Policy": null,
+        "X-Content-Type-Options": null,
+        "X-Frame-Options": "SAMEORIGIN",
+        "Referrer-Policy": "same-origin",
+        "Permissions-Policy": null,
+        "Cache-Control": "private, max-age=0, no-store, no-cache, must-revalidate, post-check=0, pre-check=0"
+      },
+      "body": null
+    },
+    {
+      "url": "https://www.247ai.live/",
+      "status": 200,
+      "bytes": 73746,
+      "headers": {
+        "Strict-Transport-Security": null,
+        "Content-Security-Policy": null,
+        "X-Content-Type-Options": null,
+        "X-Frame-Options": null,
+        "Referrer-Policy": null,
+        "Permissions-Policy": null,
+        "Cache-Control": "s-maxage=31536000"
+      },
+      "body": null
+    },
+    {
+      "url": "https://api.247ai.live/health",
+      "status": 200,
+      "bytes": 18,
+      "headers": {
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none';",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Cache-Control": null
+      },
+      "body": {
+        "status": "ready"
+      }
+    },
+    {
+      "url": "https://api.247ai.live/health/ready",
+      "status": 200,
+      "bytes": 18,
+      "headers": {
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none';",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Cache-Control": null
+      },
+      "body": {
+        "status": "ready"
+      }
+    },
+    {
+      "url": "https://voice.247ai.live/health",
+      "status": 200,
+      "bytes": 41,
+      "headers": {
+        "Strict-Transport-Security": null,
+        "Content-Security-Policy": null,
+        "X-Content-Type-Options": null,
+        "X-Frame-Options": null,
+        "Referrer-Policy": null,
+        "Permissions-Policy": null,
+        "Cache-Control": null
+      },
+      "body": {
+        "status": "healthy",
+        "service": "voice-ws"
+      }
+    },
+    {
+      "url": "https://api.247ai.live/openapi.json",
+      "status": 200,
+      "bytes": 444669,
+      "headers": {
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none';",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Cache-Control": null
+      },
+      "body": null
+    },
+    {
+      "url": "https://www.247ai.live/auth/signup",
+      "status": 200,
+      "bytes": 21984,
+      "headers": {
+        "Strict-Transport-Security": null,
+        "Content-Security-Policy": null,
+        "X-Content-Type-Options": null,
+        "X-Frame-Options": null,
+        "Referrer-Policy": null,
+        "Permissions-Policy": null,
+        "Cache-Control": "s-maxage=31536000"
+      },
+      "body": null
+    },
+    {
+      "url": "https://www.247ai.live/privacy",
+      "status": 200,
+      "bytes": 25432,
+      "headers": {
+        "Strict-Transport-Security": null,
+        "Content-Security-Policy": null,
+        "X-Content-Type-Options": null,
+        "X-Frame-Options": null,
+        "Referrer-Policy": null,
+        "Permissions-Policy": null,
+        "Cache-Control": "s-maxage=31536000"
+      },
+      "body": null
+    },
+    {
+      "url": "https://www.247ai.live/terms",
+      "status": 200,
+      "bytes": 25339,
+      "headers": {
+        "Strict-Transport-Security": null,
+        "Content-Security-Policy": null,
+        "X-Content-Type-Options": null,
+        "X-Frame-Options": null,
+        "Referrer-Policy": null,
+        "Permissions-Policy": null,
+        "Cache-Control": "s-maxage=31536000"
+      },
+      "body": null
+    },
+    {
+      "url": "https://www.247ai.live/robots.txt",
+      "status": 200,
+      "bytes": 345,
+      "headers": {
+        "Strict-Transport-Security": null,
+        "Content-Security-Policy": null,
+        "X-Content-Type-Options": null,
+        "X-Frame-Options": null,
+        "Referrer-Policy": null,
+        "Permissions-Policy": null,
+        "Cache-Control": "public, max-age=0, must-revalidate"
+      },
+      "body": null
+    },
+    {
+      "url": "https://www.247ai.live/sitemap.xml",
+      "status": 200,
+      "bytes": 2128,
+      "headers": {
+        "Strict-Transport-Security": null,
+        "Content-Security-Policy": null,
+        "X-Content-Type-Options": null,
+        "X-Frame-Options": null,
+        "Referrer-Policy": null,
+        "Permissions-Policy": null,
+        "Cache-Control": "public, max-age=0, must-revalidate"
+      },
+      "body": null
+    }
+  ],
+  "tests": {
+    "backend_shared": {
+      "passed": 2546,
+      "failed": 1,
+      "skipped": 40,
+      "python": "3.11.0",
+      "remaining_failure": "backend/tests/call_logs/test_dashboard_analytics.py::test_agent_names_and_utc_hours_are_scoped"
+    },
+    "voice": {
+      "passed": 142,
+      "failed": 0,
+      "python": "3.11.0"
+    },
+    "frontend": {
+      "passed": 1287,
+      "failed": 2,
+      "files": 206,
+      "node": "26.7.0",
+      "failures": [
+        "src/app/__tests__/sitemap.test.ts",
+        "src/app/__tests__/seo-routes.test.ts"
+      ]
+    },
+    "agent_evals": {
+      "passed": 34,
+      "failed": 0
+    },
+    "typescript": "PASS",
+    "frontend_lint": {
+      "errors": 0,
+      "warnings": 10
+    },
+    "clean_frontend_build": "PASS; no production secrets supplied",
+    "migration_graph": "PASS; one head",
+    "live_browser_call": "UNVERIFIED",
+    "live_pstn_call": "UNVERIFIED",
+    "full_e2e_lifecycle": "NOT RUN"
+  },
+  "npm_advisory_scan": {
+    "scope": "production lockfile; no exploit attempted",
+    "severity_counts": {
+      "info": 0,
+      "low": 3,
+      "moderate": 17,
+      "high": 2,
+      "critical": 0,
+      "total": 22
+    },
+    "packages": [
+      {
+        "name": "@opentelemetry/core",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<2.8.0",
+        "fix_available": {
+          "name": "@opentelemetry/exporter-metrics-otlp-http",
+          "version": "0.223.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-8988-4f7v-96qf"
+        ]
+      },
+      {
+        "name": "@opentelemetry/exporter-logs-otlp-http",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=0.218.0",
+        "fix_available": {
+          "name": "@opentelemetry/exporter-logs-otlp-http",
+          "version": "0.223.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/exporter-metrics-otlp-http",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=0.218.0",
+        "fix_available": {
+          "name": "@opentelemetry/exporter-metrics-otlp-http",
+          "version": "0.223.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/exporter-trace-otlp-http",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=0.218.0",
+        "fix_available": {
+          "name": "@opentelemetry/exporter-trace-otlp-http",
+          "version": "0.223.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/instrumentation-document-load",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=0.44.1",
+        "fix_available": {
+          "name": "@opentelemetry/instrumentation-document-load",
+          "version": "0.68.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/instrumentation-fetch",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=0.218.0",
+        "fix_available": {
+          "name": "@opentelemetry/instrumentation-fetch",
+          "version": "0.223.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/instrumentation-user-interaction",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=0.44.1",
+        "fix_available": {
+          "name": "@opentelemetry/instrumentation-user-interaction",
+          "version": "0.67.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/otlp-exporter-base",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<=0.218.0",
+        "fix_available": {
+          "name": "@opentelemetry/exporter-metrics-otlp-http",
+          "version": "0.223.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/otlp-transformer",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<=0.218.0",
+        "fix_available": {
+          "name": "@opentelemetry/exporter-metrics-otlp-http",
+          "version": "0.223.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/resources",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "0.8.0 - 2.7.1",
+        "fix_available": {
+          "name": "@opentelemetry/resources",
+          "version": "2.12.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/sdk-logs",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=0.218.0",
+        "fix_available": {
+          "name": "@opentelemetry/sdk-logs",
+          "version": "0.223.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/sdk-metrics",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=2.7.1",
+        "fix_available": {
+          "name": "@opentelemetry/sdk-metrics",
+          "version": "2.12.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/sdk-trace-base",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=2.7.1",
+        "fix_available": {
+          "name": "@opentelemetry/sdk-trace-base",
+          "version": "2.12.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@opentelemetry/sdk-trace-web",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=2.7.1",
+        "fix_available": {
+          "name": "@opentelemetry/sdk-trace-web",
+          "version": "2.12.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "@tailwindcss/typography",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "<=0.0.0-insiders.fda8ce5 || >=0.5.5",
+        "fix_available": {
+          "name": "@tailwindcss/typography",
+          "version": "0.5.4",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "dompurify",
+        "severity": "low",
+        "is_direct": false,
+        "range": "<=3.4.15",
+        "fix_available": true,
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-p98j-92pf-mc4p",
+          "https://github.com/advisories/GHSA-6688-9rhm-gjv2"
+        ]
+      },
+      {
+        "name": "katex",
+        "severity": "low",
+        "is_direct": false,
+        "range": "0.11.0 - 0.18.1",
+        "fix_available": {
+          "name": "mermaid",
+          "version": "12.2.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-238p-pmpm-9mq7"
+        ]
+      },
+      {
+        "name": "mermaid",
+        "severity": "low",
+        "is_direct": true,
+        "range": "10.9.0-rc.1 - 12.1.0",
+        "fix_available": {
+          "name": "mermaid",
+          "version": "12.2.0",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": []
+      },
+      {
+        "name": "next",
+        "severity": "moderate",
+        "is_direct": true,
+        "range": "15.0.0 - 15.5.26",
+        "fix_available": {
+          "name": "next",
+          "version": "15.5.28",
+          "isSemVerMajor": false
+        },
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-4jqv-mc3x-m676",
+          "https://github.com/advisories/GHSA-mcj8-r9mp-w47p"
+        ]
+      },
+      {
+        "name": "postcss-selector-parser",
+        "severity": "moderate",
+        "is_direct": false,
+        "range": "<7.1.6",
+        "fix_available": {
+          "name": "@tailwindcss/typography",
+          "version": "0.5.4",
+          "isSemVerMajor": true
+        },
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-rj75-hqrm-r3gf"
+        ]
+      },
+      {
+        "name": "sharp",
+        "severity": "high",
+        "is_direct": true,
+        "range": "<0.35.5",
+        "fix_available": {
+          "name": "sharp",
+          "version": "0.35.5",
+          "isSemVerMajor": false
+        },
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-wq5f-xc86-pv6w"
+        ]
+      },
+      {
+        "name": "source-map-js",
+        "severity": "high",
+        "is_direct": false,
+        "range": "1.0.0 - 1.2.1",
+        "fix_available": true,
+        "advisory_urls": [
+          "https://github.com/advisories/GHSA-68fv-2mgg-jv7q"
+        ]
+      }
+    ]
+  },
+  "python_advisory_scan": {
+    "scope": "fresh backend dev requirements resolution, not deployed image SBOM",
+    "affected_packages": [
+      {
+        "name": "black",
+        "resolved_audit_environment_version": "24.10.0",
+        "advisories": [
+          {
+            "id": "PYSEC-2026-2121",
+            "aliases": [
+              "GHSA-3936-cmfr-pm3m",
+              "CVE-2026-32274"
+            ],
+            "fix_versions": [
+              "26.3.1"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-2120",
+            "aliases": [
+              "GHSA-v53h-f6m7-xcgm",
+              "CVE-2026-31900"
+            ],
+            "fix_versions": [
+              "26.3.0"
+            ]
+          }
+        ],
+        "production_image_version_verified": false
+      },
+      {
+        "name": "cryptography",
+        "resolved_audit_environment_version": "43.0.1",
+        "advisories": [
+          {
+            "id": "PYSEC-2026-1284",
+            "aliases": [
+              "CVE-2024-12797",
+              "GHSA-79v4-65xg-pq4g"
+            ],
+            "fix_versions": [
+              "44.0.1"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-2141",
+            "aliases": [
+              "GHSA-r6ph-v2qm-q3c2",
+              "CVE-2026-26007"
+            ],
+            "fix_versions": [
+              "46.0.5"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-35",
+            "aliases": [
+              "GHSA-m959-cc7f-wv43",
+              "CVE-2026-34073"
+            ],
+            "fix_versions": [
+              "46.0.6"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-3553",
+            "aliases": [
+              "GHSA-jwv3-5hgf-82ww",
+              "CVE-2026-69249"
+            ],
+            "fix_versions": [
+              "49.0.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-3554",
+            "aliases": [
+              "CVE-2026-69248",
+              "GHSA-m2h6-j472-rp4c"
+            ],
+            "fix_versions": [
+              "49.0.0"
+            ]
+          },
+          {
+            "id": "GHSA-537c-gmf6-5ccf",
+            "aliases": [],
+            "fix_versions": [
+              "48.0.1"
+            ]
+          }
+        ],
+        "production_image_version_verified": false
+      },
+      {
+        "name": "pyjwt",
+        "resolved_audit_environment_version": "2.10.1",
+        "advisories": [
+          {
+            "id": "PYSEC-2026-120",
+            "aliases": [
+              "GHSA-752w-5fwx-jx9f",
+              "CVE-2026-32597"
+            ],
+            "fix_versions": [
+              "2.12.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2025-183",
+            "aliases": [
+              "CVE-2025-45768"
+            ],
+            "fix_versions": []
+          },
+          {
+            "id": "PYSEC-2026-179",
+            "aliases": [
+              "GHSA-xgmm-8j9v-c9wx",
+              "CVE-2026-48526"
+            ],
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-175",
+            "aliases": [
+              "GHSA-993g-76c3-p5m4",
+              "CVE-2026-48522"
+            ],
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-177",
+            "aliases": [
+              "GHSA-fhv5-28vv-h8m8",
+              "CVE-2026-48524"
+            ],
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-178",
+            "aliases": [
+              "CVE-2026-48525",
+              "GHSA-w7vc-732c-9m39"
+            ],
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-176",
+            "aliases": [
+              "CVE-2026-48523",
+              "GHSA-jq35-7prp-9v3f"
+            ],
+            "fix_versions": [
+              "2.12.1"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-4145",
+            "aliases": [
+              "GHSA-ffc3-869f-jxw9",
+              "CVE-2026-102268"
+            ],
+            "fix_versions": [
+              "2.14.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-4149",
+            "aliases": [
+              "CVE-2026-102271",
+              "GHSA-p4g4-x82p-q773"
+            ],
+            "fix_versions": [
+              "2.14.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-4152",
+            "aliases": [
+              "CVE-2026-102274",
+              "GHSA-w6j9-cwv2-h6wq"
+            ],
+            "fix_versions": [
+              "2.14.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-4144",
+            "aliases": [
+              "CVE-2026-102267",
+              "GHSA-9v7f-9g4p-ffgj"
+            ],
+            "fix_versions": [
+              "2.14.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-4148",
+            "aliases": [
+              "CVE-2026-102270",
+              "GHSA-jwrc-g2q2-pq5p"
+            ],
+            "fix_versions": [
+              "2.14.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-4140",
+            "aliases": [
+              "GHSA-2gx3-rcp4-g85q",
+              "CVE-2026-101917"
+            ],
+            "fix_versions": [
+              "2.14.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-4141",
+            "aliases": [
+              "CVE-2026-101918",
+              "GHSA-42vr-xj54-vc7v"
+            ],
+            "fix_versions": [
+              "2.15.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-4147",
+            "aliases": [
+              "GHSA-hxm8-2xgr-2p9m",
+              "CVE-2026-102269"
+            ],
+            "fix_versions": [
+              "2.14.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-4183",
+            "aliases": [
+              "CVE-2026-102275",
+              "GHSA-x33g-cr3x-6449"
+            ],
+            "fix_versions": [
+              "2.15.0"
+            ]
+          }
+        ],
+        "production_image_version_verified": false
+      },
+      {
+        "name": "pytest",
+        "resolved_audit_environment_version": "8.3.4",
+        "advisories": [
+          {
+            "id": "PYSEC-2026-1845",
+            "aliases": [
+              "GHSA-6w46-j5rx-g56g",
+              "CVE-2025-71176"
+            ],
+            "fix_versions": [
+              "9.0.3"
+            ]
+          }
+        ],
+        "production_image_version_verified": false
+      },
+      {
+        "name": "python-dotenv",
+        "resolved_audit_environment_version": "1.0.1",
+        "advisories": [
+          {
+            "id": "PYSEC-2026-2270",
+            "aliases": [
+              "GHSA-mf9w-mj56-hr94",
+              "CVE-2026-28684"
+            ],
+            "fix_versions": [
+              "1.2.2"
+            ]
+          }
+        ],
+        "production_image_version_verified": false
+      },
+      {
+        "name": "python-multipart",
+        "resolved_audit_environment_version": "0.0.12",
+        "advisories": [
+          {
+            "id": "PYSEC-2026-1851",
+            "aliases": [
+              "CVE-2024-53981",
+              "GHSA-59g5-xgcq-4qw3"
+            ],
+            "fix_versions": [
+              "0.0.18"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-1852",
+            "aliases": [
+              "GHSA-wp53-j4wj-2cfg",
+              "CVE-2026-24486"
+            ],
+            "fix_versions": [
+              "0.0.22"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-3038",
+            "aliases": [
+              "CVE-2026-40347",
+              "GHSA-mj87-hwqh-73pj"
+            ],
+            "fix_versions": [
+              "0.0.26"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-3039",
+            "aliases": [
+              "CVE-2026-42561",
+              "GHSA-pp6c-gr5w-3c5g"
+            ],
+            "fix_versions": [
+              "0.0.27"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-3040",
+            "aliases": [
+              "GHSA-v9pg-7xvm-68hf",
+              "CVE-2026-53540"
+            ],
+            "fix_versions": [
+              "0.0.31"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-3036",
+            "aliases": [
+              "GHSA-5rvq-cxj2-64vf",
+              "CVE-2026-53539"
+            ],
+            "fix_versions": [
+              "0.0.30"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-3037",
+            "aliases": [
+              "CVE-2026-53538",
+              "GHSA-6jv3-5f52-599m"
+            ],
+            "fix_versions": [
+              "0.0.30"
+            ]
+          }
+        ],
+        "production_image_version_verified": false
+      },
+      {
+        "name": "requests",
+        "resolved_audit_environment_version": "2.32.3",
+        "advisories": [
+          {
+            "id": "PYSEC-2026-1872",
+            "aliases": [
+              "GHSA-9hjg-9r4m-mvj7",
+              "CVE-2024-47081"
+            ],
+            "fix_versions": [
+              "2.32.4"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-2275",
+            "aliases": [
+              "CVE-2026-25645",
+              "GHSA-gc5v-m9x4-r6x2"
+            ],
+            "fix_versions": [
+              "2.33.0"
+            ]
+          }
+        ],
+        "production_image_version_verified": false
+      },
+      {
+        "name": "starlette",
+        "resolved_audit_environment_version": "0.41.3",
+        "advisories": [
+          {
+            "id": "PYSEC-2026-1941",
+            "aliases": [
+              "GHSA-2c2j-9gv5-cj73",
+              "CVE-2025-54121"
+            ],
+            "fix_versions": [
+              "0.47.2"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-1942",
+            "aliases": [
+              "CVE-2025-62727",
+              "GHSA-7f5h-v6xp-fcq8"
+            ],
+            "fix_versions": [
+              "0.49.1"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-161",
+            "aliases": [
+              "X41-2026-002",
+              "GHSA-86qp-5c8j-p5mr",
+              "CVE-2026-48710"
+            ],
+            "fix_versions": [
+              "1.0.1"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-2281",
+            "aliases": [
+              "CVE-2026-48818",
+              "GHSA-wqp7-x3pw-xc5r"
+            ],
+            "fix_versions": [
+              "1.1.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-2280",
+            "aliases": [
+              "CVE-2026-48817",
+              "GHSA-x746-7m8f-x49c"
+            ],
+            "fix_versions": [
+              "1.1.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-249",
+            "aliases": [
+              "GHSA-82w8-qh3p-5jfq",
+              "CVE-2026-54283"
+            ],
+            "fix_versions": [
+              "1.3.1"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-248",
+            "aliases": [
+              "CVE-2026-54282",
+              "GHSA-jp82-jpqv-5vv3"
+            ],
+            "fix_versions": [
+              "1.3.0"
+            ]
+          }
+        ],
+        "production_image_version_verified": false
+      }
+    ]
+  }
+}

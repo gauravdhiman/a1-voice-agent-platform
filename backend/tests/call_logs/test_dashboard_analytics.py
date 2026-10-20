@@ -274,7 +274,7 @@ def test_org_calendar_period_uses_workspace_timezone_and_rejects_mixed_ranges(cl
         )
 
         conflicting_ranges = client.get(
-            f"/api/v1/calls/organization/{org}/analytics" "?period=today&period_days=7"
+            f"/api/v1/calls/organization/{org}/analytics?period=today&period_days=7"
         )
         assert conflicting_ranges.status_code == 422
         service.assert_awaited_once()
@@ -297,6 +297,8 @@ def test_platform_provider_failure_is_not_a_zero_response(client):
 async def test_agent_names_and_utc_hours_are_scoped():
     """An org report resolves only its agent names and normalizes offset hours."""
     org, agent = uuid4(), uuid4()
+    clock = MagicMock(wraps=datetime)
+    clock.now.return_value = datetime(2026, 9, 16, tzinfo=timezone.utc)
     row = {
         "organization_id": str(org),
         "agent_id": str(agent),
@@ -311,7 +313,10 @@ async def test_agent_names_and_utc_hours_are_scoped():
         MagicMock(data=[row]),
         MagicMock(data=[{"id": str(agent), "name": "Test agent"}]),
     ]
-    with patch("src.call_logs.service.supabase_config") as config:
+    with (
+        patch("src.call_logs.service.supabase_config") as config,
+        patch("src.call_logs.service.datetime", clock),
+    ):
         config.client.table.return_value = query
         result, error = await CallLogService().get_analytics(org)
     assert error is None

@@ -127,3 +127,20 @@ local dashboards, call correlation, privacy, alert rules and production rollout.
 The isolated worktree launcher provisions the monitoring stack. Backend and voice
 SDK exports are bounded and asynchronous; browser API correlation needs no public
 collector credentials.
+
+## Tracking, admission and crash recovery
+
+Install `voice-ws/requirements-dev.txt` in an isolated project environment.
+Run `pytest -c voice-ws/pytest.ini voice-ws/tests -q` in that voice environment;
+backend tests run separately because both runtimes own a `src` package.
+
+A call must claim its tracked slot through `admit_voice_call` before transport
+and provider startup. Admission serializes the quota check and claim and rejects
+replayed sessions; Twilio reuses its backend-created call row. Workers renew a
+90-second database lease every 20 seconds. Renewal failure cancels provider work.
+Expired sessions are finalized from their last confirmed activity and settled by
+the backend retry loop. Terminal updates cannot overwrite an already finalized
+call. Settlement and ledger linkage are atomic, retryable, and preserve demo
+exemption and the existing overdraft policy. Deploy all related migrations and
+runtimes together and drain active sessions first. A maximum duration for normal
+customer calls remains a launch policy decision; demo caps retain their contract.

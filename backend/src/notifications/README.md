@@ -172,7 +172,7 @@ await notification_service.send_notification(
 | POST | `/api/v1/auth/verify-email` | Public | Verify email token |
 | POST | `/api/v1/auth/resend-verification` | Public | Resend verification email |
 
-See [Notification System docs](../../docs/02_core_systems/notification_system.md) for the full reference.
+See [Notification System docs](../../../docs/02_core_systems/notification_system.md) for the full reference.
 
 ## Tests
 
@@ -185,3 +185,16 @@ pytest tests/notifications/ tests/auth/test_sign_up_flow.py -v
 cd frontend
 npx vitest run tests/services/test-auth-service-verification.test.ts
 ```
+
+## Saved-destination delivery checks
+
+Platform admins can POST `admin/settings/test`; org admins (or platform admins)
+can POST `organizations/{organization_id}/settings/test` under the notification
+API prefix. Body: `{"channel":"email"}` or `{"channel":"telegram"}` only. Arbitrary
+recipients/content are rejected. Probes use saved destinations and server-held
+credentials; org email probes require the saved additional alert inbox. Provider
+acceptance does not prove inbox receipt. No automatic send retry is performed.
+
+`EMAIL_VERIFICATION_REQUIRED` defaults to required in production, independent of
+sender completeness; explicit overrides are for isolated development. Configure
+both verification sender fields and verify the domain before onboarding.

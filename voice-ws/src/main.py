@@ -37,6 +37,7 @@ from shared.config.opentelemetry import (
     shutdown_opentelemetry,
 )
 from shared.observability.health import Readiness
+from shared.observability.privacy import protect_console_logs
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.voice_session_service import VoiceSessionService
 
@@ -49,6 +50,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("voice-ws")
+protect_console_logs()
 tracer = trace.get_tracer(__name__)
 
 

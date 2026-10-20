@@ -5,7 +5,7 @@ import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
-import { Resource } from "@opentelemetry/resources";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import { SemanticResourceAttributes } from "@opentelemetry/semantic-conventions";
 import { MeterProvider } from "@opentelemetry/sdk-metrics";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
@@ -97,7 +97,7 @@ export function initOpenTelemetry() {
 
   try {
     // Create resource
-    const resource = new Resource({
+    const resource = resourceFromAttributes({
       [SemanticResourceAttributes.SERVICE_NAME]:
         process.env.NEXT_PUBLIC_OTEL_SERVICE_NAME || "247ai-frontend",
       [SemanticResourceAttributes.SERVICE_VERSION]: "1.0.0",
@@ -106,7 +106,6 @@ export function initOpenTelemetry() {
     });
 
     // Create tracer provider
-    tracerProvider = new WebTracerProvider({ resource });
 
     // Set up trace exporter to send to OTel Collector
     // For browser-based telemetry, use localhost:4318 instead of 127.0.0.1 (which fails in Docker)
@@ -183,12 +182,11 @@ export function initOpenTelemetry() {
 
     // Add the batch span processor directly without custom filtering
     // We'll handle filtering at the exporter level or use environment variables
-    tracerProvider.addSpanProcessor(batchSpanProcessor);
+    tracerProvider = new WebTracerProvider({ resource, spanProcessors: [batchSpanProcessor] });
 
     tracerProvider.register();
 
     // Create logger provider
-    loggerProvider = new LoggerProvider({ resource });
 
     // Set up log exporter to send to OTel Collector
     // For browser-based telemetry, use localhost:4318 instead of 127.0.0.1 (which fails in Docker)
@@ -218,12 +216,9 @@ export function initOpenTelemetry() {
       });
     };
 
-    loggerProvider.addLogRecordProcessor(
-      new SimpleLogRecordProcessor(logExporter),
-    );
+    loggerProvider = new LoggerProvider({ resource, processors: [new SimpleLogRecordProcessor({ exporter: logExporter })] });
 
     // Create meter provider
-    meterProvider = new MeterProvider({ resource });
 
     // Set up metric exporter to send to OTel Collector
     // For browser-based telemetry, use localhost:4318 instead of 127.0.0.1 (which fails in Docker)
@@ -253,12 +248,12 @@ export function initOpenTelemetry() {
       });
     };
 
-    meterProvider.addMetricReader(
+    meterProvider = new MeterProvider({ resource, readers: [
       new PeriodicExportingMetricReader({
         exporter: metricExporter,
         exportIntervalMillis: 30000, // Export every 30 seconds (reduced from 60 seconds)
       }),
-    );
+    ] });
 
     isInitialized = true;
     console.log("OpenTelemetry initialized successfully");

@@ -117,6 +117,22 @@ describe("RealtimeService reconnect", () => {
     expect(subscribeCallbacks.length).toBe(1);
   });
 
+  it("subscribes only to safe invalidation rows and never forwards row content", async () => {
+    const service = getRealtimeService(queryClient as never);
+    const onUpdate = vi.fn();
+    service.subscribe({ subscriptionId: "agent-a", tables: ["agent_tools", "voice_agents"], onUpdate });
+    await flushSubscribe(1);
+    const [type, options, receive] = channelInstances[0].on.mock.calls[0];
+    expect(type).toBe("postgres_changes");
+    expect(options).toEqual({event: "*", schema: "public", table: "agent_change_events", filter: "agent_id=eq.agent-a"});
+    receive({ new: { agent_id: "agent-a", changed_at: "now", sensitive_config: "must-not-forward" } });
+    expect(onUpdate).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(onUpdate.mock.calls)).not.toContain("must-not-forward");
+    expect(queryClient.invalidateQueries).toHaveBeenCalled();
+    receive({ new: { agent_id: "agent-b" } });
+    expect(onUpdate).toHaveBeenCalledTimes(2);
+  });
+
   it("removes the dead channel and resubscribes after CHANNEL_ERROR", async () => {
     const service = getRealtimeService(queryClient as never);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});

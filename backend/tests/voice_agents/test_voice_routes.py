@@ -17,6 +17,7 @@ class TestVoiceRoutes:
     async def test_handle_twilio_incoming_agent_found(self):
         """Test successful Twilio incoming call returns Media Stream TwiML."""
         mock_request = MagicMock()
+        mock_request.headers = {}
         mock_request.form = AsyncMock(
             return_value={
                 "To": "+1234567890",
@@ -66,6 +67,7 @@ class TestVoiceRoutes:
     async def test_handle_twilio_incoming_agent_not_found(self):
         """Test Twilio incoming call when agent not found."""
         mock_request = MagicMock()
+        mock_request.headers = {}
         mock_request.form = AsyncMock(
             return_value={
                 "To": "+1234567890",
@@ -95,6 +97,7 @@ class TestVoiceRoutes:
     async def test_handle_twilio_incoming_missing_public_url(self):
         """Test Twilio incoming call when voice-ws URL is not configured."""
         mock_request = MagicMock()
+        mock_request.headers = {}
         mock_request.form = AsyncMock(
             return_value={
                 "To": "+1234567890",

@@ -110,6 +110,9 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 8. **[Current production secret map](05_operations/deployment/production-secret-map.md)** — where each secret category lives, how GitHub/GCP/OCI interact, and the soft-production launch checklist
 9. **[Worktree isolation and release strategy](05_operations/deployment/worktree-and-release-strategy.md)** — local Supabase sandboxes, shared staging, and production promotion
 
+10. **[October 19 readiness audit](05_operations/production-readiness-2026-10-19.md)** — dated findings and read-only evidence
+11. **[Readiness remediation and launch gates](05_operations/production-readiness-remediation-2026-10-19.md)** — prepared fixes, verification and founder actions
+
 #### Other operations
 
 1. **[Cloud staging environment](05_operations/staging_environment.md)** — shared release-validation DB; not for concurrent worktree sandboxes

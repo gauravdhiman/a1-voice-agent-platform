@@ -498,3 +498,13 @@ local dashboards, call correlation, privacy, alert rules and production rollout.
 The isolated worktree launcher provisions the monitoring stack. Backend and voice
 SDK exports are bounded and asynchronous; browser API correlation needs no public
 collector credentials.
+
+## Operational privacy and voice billing
+
+`observability.privacy.protect_console_logs()` applies the same content-free
+allowlist to console handlers even with OTLP disabled, including token-bearing
+Uvicorn access logs. Use structured safe events for operational diagnostics.
+`billing.voice_settlement.settle_voice_call()` calls the service-only atomic
+settlement RPC; provider/database failures remain pending for backend recovery.
+Shared entitlement resolution runs its synchronous database reads in a worker
+thread and supplies the server-owned concurrency limit to atomic admission.
