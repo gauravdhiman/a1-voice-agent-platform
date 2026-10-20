@@ -12,6 +12,11 @@ type SitemapPage = {
 /** Directory pages generated from the AI tools data. */
 const aiToolsPages: SitemapPage[] = [
   { path: "/ai-tools", changeFrequency: "weekly", priority: 0.7 },
+  {
+    path: "/ai-tools/savings-calculator",
+    changeFrequency: "monthly",
+    priority: 0.7,
+  },
   ...TOOL_CATEGORIES.map(
     (category): SitemapPage => ({
       path: `/ai-tools/${category.slug}`,
