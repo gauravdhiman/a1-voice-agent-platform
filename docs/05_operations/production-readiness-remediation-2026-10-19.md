@@ -3,7 +3,7 @@
 This branch prepares fixes; it does **not** establish that production is ready.
 No production/staging migration, deployment, paid call, payment or notification
 was performed. Worktree: `.worktrees/codex-production-readiness-fixes`, branch
-`codex/production-readiness-fixes`, based on main commit `5eef740f`.
+`codex/production-readiness-fixes`, rebased onto main commit `5c360153`.
 The [original audit](production-readiness-2026-10-19.md) preserves the observed
 production state. Approved plan/catalog changes remain in the separate workstream.
 
@@ -154,7 +154,7 @@ database was used for mutation.
 | --- | --- |
 | Backend, shared and deployment Python suites | **2,650 passed, 57 skipped**; includes real shared-Redis quota checks. Optional provider/database lanes do not become PASS from a skip. |
 | Voice runtime suite | **145 passed**, in its separate Python environment with the patched pytest/asyncio dependencies |
-| Frontend suite | **209 files / 1,296 tests passed** |
+| Frontend suite | **209 files / 1,297 tests passed** after rebasing onto current main and preserving its expanded sitemap coverage |
 | Fresh PostgreSQL migration/security tests | **6 passed** against the preceding schema; all five new migrations then applied to head `20261019000005`; all five read-only security violation counts were zero |
 | Real SQL financial/admission tests | **11 passed** against the final migration chain, including concurrent debit/admission, replay rejection, rollback, leases and recovery |
 | Deterministic agent evaluations | **34/34 passed**, across Calendar, callback, lead capture and Resend; no live provider delivery/latency claim |
