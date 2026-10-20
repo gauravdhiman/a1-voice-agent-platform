@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TelegramBotCredentialRow } from "@/components/notifications/telegram-bot-credential-row";
+import { NotificationDeliveryTest } from "@/components/notifications/notification-delivery-test";
 import {
   notificationSettingsService,
   type PlatformNotificationSettings,
@@ -167,12 +168,12 @@ export function PlatformNotificationSettingsForm() {
           ) : resendConfigured === false ? (
             <Badge variant="secondary">Resend API key missing</Badge>
           ) : null}
-          {verificationActive ? (
+          {settings?.email_verification_active ? (
             <Badge className="bg-blue-600 hover:bg-blue-600/90">
-              Verification active
+              Verification required
             </Badge>
           ) : (
-            <Badge variant="secondary">Verification off (set sender)</Badge>
+            <Badge variant="secondary">Verification optional</Badge>
           )}
           {resendConfigured === true && platformAdminEmail.trim() ? (
             <Badge className="bg-green-600 hover:bg-green-600/90">
@@ -183,11 +184,14 @@ export function PlatformNotificationSettingsForm() {
           )}
         </div>
         <p className="text-sm text-muted-foreground">
-          Signup email verification is enabled automatically when both From email
-          and From name are set. Clear either field to disable verification. The
-          Resend API key is set via environment variables (
+          Production signup requires email verification even when sender settings
+          are missing. Set both From email and From name and verify the sending
+          domain in Resend. The API key is set via environment variables (
           <code className="text-xs">RESEND_API_KEY</code>).
         </p>
+        {settings?.email_verification_active && !verificationActive ? (
+          <Alert variant="destructive"><AlertDescription>Verification is required, but the sender is incomplete. Configure it before onboarding customers.</AlertDescription></Alert>
+        ) : null}
         <Alert>
           <AlertDescription className="text-sm">
             If emails show as sent in logs but do not arrive, check spam and the{" "}
@@ -400,6 +404,7 @@ export function PlatformNotificationSettingsForm() {
         </div>
       </section>
 
+      <NotificationDeliveryTest disabled={saving} />
       <Button type="submit" disabled={saving}>
         {saving ? (
           <>

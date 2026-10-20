@@ -62,12 +62,14 @@ from shared.config.opentelemetry import (
     shutdown_opentelemetry,
 )
 from shared.observability.health import Readiness
+from shared.observability.privacy import protect_console_logs
 
 # Configure logging to ensure it outputs to stdout with proper formatting
 # The OpenTelemetry logging handler is added in the setup_manual_opentelemetry function
 logging.basicConfig(
     level=logging_level, format="%(name)s - %(levelname)s - %(message)s"
 )
+protect_console_logs()
 
 # Set up OpenTelemetry explicitly to ensure logger and meter providers are available
 # This needs to happen before configuring logging to ensure proper integration

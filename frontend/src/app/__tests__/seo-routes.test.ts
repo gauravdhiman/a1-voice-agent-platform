@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TOOL_CATEGORIES, TOOLS } from "@/content/ai-tools/tools";
 
 import robots from "../robots";
 import sitemap from "../sitemap";
@@ -84,6 +85,38 @@ describe("public SEO routes", () => {
         changeFrequency: "monthly",
         priority: 0.5,
       },
+      { url: `${SITE_URL}/blog`, changeFrequency: "weekly", priority: 0.7 },
+      {
+        url: `${SITE_URL}/blog/how-much-does-one-missed-call-cost`,
+        changeFrequency: "monthly",
+        priority: 0.6,
+      },
+      {
+        url: `${SITE_URL}/blog/ai-receptionist-vs-answering-service`,
+        changeFrequency: "monthly",
+        priority: 0.6,
+      },
+      {
+        url: `${SITE_URL}/blog/ai-receptionist-explained`,
+        changeFrequency: "monthly",
+        priority: 0.6,
+      },
+      {
+        url: `${SITE_URL}/blog/how-much-does-a-missed-call-cost`,
+        changeFrequency: "monthly",
+        priority: 0.6,
+      },
+      { url: `${SITE_URL}/ai-tools`, changeFrequency: "weekly", priority: 0.7 },
+      ...TOOL_CATEGORIES.map((category) => ({
+        url: `${SITE_URL}/ai-tools/${category.slug}`,
+        changeFrequency: "weekly",
+        priority: 0.6,
+      })),
+      ...TOOLS.map((tool) => ({
+        url: `${SITE_URL}/ai-tools/${tool.category}/${tool.slug}`,
+        changeFrequency: "monthly",
+        priority: 0.5,
+      })),
     ]);
   });
 

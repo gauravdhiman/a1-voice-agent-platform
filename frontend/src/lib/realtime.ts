@@ -138,10 +138,10 @@ export interface DatabaseChangePayload {
   /** Type of change: INSERT, UPDATE, DELETE */
   eventType: 'INSERT' | 'UPDATE' | 'DELETE'
 
-  /** Database table name */
+  /** Logical source name; browser events contain invalidation IDs only. */
   table: string
 
-  /** Changed record data (for UPDATE, includes old and new values) */
+  /** Invalidation identifiers only; fetch authorized data through the backend. */
   record: {
     old?: Record<string, unknown>
     new?: Record<string, unknown>
@@ -238,20 +238,31 @@ class RealtimeService {
     const channelName = `realtime:${subscriptionId}`
     const channel = supabase.channel(channelName)
 
-    tables.forEach((table) => {
-      channel.on(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'postgres_changes' as any,
-        {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          event: eventType as any,
-          schema: 'public',
-          table: table,
-          ...(filter ? { filter: `${filter.column}=eq.${filter.value}` } : {}),
-        },
-        (payload: DatabaseChangePayload) => this.handleDatabaseChange(payload, options)
-      )
-    })
+    // Private source tables are never readable/published to browser clients.
+    // The row contains only tenant/agent IDs and a monotonically increasing revision.
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'agent_change_events',
+        filter: `agent_id=eq.${filter?.value ?? subscriptionId}`,
+      },
+      (payload) => {
+        const row = payload.new as Record<string, unknown>
+        if (row.agent_id !== (filter?.value ?? subscriptionId)) return
+        if (eventType !== '*' && eventType !== 'UPDATE') return
+        for (const table of tables) {
+          if (table !== 'agent_tools' && table !== 'voice_agents') continue
+          this.handleDatabaseChange({
+            eventType: 'UPDATE',
+            table,
+            record: { new: { id: row.agent_id, agent_id: row.agent_id } },
+            timestamp: String(row.changed_at ?? ''),
+          }, options)
+        }
+      }
+    )
 
     this.channels.set(subscriptionId, channel)
 

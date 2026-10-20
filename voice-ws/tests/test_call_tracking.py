@@ -34,6 +34,9 @@ class _Query:
     def limit(self, *_args, **_kwargs):
         return self
 
+    def order(self, *_args, **_kwargs):
+        return self
+
     def update(self, payload):
         self.operation = "update"
         self.payload = payload
@@ -84,6 +87,8 @@ class _Rpc:
 
     def execute(self):
         self.client.rpc_payload = self.client.rpc_args
+        if self.client.rpc_name == "admit_voice_call":
+            return _Result({"success": True, "call_log_id": "existing-call-log"})
         return _Result(self.client.rpc_result)
 
 
@@ -117,6 +122,7 @@ class _Client:
         return _Query(self, table)
 
     def rpc(self, *_args, **_kwargs):
+        self.rpc_name = _args[0]
         self.rpc_args = _kwargs or (_args[1] if len(_args) > 1 else {})
         return _Rpc(self)
 
@@ -165,9 +171,10 @@ async def test_start_call_tracking_persists_web_source_metadata():
     finally:
         call_tracking.supabase_config._client = original_client
 
-    assert client.inserts[0]["source_type"] == "web_embed"
-    assert client.inserts[0]["source_url"] == "https://example.com/support"
-    assert client.inserts[0]["source_domain"] == "example.com"
+    assert client.rpc_payload["p_source_type"] == "web_embed"
+    assert client.rpc_payload["p_source_url"] == "https://example.com/support"
+    assert client.rpc_payload["p_source_domain"] == "example.com"
+    assert client.rpc_payload["p_concurrent_limit"] is None
 
 
 @pytest.mark.asyncio
@@ -201,13 +208,9 @@ async def test_end_call_tracking_records_duration_and_credit_transaction():
     finally:
         call_tracking.supabase_config._client = original_client
 
-    assert client.rpc_payload["p_credits_needed"] == 20
     assert client.rpc_payload["p_call_log_id"] == "call-log-1"
-    assert any(
-        payload.get("credits_consumed") == 20
-        for table, payload in client.updates
-        if table == "call_logs"
-    )
+    # Credit calculation and linkage are atomic inside the database RPC.
+    assert client.rpc_payload == {"p_call_log_id": "call-log-1"}
     status_updates = [
         payload
         for table, payload in client.updates
@@ -248,98 +251,33 @@ async def test_end_call_tracking_persists_safe_failure_details():
         if table == "call_logs" and payload.get("status") == "failed"
     ]
     assert status_updates[0]["failure_code"] == "model_reasoning_required"
-    assert status_updates[0]["failure_message"] == (
-        "Review the model and reasoning configuration."
+    assert (
+        status_updates[0]["failure_message"]
+        == "Review the model and reasoning configuration."
     )
 
 
 @pytest.mark.asyncio
-async def test_completed_call_settles_full_usage_when_rpc_reports_overdraft():
-    """An admitted call is linked even when final settlement crosses zero."""
+async def test_completed_call_delegates_authoritative_billing_to_atomic_rpc():
+    """Caller-provided duration/org cannot override the persisted call row."""
     client = _Client()
-    client.rpc_result = {
-        "success": True,
-        "balance_after": -20,
-        "plan_used": 0,
-        "admin_used": 0,
-        "purchased_used": 0,
-        "overdraft_used": 20,
-        "transaction_id": str(client.transaction_id),
-    }
+    await _bill_completed_call(
+        client, call_log_id="call-log-1", organization_id=uuid4(), duration_seconds=999
+    )
+    assert client.rpc_payload == {"p_call_log_id": "call-log-1"}
+    assert client.updates == []
 
+
+@pytest.mark.asyncio
+async def test_failed_settlement_does_not_mask_websocket_teardown():
+    """The database keeps pending work for the backend retry loop."""
+    client = _Client()
+    client.rpc_result = {"success": False, "error": "voice_rate_unavailable"}
     await _bill_completed_call(
         client,
         call_log_id="call-log-1",
         organization_id=client.organization_id,
         duration_seconds=61,
     )
-
-    usage_updates = [
-        payload
-        for table, payload in client.updates
-        if table == "call_logs" and "credits_consumed" in payload
-    ]
-    assert usage_updates == [
-        {
-            "credits_consumed": 20,
-            "credit_transaction_id": str(client.transaction_id),
-        }
-    ]
-
-
-@pytest.mark.asyncio
-async def test_completed_call_with_zero_rate_is_recorded_without_a_debit():
-    """A zero voice rate leaves the call free while preserving call usage."""
-    client = _Client()
-    client.event_cost = 0
-
-    await _bill_completed_call(
-        client,
-        call_log_id="call-log-1",
-        organization_id=client.organization_id,
-        duration_seconds=61,
-    )
-
-    assert client.rpc_payload is None
-    assert any(
-        table == "call_logs" and payload.get("credits_consumed") == 0
-        for table, payload in client.updates
-    )
-
-
-@pytest.mark.asyncio
-async def test_demo_agent_skips_billing_and_marks_zero_credits():
-    """Demo agents are not billed — zero credits, no RPC."""
-    client = _Client()
-    client.is_demo = True
-
-    await _bill_completed_call(
-        client,
-        call_log_id="call-log-1",
-        organization_id=client.organization_id,
-        duration_seconds=300,
-        agent_id=str(client.transaction_id),
-    )
-
-    assert client.rpc_payload is None
-    assert any(
-        table == "call_logs" and payload.get("credits_consumed") == 0
-        for table, payload in client.updates
-    )
-
-
-@pytest.mark.asyncio
-async def test_demo_agent_missing_column_falls_through_to_normal_billing():
-    """Pre-migration DB without is_demo column falls through to normal billing."""
-    client = _Client()
-    client.is_demo_missing = True
-
-    await _bill_completed_call(
-        client,
-        call_log_id="call-log-1",
-        organization_id=client.organization_id,
-        duration_seconds=61,
-        agent_id=str(client.transaction_id),
-    )
-
-    assert client.rpc_payload is not None
+    assert client.rpc_payload == {"p_call_log_id": "call-log-1"}
+    assert client.updates == []

@@ -1,6 +1,7 @@
 """Security and routing tests for Twilio phone-number webhooks."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import urlencode
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,8 @@ from src.voice_agents.voice_routes import (
     handle_twilio_incoming,
     handle_twilio_status_callback,
 )
+from starlette.requests import Request
+from twilio.request_validator import RequestValidator
 
 
 def _request(form: dict[str, str], *, signature: str = "signature"):
@@ -19,6 +22,39 @@ def _request(form: dict[str, str], *, signature: str = "signature"):
     request.url = "https://api.example.com/api/v1/voice/twilio/incoming"
     request.query_params = {}
     return request
+
+
+@pytest.mark.asyncio
+async def test_signed_bounded_urlencoded_body_is_parsed_and_verified():
+    """Real streamed form parsing preserves Twilio's signature contract."""
+    params = {"CallSid": "CA123", "To": "+14155550100"}
+    url = "https://api.example.test/api/v1/voice/twilio/incoming"
+    signature = RequestValidator("test-token").compute_signature(url, params)
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "https",
+            "server": ("api.example.test", 443),
+            "path": "/api/v1/voice/twilio/incoming",
+            "query_string": b"",
+            "headers": [
+                (b"content-type", b"application/x-www-form-urlencoded"),
+                (b"x-twilio-signature", signature.encode()),
+            ],
+        },
+        AsyncMock(
+            return_value={
+                "type": "http.request",
+                "body": urlencode(params).encode(),
+                "more_body": False,
+            }
+        ),
+    )
+    with patch("src.voice_agents.voice_routes.settings") as settings:
+        settings.twilio_webhook_signature_validation_enabled = True
+        settings.twilio_auth_token = "test-token"
+        assert await _validated_form(request) == params
 
 
 @pytest.mark.asyncio
@@ -39,8 +75,61 @@ async def test_invalid_twilio_signature_is_rejected():
 
 
 @pytest.mark.asyncio
+async def test_unsigned_twilio_payload_is_not_parsed():
+    """Missing signatures are denied before any potentially costly parsing."""
+    request = _request({}, signature="")
+    with patch("src.voice_agents.voice_routes.settings") as settings:
+        settings.twilio_webhook_signature_validation_enabled = True
+        settings.twilio_auth_token = "test-token"
+        with pytest.raises(HTTPException) as exc:
+            await _validated_form(request)
+    assert exc.value.status_code == 403
+    request.form.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_multipart_is_rejected_even_with_a_signature():
+    """Voice callbacks never need file uploads or multipart parsing."""
+    request = _request({})
+    request.headers["content-type"] = "multipart/form-data; boundary=test"
+    with patch("src.voice_agents.voice_routes.settings") as settings:
+        settings.twilio_webhook_signature_validation_enabled = True
+        settings.twilio_auth_token = "test-token"
+        with pytest.raises(HTTPException) as exc:
+            await _validated_form(request)
+    assert exc.value.status_code == 415
+    request.form.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_chunked_twilio_body_has_a_hard_limit():
+    """A forged/absent Content-Length cannot bypass the stream byte bound."""
+    from starlette.requests import Request
+
+    receive = AsyncMock(return_value={"type": "http.request", "body": b"x" * 65537})
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/",
+            "headers": [
+                (b"content-type", b"application/x-www-form-urlencoded"),
+                (b"x-twilio-signature", b"test"),
+            ],
+        },
+        receive,
+    )
+    with patch("src.voice_agents.voice_routes.settings") as settings:
+        settings.twilio_webhook_signature_validation_enabled = True
+        settings.twilio_auth_token = "test-token"
+        with pytest.raises(HTTPException) as exc:
+            await _validated_form(request)
+    assert exc.value.status_code == 413
+
+
+@pytest.mark.asyncio
 async def test_incoming_call_routes_from_phone_numbers_source_of_truth():
-    """Inbound routing resolves the agent through phone_numbers, not agent.phone_number."""
+    """Inbound routing resolves the agent through the phone_numbers relation."""
     request = _request(
         {"To": "+14155550100", "From": "+14155550199", "CallSid": "CA123"},
     )

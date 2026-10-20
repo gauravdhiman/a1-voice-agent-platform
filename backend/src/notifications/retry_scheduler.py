@@ -76,6 +76,20 @@ class NotificationRetryScheduler:
             except Exception:
                 logger.exception("Legal document update outbox iteration failed")
             try:
+                from src.call_artifacts.retention import remove_expired_recordings
+
+                await remove_expired_recordings()
+            except Exception:
+                logger.exception("Recording retention iteration failed")
+            try:
+                from src.billing.voice_settlement_retry import (
+                    retry_pending_voice_settlements,
+                )
+
+                await retry_pending_voice_settlements()
+            except Exception:
+                logger.exception("Voice settlement retry iteration failed")
+            try:
                 await asyncio.sleep(self.check_interval_hours * 3600)
             except asyncio.CancelledError:
                 break

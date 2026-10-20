@@ -18,7 +18,11 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.trace import Status
 
-from shared.observability.privacy import TelemetryLogFilter, safe_attributes
+from shared.observability.privacy import (
+    TelemetryLogFilter,
+    protect_console_logs,
+    safe_attributes,
+)
 
 from . import settings
 
@@ -105,7 +109,7 @@ def _exporter(signal):
         "logs": "OTLPLogExporter",
     }[signal]
     module = import_module(
-        f"opentelemetry.exporter.otlp.proto."
+        "opentelemetry.exporter.otlp.proto."
         f"{'grpc' if protocol == 'grpc' else 'http'}.{suffix}"
     )
     kwargs = {"timeout": 3}
@@ -141,6 +145,7 @@ def _parse_headers(value: str | None) -> dict[str, str]:
 def setup_opentelemetry(app_name: str = "247ai-backend"):
     """Initialize once per process. Invalid enabled configuration fails startup."""
     global tracer_provider, logger_provider, meter_provider, _handler, _started
+    protect_console_logs()
     if not settings.otel_enabled:
         return
     with _lock:

@@ -47,7 +47,9 @@ class PlatformNotificationSettings(BaseModel):
     platform_admin_whatsapp_notifications_enabled: bool = False
     whatsapp_sender_configured: bool = Field(
         False,
-        description="Whether Twilio WhatsApp credentials, sender, and template are configured",
+        description=(
+            "Whether Twilio WhatsApp credentials, sender, and template are configured"
+        ),
     )
     sms_sender_configured: bool = Field(
         False, description="Whether Twilio credentials and an SMS sender are configured"
@@ -56,7 +58,10 @@ class PlatformNotificationSettings(BaseModel):
     verification_from_name: Optional[str] = Field(None, max_length=100)
     email_verification_active: bool = Field(
         False,
-        description="True when From email and From name are both configured",
+        description=(
+            "Whether signup requires verification; required by default in "
+            "production even if the sender is missing"
+        ),
     )
     telegram_chat_id: Optional[str] = Field(None, max_length=100)
     telegram_notifications_enabled: bool = False

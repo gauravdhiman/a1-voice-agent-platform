@@ -9,6 +9,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from opentelemetry import trace
+from src.call_artifacts.retention import recording_expired
 
 from shared.config import supabase_config
 
@@ -192,7 +193,7 @@ class CallLogService:
                 try:
                     artifact_result = (
                         self.supabase.table("call_artifacts")
-                        .select("call_log_id")
+                        .select("call_log_id,retention_expires_at")
                         .eq("organization_id", str(organization_id))
                         .eq("artifact_type", "recording")
                         .eq("status", "completed")
@@ -200,12 +201,13 @@ class CallLogService:
                     )
                     recording_call_ids = {
                         str(row["call_log_id"])
-                        for row in (artifact_result.data or [])
-                        if row.get("call_log_id")
+                        for row in artifact_result.data or []
+                        if row.get("call_log_id") and not recording_expired(row)
                     }
                 except Exception:  # noqa: BLE001 - old DBs may not have artifacts yet
                     logger.warning(
-                        "Could not load recording-only call logs; returning no recordings",
+                        "Could not load recording-only call logs; returning no"
+                        " recordings",
                         exc_info=True,
                     )
                     recording_call_ids = set()
@@ -254,14 +256,16 @@ class CallLogService:
                 try:
                     artifact_result = (
                         self.supabase.table("call_artifacts")
-                        .select("call_log_id")
+                        .select("call_log_id,retention_expires_at")
                         .in_("call_log_id", [str(row["id"]) for row in rows])
                         .eq("artifact_type", "recording")
                         .eq("status", "completed")
                         .execute()
                     )
                     recording_call_ids = {
-                        str(row["call_log_id"]) for row in (artifact_result.data or [])
+                        str(row["call_log_id"])
+                        for row in artifact_result.data or []
+                        if not recording_expired(row)
                     }
                 except Exception:  # noqa: BLE001 - old DBs may not have artifacts yet
                     logger.warning(
@@ -351,7 +355,8 @@ class CallLogService:
                 query = (
                     self.supabase.table("call_logs")
                     .select(
-                        "id,organization_id,agent_id,created_at,duration,status,source_type"
+                        "id,organization_id,agent_id,created_at,duration,st"
+                        "atus,source_type"
                     )
                     .gte("created_at", month_ago.isoformat())
                     .lt("created_at", now.isoformat())
@@ -446,7 +451,7 @@ class CallLogService:
                     query = query.eq("organization_id", str(organization_id))
                 agents_result = await asyncio.to_thread(query.execute)
                 agent_names.update(
-                    {agent["id"]: agent["name"] for agent in (agents_result.data or [])}
+                    {agent["id"]: agent["name"] for agent in agents_result.data or []}
                 )
 
             for agent_id, agent in calls_by_agent.items():

@@ -14,6 +14,7 @@ next session until credits are restored.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -358,63 +359,83 @@ async def _resolve_org_entitlements(
     client: Any, organization_id: UUID
 ) -> dict[str, dict[str, Any]]:
     """Return sparse limits/features maps keyed by entitlement key."""
-    sub_result = (
-        client.table("organization_subscriptions")
-        .select("status, plan_version_id")
-        .eq("organization_id", str(organization_id))
-        .limit(1)
-        .execute()
-    )
-    plan_version_id: Optional[str] = None
-    if (
-        sub_result.data
-        and sub_result.data[0].get("status") in ACTIVE_SUBSCRIPTION_STATUSES
-    ):
-        plan_version_id = sub_result.data[0].get("plan_version_id")
 
-    if not plan_version_id:
-        free_result = (
-            client.table("plan_versions")
-            .select("id, plan_products!inner(slug)")
-            .eq("plan_products.slug", FREE_PLAN_PRODUCT_SLUG)
-            .eq("is_current_for_signup", True)
-            .eq("status", "published")
-            .order("version_number", desc=True)
+    def load():
+        sub_result = (
+            client.table("organization_subscriptions")
+            .select("status, plan_version_id")
+            .eq("organization_id", str(organization_id))
             .limit(1)
             .execute()
         )
-        if not free_result.data:
-            return {"limits": {}, "features": {}}
-        plan_version_id = free_result.data[0]["id"]
+        plan_version_id: Optional[str] = None
+        if (
+            sub_result.data
+            and sub_result.data[0].get("status") in ACTIVE_SUBSCRIPTION_STATUSES
+        ):
+            plan_version_id = sub_result.data[0].get("plan_version_id")
 
-    assigned_result = (
-        client.table("plan_version_entitlements")
-        .select("entitlement_key, value")
-        .eq("plan_version_id", str(plan_version_id))
-        .execute()
-    )
-    catalog_result = (
-        client.table("entitlement_definitions")
-        .select("key, kind, default_when_absent")
-        .eq("is_active", True)
-        .execute()
-    )
-    assigned_by_key = {
-        row["entitlement_key"]: row["value"] for row in (assigned_result.data or [])
-    }
-    limits: dict[str, Any] = {}
-    features: dict[str, Any] = {}
-    for row in catalog_result.data or []:
-        key = row["key"]
-        raw = assigned_by_key.get(key)
-        if raw is None:
-            raw = row.get("default_when_absent")
-        if row["kind"] == "limit":
-            limits[key] = raw
-        else:
-            effective, _ = _parse_entitlement_value(raw)
-            features[key] = effective
-    return {"limits": limits, "features": features}
+        if not plan_version_id:
+            free_result = (
+                client.table("plan_versions")
+                .select("id, plan_products!inner(slug)")
+                .eq("plan_products.slug", FREE_PLAN_PRODUCT_SLUG)
+                .eq("is_current_for_signup", True)
+                .eq("status", "published")
+                .order("version_number", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if not free_result.data:
+                return {"limits": {}, "features": {}}
+            plan_version_id = free_result.data[0]["id"]
+
+        assigned_result = (
+            client.table("plan_version_entitlements")
+            .select("entitlement_key, value")
+            .eq("plan_version_id", str(plan_version_id))
+            .execute()
+        )
+        catalog_result = (
+            client.table("entitlement_definitions")
+            .select("key, kind, default_when_absent")
+            .eq("is_active", True)
+            .execute()
+        )
+        assigned_by_key = {
+            row["entitlement_key"]: row["value"] for row in assigned_result.data or []
+        }
+        limits: dict[str, Any] = {}
+        features: dict[str, Any] = {}
+        for row in catalog_result.data or []:
+            key = row["key"]
+            raw = assigned_by_key.get(key)
+            if raw is None:
+                raw = row.get("default_when_absent")
+            if row["kind"] == "limit":
+                limits[key] = raw
+            else:
+                effective, _ = _parse_entitlement_value(raw)
+                features[key] = effective
+        return {"limits": limits, "features": features}
+
+    return await asyncio.to_thread(load)
+
+
+async def resolve_voice_concurrency_limit(
+    client: Any, organization_id: UUID
+) -> Optional[int]:
+    """Resolve the server-owned limit used by atomic admission; None means unlimited.
+
+    The existing fast precheck gives an early error. The database admission RPC
+    rechecks the active count under a lock before a provider call can start.
+    """
+    entitlements = await _resolve_org_entitlements(client, organization_id)
+    raw = entitlements["limits"].get("max_concurrent_calls")
+    if raw is None:
+        return None
+    value, unlimited = _parse_entitlement_value(raw)
+    return None if unlimited else max(0, int(value or 0))
 
 
 async def _count_active_calls(
@@ -432,7 +453,7 @@ async def _count_active_calls(
     )
     if current_call_sid is not None:
         return sum(
-            1 for row in (result.data or []) if row.get("call_sid") != current_call_sid
+            1 for row in result.data or [] if row.get("call_sid") != current_call_sid
         )
     count = getattr(result, "count", None)
     if isinstance(count, int):

@@ -2,6 +2,7 @@
 Authentication middleware for extracting user information from JWT tokens.
 """
 
+import asyncio
 import base64
 import json
 import logging
@@ -14,7 +15,6 @@ import jwt
 from fastapi import Header, HTTPException, status
 from src.auth.models import UserProfile
 from src.auth.service import auth_service
-from src.rbac.user_roles.service import user_role_service
 
 from shared.config import settings, supabase_config
 
@@ -29,7 +29,10 @@ def _get_jwks_key(kid: str) -> Optional[dict]:
     """Return the JWKS key dict for a given kid, refreshing cache as needed."""
     global _jwks_cache
     now = time.monotonic()
-    if now - _jwks_cache["fetched_at"] > _JWKS_CACHE_TTL or kid not in _jwks_cache["keys"]:
+    if (
+        now - _jwks_cache["fetched_at"] > _JWKS_CACHE_TTL
+        or kid not in _jwks_cache["keys"]
+    ):
         supabase_url = settings.supabase_url or ""
         # Inside Docker the URL uses host.docker.internal; try both host variants
         jwks_url = f"{supabase_url}/auth/v1/.well-known/jwks.json"
@@ -43,7 +46,9 @@ def _get_jwks_key(kid: str) -> Optional[dict]:
                 _jwks_cache["fetched_at"] = now
                 break
             except Exception as exc:
-                logger.debug("_get_jwks_key: failed to fetch JWKS from %s: %s", url, exc)
+                logger.debug(
+                    "_get_jwks_key: failed to fetch JWKS from %s: %s", url, exc
+                )
     return _jwks_cache["keys"].get(kid)
 
 
@@ -74,7 +79,9 @@ def _decode_jwt_verified(token: str) -> dict:
             kid = header.get("kid", "")
             jwk = _get_jwks_key(kid)
             if jwk is None:
-                logger.error("_decode_jwt_verified: ES256 key kid=%s not found in JWKS", kid)
+                logger.error(
+                    "_decode_jwt_verified: ES256 key kid=%s not found in JWKS", kid
+                )
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Token signing key not found",
@@ -90,7 +97,8 @@ def _decode_jwt_verified(token: str) -> dict:
             # HS256 path (cloud Supabase)
             if not settings.jwt_secret_key:
                 logger.error(
-                    "_decode_jwt_verified: JWT_SECRET_KEY is not set — authentication service unavailable"
+                    "_decode_jwt_verified: JWT_SECRET_KEY is not set — "
+                    "authentication service unavailable"
                 )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -152,7 +160,7 @@ async def get_current_user_id(authorization: str = Header(None)) -> UUID:
         return UUID("00000000-0000-0000-0000-000000000000")
 
     try:
-        payload = _decode_jwt_verified(token)
+        payload = await asyncio.to_thread(_decode_jwt_verified, token)
         user_id = payload.get("sub")
 
         if not user_id:
@@ -169,7 +177,7 @@ async def get_current_user_id(authorization: str = Header(None)) -> UUID:
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.error("get_current_user_id: unexpected error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -217,13 +225,13 @@ async def get_authenticated_user(
             last_name="User",
             created_at="2026-01-21T00:00:00Z",
             updated_at="2026-01-21T00:00:00Z",
-            roles=[]
+            roles=[],
         )
         return test_uuid, mock_user
 
     try:
         # Step 1: Verify JWT signature before trusting any claims
-        _decode_jwt_verified(token)
+        await asyncio.to_thread(_decode_jwt_verified, token)
 
         # Step 2: Validate token against Supabase and get authoritative user profile
         user_profile, error = await auth_service.get_user(token)
@@ -249,7 +257,7 @@ async def get_authenticated_user(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.error("get_authenticated_user: unexpected error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -326,7 +334,7 @@ async def check_organization_access(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.error("check_organization_access: unexpected error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 
+from .delivery_test import DeliveryTestRequest, DeliveryTestResult, send_delivery_test
 from .models import (
     NotificationCategory,
     NotificationEvent,
@@ -100,6 +101,32 @@ def _assert_organization_notification_settings_access(
                 "notification settings"
             ),
         )
+
+
+@router.post("/admin/settings/test", response_model=DeliveryTestResult)
+async def test_platform_notification_delivery(
+    payload: DeliveryTestRequest,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Send a fixed probe to a saved platform destination; platform admins only."""
+    if not user_auth[1].has_role("platform_admin"):
+        raise HTTPException(
+            403, "Only platform administrators can test platform notifications"
+        )
+    return await send_delivery_test(payload.channel)
+
+
+@router.post(
+    "/organizations/{organization_id}/settings/test", response_model=DeliveryTestResult
+)
+async def test_organization_notification_delivery(
+    organization_id: UUID,
+    payload: DeliveryTestRequest,
+    user_auth: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Send a fixed probe only to the authorized organization's saved destination."""
+    _assert_organization_notification_settings_access(user_auth[1], organization_id)
+    return await send_delivery_test(payload.channel, organization_id)
 
 
 @router.get(

@@ -19,6 +19,7 @@ from .models import (
     RecordingBatchDeleteRequest,
     RecordingBatchDeleteResponse,
 )
+from .retention import recording_expired
 from .service import call_artifact_service
 
 logger = logging.getLogger(__name__)
@@ -32,9 +33,7 @@ def _check_delete_access(user_profile: UserProfile, organization_id: UUID) -> No
         "call_log",
         "delete",
         organization_id,
-        error_message=(
-            "Only organization admins can delete call recordings"
-        ),
+        error_message="Only organization admins can delete call recordings",
     )
 
 
@@ -52,7 +51,7 @@ async def _delete_one_recording(
     if settings.recording_storage_backend == "r2":
         try:
             object_available = await storage.object_exists(object_key)
-        except Exception as exc:  # noqa: BLE001 - provider boundary
+        except Exception:  # noqa: BLE001 - provider boundary
             logger.exception("Could not verify recording object availability")
             return False, "storage_unreachable"
         if not object_available:
@@ -83,9 +82,7 @@ async def delete_call_recording(
     artifact, error = await call_artifact_service.get_recording(call_log_id)
     if error or artifact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
-    _check_delete_access(
-        user_profile, UUID(str(artifact["organization_id"]))
-    )
+    _check_delete_access(user_profile, UUID(str(artifact["organization_id"])))
 
     deleted, failure = await _delete_one_recording(artifact)
     if failure == "gone":
@@ -114,9 +111,7 @@ async def delete_call_recording(
             tombstone_error,
         )
     return Response(
-        content=(
-            '{"call_log_id": "%s", "status": "deleted"}' % str(call_log_id)
-        ),
+        content=('{"call_log_id": "%s", "status": "deleted"}' % str(call_log_id)),
         media_type="application/json",
         status_code=status.HTTP_200_OK,
     )
@@ -139,7 +134,6 @@ async def batch_delete_recordings(
 
     items: list[dict[str, str]] = []
     deleted_count = 0
-    storage = get_recording_storage()
     for call_log_id in request.call_log_ids:
         try:
             log_uuid = UUID(str(call_log_id))
@@ -200,9 +194,7 @@ async def batch_delete_recordings(
                 {
                     "call_log_id": str(call_log_id),
                     "status": "failed",
-                    "detail": (
-                        "Storage could not be reached; recording was kept"
-                    ),
+                    "detail": "Storage could not be reached; recording was kept",
                 }
             )
             continue
@@ -268,6 +260,7 @@ async def list_call_artifacts(
                 f"/api/v1/calls/{call_log_id}/recording"
                 if row.get("artifact_type") == "recording"
                 and row.get("status") == "completed"
+                and not recording_expired(row)
                 else None
             ),
         )

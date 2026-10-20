@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "deploy" / "validate-versioned-config.py"
 SPEC = importlib.util.spec_from_file_location("validate_versioned_config", SCRIPT)
 assert SPEC and SPEC.loader
@@ -116,13 +115,14 @@ def test_production_config_rejects_live_stripe_in_test_mode(tmp_path: Path) -> N
 
 
 def test_checked_in_environment_configs_contain_no_secret_values() -> None:
-    expected_missing_optional = {"MCP_OAUTH_STATE_SECRET"}
     for path in (
         ROOT / "deploy/config/local.env",
         ROOT / "deploy/config/staging.env",
         ROOT / "deploy/config/production.env",
     ):
         values = validator.parse_env_file(path)
-        assert set(validator.SECRET_KEYS) - set(values) == expected_missing_optional
+        # Optional managed secrets may be absent or blank in public config.
+        # Their absence must not force copying private values into this file.
+        assert {"DATABASE_URL", "ENCRYPTION_KEY", "JWT_SECRET_KEY"} <= set(values)
         leaked = [key for key in validator.SECRET_KEYS if values.get(key, "").strip()]
         assert leaked == [], f"secret values found in {path}: {leaked}"

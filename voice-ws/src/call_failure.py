@@ -40,6 +40,12 @@ def classify_pipeline_failure(error: object) -> CallFailure:
     """
     text = _error_text(error).lower()
 
+    if "call_storage_unavailable" in text:
+        return CallFailure(
+            code="call_storage_unavailable",
+            message="The call could not be safely tracked. Please try again later.",
+        )
+
     if (
         "session_finalization_unconfirmed" in text
         or "finalization unconfirmed" in text

@@ -2,6 +2,7 @@
 Stripe integration service for payment processing.
 """
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize Stripe with secret key
 stripe.api_key = getattr(settings, "stripe_secret_key", None)
+stripe.default_http_client = stripe.http_client.RequestsClient(timeout=15)
 
 
 class StripeService:
@@ -42,12 +44,16 @@ class StripeService:
                 **(metadata or {}),
             }
 
-            customer = stripe.Customer.create(
-                email=email, name=name, metadata=customer_metadata
+            customer = await asyncio.to_thread(
+                stripe.Customer.create,
+                email=email,
+                name=name,
+                metadata=customer_metadata,
             )
 
             logger.info(
-                f"Created Stripe customer {customer.id} for organization {organization_id}"
+                f"Created Stripe customer {customer.id} for organization"
+                f" {organization_id}"
             )
             return customer
 
@@ -58,7 +64,7 @@ class StripeService:
     async def get_customer(self, customer_id: str) -> stripe.Customer:
         """Retrieve a Stripe customer."""
         try:
-            return stripe.Customer.retrieve(customer_id)
+            return await asyncio.to_thread(stripe.Customer.retrieve, customer_id)
         except stripe.error.StripeError as e:
             logger.error(f"Failed to retrieve Stripe customer {customer_id}: {e}")
             raise
@@ -66,7 +72,9 @@ class StripeService:
     async def update_customer(self, customer_id: str, **kwargs) -> stripe.Customer:
         """Update a Stripe customer."""
         try:
-            return stripe.Customer.modify(customer_id, **kwargs)
+            return await asyncio.to_thread(
+                stripe.Customer.modify, customer_id, **kwargs
+            )
         except stripe.error.StripeError as e:
             logger.error(f"Failed to update Stripe customer {customer_id}: {e}")
             raise
@@ -94,7 +102,8 @@ class StripeService:
             raise ValueError("Stripe is not configured")
 
         try:
-            product = stripe.Product.create(
+            product = await asyncio.to_thread(
+                stripe.Product.create,
                 name=name,
                 metadata=metadata or {},
             )
@@ -128,7 +137,8 @@ class StripeService:
             stripe.error.StripeError: When Stripe API call fails.
         """
         try:
-            price = stripe.Price.create(
+            price = await asyncio.to_thread(
+                stripe.Price.create,
                 product=product_id,
                 unit_amount=unit_amount,
                 currency=currency.lower(),
@@ -178,7 +188,9 @@ class StripeService:
                 if subscription_data:
                     session_params["subscription_data"] = subscription_data
 
-            session = stripe.checkout.Session.create(**session_params)
+            session = await asyncio.to_thread(
+                stripe.checkout.Session.create, **session_params
+            )
 
             logger.info(
                 f"Created checkout session {session.id} for customer {customer_id}"
@@ -207,7 +219,9 @@ class StripeService:
             if trial_period_days:
                 subscription_params["trial_period_days"] = trial_period_days
 
-            subscription = stripe.Subscription.create(**subscription_params)
+            subscription = await asyncio.to_thread(
+                stripe.Subscription.create, **subscription_params
+            )
 
             logger.info(
                 f"Created subscription {subscription.id} for customer {customer_id}"
@@ -221,7 +235,9 @@ class StripeService:
     async def get_subscription(self, subscription_id: str) -> stripe.Subscription:
         """Retrieve a Stripe subscription."""
         try:
-            return stripe.Subscription.retrieve(subscription_id)
+            return await asyncio.to_thread(
+                stripe.Subscription.retrieve, subscription_id
+            )
         except stripe.error.StripeError as e:
             logger.error(f"Failed to retrieve subscription {subscription_id}: {e}")
             raise
@@ -231,7 +247,9 @@ class StripeService:
     ) -> stripe.SubscriptionSchedule:
         """Retrieve a subscription schedule to reconcile an uncertain plan change."""
         try:
-            return stripe.SubscriptionSchedule.retrieve(schedule_id)
+            return await asyncio.to_thread(
+                stripe.SubscriptionSchedule.retrieve, schedule_id
+            )
         except stripe.error.StripeError as e:
             logger.error(
                 "Failed to retrieve subscription schedule %s: %s", schedule_id, e
@@ -243,7 +261,9 @@ class StripeService:
     ) -> stripe.Subscription:
         """Update a Stripe subscription."""
         try:
-            return stripe.Subscription.modify(subscription_id, **kwargs)
+            return await asyncio.to_thread(
+                stripe.Subscription.modify, subscription_id, **kwargs
+            )
         except stripe.error.StripeError as e:
             logger.error(f"Failed to update subscription {subscription_id}: {e}")
             raise
@@ -272,7 +292,9 @@ class StripeService:
             Updated Stripe Subscription object.
         """
         try:
-            subscription = stripe.Subscription.retrieve(subscription_id)
+            subscription = await asyncio.to_thread(
+                stripe.Subscription.retrieve, subscription_id
+            )
             items = subscription.get("items", {}).get("data", [])
             if not items:
                 raise ValueError(
@@ -280,8 +302,9 @@ class StripeService:
                 )
             item_id = items[0]["id"]
             if at_period_end:
-                schedule = stripe.SubscriptionSchedule.create(
-                    from_subscription=subscription_id
+                schedule = await asyncio.to_thread(
+                    stripe.SubscriptionSchedule.create,
+                    from_subscription=subscription_id,
                 )
                 phases = schedule.get("phases", [])
                 if not phases:
@@ -298,7 +321,8 @@ class StripeService:
                 phase_end = current_phase.get(
                     "end_date", subscription.get("current_period_end")
                 )
-                stripe.SubscriptionSchedule.modify(
+                await asyncio.to_thread(
+                    stripe.SubscriptionSchedule.modify,
                     schedule.id,
                     phases=[
                         {
@@ -324,7 +348,9 @@ class StripeService:
                     "items": [{"id": item_id, "price": new_price_id}],
                     "proration_behavior": proration_behavior,
                 }
-                updated = stripe.Subscription.modify(subscription_id, **modify_params)
+                updated = await asyncio.to_thread(
+                    stripe.Subscription.modify, subscription_id, **modify_params
+                )
             logger.info(
                 "Changed Stripe subscription %s to price %s (at_period_end=%s)",
                 subscription_id,
@@ -342,14 +368,19 @@ class StripeService:
         """Cancel a Stripe subscription."""
         try:
             if at_period_end:
-                subscription = stripe.Subscription.modify(
-                    subscription_id, cancel_at_period_end=True
+                subscription = await asyncio.to_thread(
+                    stripe.Subscription.modify,
+                    subscription_id,
+                    cancel_at_period_end=True,
                 )
             else:
-                subscription = stripe.Subscription.delete(subscription_id)
+                subscription = await asyncio.to_thread(
+                    stripe.Subscription.delete, subscription_id
+                )
 
             logger.info(
-                f"Cancelled subscription {subscription_id} (at_period_end={at_period_end})"
+                f"Cancelled subscription {subscription_id}"
+                f" (at_period_end={at_period_end})"
             )
             return subscription
 
@@ -363,15 +394,19 @@ class StripeService:
         """Create a Stripe customer portal session."""
         try:
             logger.info(
-                f"Creating portal session for customer {customer_id} with return URL {return_url}"
+                f"Creating portal session for customer {customer_id} with return URL"
+                f" {return_url}"
             )
 
-            session = stripe.billing_portal.Session.create(
-                customer=customer_id, return_url=return_url
+            session = await asyncio.to_thread(
+                stripe.billing_portal.Session.create,
+                customer=customer_id,
+                return_url=return_url,
             )
 
             logger.info(
-                f"Created portal session {session.id} for customer {customer_id}: {session.url}"
+                f"Created portal session {session.id} for customer {customer_id}:"
+                f" {session.url}"
             )
             return session
 
@@ -387,7 +422,7 @@ class StripeService:
     async def get_invoice(self, invoice_id: str) -> stripe.Invoice:
         """Retrieve a Stripe invoice."""
         try:
-            return stripe.Invoice.retrieve(invoice_id)
+            return await asyncio.to_thread(stripe.Invoice.retrieve, invoice_id)
         except stripe.error.StripeError as e:
             logger.error(f"Failed to retrieve invoice {invoice_id}: {e}")
             raise
@@ -395,7 +430,9 @@ class StripeService:
     async def get_payment_intent(self, payment_intent_id: str) -> stripe.PaymentIntent:
         """Retrieve a Stripe payment intent."""
         try:
-            return stripe.PaymentIntent.retrieve(payment_intent_id)
+            return await asyncio.to_thread(
+                stripe.PaymentIntent.retrieve, payment_intent_id
+            )
         except stripe.error.StripeError as e:
             logger.error(f"Failed to retrieve payment intent {payment_intent_id}: {e}")
             raise
@@ -405,7 +442,9 @@ class StripeService:
     ) -> list[stripe.Invoice]:
         """list invoices for a customer."""
         try:
-            invoices = stripe.Invoice.list(customer=customer_id, limit=limit)
+            invoices = await asyncio.to_thread(
+                stripe.Invoice.list, customer=customer_id, limit=limit
+            )
             return invoices.data
         except stripe.error.StripeError as e:
             logger.error(f"Failed to list invoices for customer {customer_id}: {e}")
@@ -429,8 +468,8 @@ class StripeService:
     ) -> stripe.Subscription:
         """Reactivate a cancelled subscription."""
         try:
-            subscription = stripe.Subscription.modify(
-                subscription_id, cancel_at_period_end=False
+            subscription = await asyncio.to_thread(
+                stripe.Subscription.modify, subscription_id, cancel_at_period_end=False
             )
 
             logger.info(f"Reactivated subscription: {subscription_id}")
@@ -447,7 +486,8 @@ class StripeService:
     ) -> stripe.checkout.Session:
         """Create a Stripe Checkout session for subscription."""
         try:
-            session = stripe.checkout.Session.create(
+            session = await asyncio.to_thread(
+                stripe.checkout.Session.create,
                 mode="subscription",
                 customer=customer_id,
                 line_items=[
@@ -456,8 +496,13 @@ class StripeService:
                         "quantity": 1,
                     }
                 ],
-                success_url=f"{self.frontend_url}/billing/success?org_id={organization_id}&session_id={{CHECKOUT_SESSION_ID}}",
-                cancel_url=f"{self.frontend_url}/billing/cancel?org_id={organization_id}",
+                success_url=(
+                    f"{self.frontend_url}/billing/success?org_id={organization_id}"
+                    "&session_id={CHECKOUT_SESSION_ID}"
+                ),
+                cancel_url=(
+                    f"{self.frontend_url}/billing/cancel?org_id={organization_id}"
+                ),
                 metadata={
                     "organization_id": organization_id,
                     "plan_id": plan_id,
@@ -488,7 +533,8 @@ class StripeService:
     ) -> stripe.checkout.Session:
         """Create a Stripe Checkout session for credit purchase."""
         try:
-            session = stripe.checkout.Session.create(
+            session = await asyncio.to_thread(
+                stripe.checkout.Session.create,
                 mode="payment",
                 customer=customer_id,
                 line_items=[
@@ -497,8 +543,13 @@ class StripeService:
                         "quantity": 1,
                     }
                 ],
-                success_url=f"{self.frontend_url}/billing/success?org_id={organization_id}&session_id={{CHECKOUT_SESSION_ID}}",
-                cancel_url=f"{self.frontend_url}/billing/cancel?org_id={organization_id}",
+                success_url=(
+                    f"{self.frontend_url}/billing/success?org_id={organization_id}"
+                    "&session_id={CHECKOUT_SESSION_ID}"
+                ),
+                cancel_url=(
+                    f"{self.frontend_url}/billing/cancel?org_id={organization_id}"
+                ),
                 metadata={
                     "organization_id": organization_id,
                     "product_id": product_id,
@@ -529,8 +580,10 @@ class StripeService:
     ) -> stripe.billing_portal.Session:
         """Create a Stripe Customer Portal session."""
         try:
-            session = stripe.billing_portal.Session.create(
-                customer=customer_id, return_url=f"{self.frontend_url}/billing"
+            session = await asyncio.to_thread(
+                stripe.billing_portal.Session.create,
+                customer=customer_id,
+                return_url=f"{self.frontend_url}/billing",
             )
 
             logger.info(f"Created customer portal session for customer: {customer_id}")

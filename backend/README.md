@@ -484,3 +484,16 @@ collector credentials.
 
 See [dashboard behavior and API contracts](../docs/02_features/dashboard.md) for
 role scope, live metric definitions, authorization and reporting limits.
+
+## Production security and recovery boundaries
+
+Application tables and RPCs are service-role only; authenticated browsers read
+only tenant-scoped agent invalidation IDs. Keep backend tenant authorization on
+every API. `verify_data_api_security.py` is a read-only release postcondition.
+
+The notification retry scheduler also runs bounded expired-recording cleanup and
+pending voice settlement/crash recovery. Recording expiry denies playback before
+object deletion. New terminal voice calls retain a pending billing marker until
+ledger linkage succeeds atomically; historical calls are not back-billed.
+Admin notification settings expose saved-destination email and Telegram probes.
+See the [remediation release guide](../docs/05_operations/production-readiness-remediation-2026-10-19.md).

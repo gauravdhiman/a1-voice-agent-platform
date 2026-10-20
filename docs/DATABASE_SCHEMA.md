@@ -7,6 +7,7 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Database Overview](#database-overview)
 - [Core Tables](#core-tables)
 - [Voice Agent Tables](#voice-agent-tables)
+- [Data API security boundary](#data-api-security-boundary)
 - [Demo Outcome Tables](#demo-outcome-tables)
 - [Embed Button Tables](#embed-button-tables)
 - [Billing Tables](#billing-tables)
@@ -22,6 +23,38 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Migration History](#migration-history)
 
 ---
+
+## Data API security boundary
+
+Migrations `20261019000001`–`20261019000005` require coordinated backend,
+frontend and voice-ws deployment. All public application tables have RLS enabled;
+`anon` and `authenticated` have no direct table/sequence access or function
+execution, except authenticated SELECT on `agent_change_events` and execution
+of its tenant-check helper. Backend authorization remains authoritative because
+service-role database clients bypass RLS. Supabase Auth and Storage schemas are
+unchanged. Global **and** schema default privileges are revoked for the migration
+owner; future migrations must retain these ACLs and explicitly enable RLS.
+
+### agent_change_events
+
+| Column | Type | Contract |
+| --- | --- | --- |
+| agent_id | UUID primary key | Invalidation identifier; deliberately no agent FK so deletion can invalidate a cached agent |
+| organization_id | UUID, non-null, FK organizations ON DELETE CASCADE | Tenant boundary |
+| revision | BIGINT, non-null, default 1 | Incremented on agent/tool writes |
+| changed_at | TIMESTAMPTZ, non-null, default now() | Invalidation timestamp |
+
+AFTER INSERT/UPDATE/DELETE triggers on `voice_agents` and `agent_tools` upsert
+this row. It contains no prompts, configuration, credential ciphertext, or user
+content. `can_read_agent_change(uuid)` is a SECURITY DEFINER helper with empty
+search_path: current `auth.uid()` must hold a role in that organization or the
+platform-admin role. Only authenticated SELECT is allowed; clients cannot write.
+`publish_agent_change()` is service-only. The Realtime publication removes the
+private agent/tool tables and publishes the invalidation table. The frontend
+refetches permitted metadata through the backend API.
+
+The read-only release gate is `scripts/deploy/verify_data_api_security.py`.
+Do not use the historical manual Realtime setup script to grant table access.
 
 ## Database Overview
 
@@ -974,6 +1007,10 @@ Tracks voice sessions for organization reporting and concurrent-call limits.
 | failure_message       | VARCHAR(1000) | NULLABLE                              | Safe admin-facing explanation of the failure; raw provider diagnostics are not stored         |
 | duration              | INTEGER       | NOT NULL, DEFAULT `0`                 | Duration in seconds                                                                           |
 | credits_consumed      | INTEGER       | NOT NULL, DEFAULT `0`                 | Credits billed at teardown                                                                    |
+| billing_status | TEXT | NOT NULL, default `legacy`; check `legacy`, `pending`, `settled` | Durable settlement marker; only newly admitted runtime calls become pending |
+| voice_session_id | TEXT | NULLABLE, partial UNIQUE | Single-use voice session claim |
+| voice_last_seen_at | TIMESTAMPTZ | NULLABLE | Last confirmed worker lease renewal |
+| voice_lease_expires_at | TIMESTAMPTZ | NULLABLE | Active slot expires after 90 seconds without renewal |
 | credit_transaction_id | UUID          | NULLABLE, FK → credit_transactions.id | Ledger row explaining the call charge                                                         |
 | caller_number         | VARCHAR(30)   | NULLABLE                              | Caller number; mask in UI                                                                     |
 | called_number         | VARCHAR(30)   | NULLABLE                              | Destination number                                                                            |
@@ -993,6 +1030,28 @@ an existing failure classification instead of replacing it with a later
 the authenticated call-log UI; detailed provider exceptions stay in the
 runtime logging/telemetry boundary. Added by migration
 `20260902000001_add_call_failure_details`.
+
+`settle_voice_call(uuid)` resolves the authoritative call, demo exemption,
+voice rate and rounded minutes. It locks organization then call, debits through
+`consume_voice_call_credits`, and links the original ledger amount in the same
+transaction. The debit RPC now locks the organization **before** checking
+idempotency. Historical/default `legacy` calls are never back-billed. Pending
+terminal calls are retried in batches of 100 by the backend scheduler. Existing
+minimum-minute and final overdraft policies are preserved.
+
+`admit_voice_call(...)` is service-only, validates agent ownership, serializes the
+active-count check and slot claim under the organization lock, and rejects a
+replayed session. The runtime resolves the plan limit; the fast precheck remains
+an early response only. Triggers initialize a 90-second lease. `touch_voice_call`
+renews only an unexpired matching session; workers renew every 20 seconds and
+cancel provider work on renewal failure. `reconcile_expired_voice_calls(uuid)`
+finalizes at most 100 abandoned active rows using the last confirmed activity,
+then the settlement worker retries billing. Admission also reconciles expired
+slots for its organization. Old calls without a lease are excluded.
+
+Indexes: `ix_call_logs_pending_billing`, `ux_call_logs_voice_session`, and
+`ix_call_logs_expiring_voice`. New RPCs/trigger functions explicitly deny
+PUBLIC/anon/authenticated EXECUTE and grant service_role only.
 
 ### call_artifacts
 
@@ -1854,6 +1913,13 @@ erDiagram
         timestamptz updated_at
     }
 
+    agent_change_events {
+        uuid agent_id PK
+        uuid organization_id FK
+        bigint revision
+        timestamptz changed_at
+    }
+
     token_refresh_leases {
         uuid agent_tool_id
         timestamptz locked_at
@@ -1901,6 +1967,10 @@ erDiagram
         integer duration
         integer credits_consumed
         uuid credit_transaction_id
+        text billing_status
+        text voice_session_id UK
+        timestamptz voice_last_seen_at
+        timestamptz voice_lease_expires_at
         timestamptz started_at
         timestamptz ended_at
         timestamptz created_at
@@ -2180,6 +2250,7 @@ erDiagram
     }
 
     organizations ||--o{ voice_agents : "has many"
+    organizations ||--o{ agent_change_events : "owns invalidation IDs"
     pipeline_presets ||--o{ voice_agents : "references (SET NULL on delete)"
     voice_agents ||--o{ agent_tools : "has many"
     voice_agents ||--o| agent_embed_configs : "has one"
@@ -2542,14 +2613,23 @@ be verified against the latest source definition before applying changes.
 
 ---
 
+### October 19 production remediation revisions
+
+- `20261019000001` (after `20261012000001`): Data API ACL/default-privilege lockdown, RLS, safe tenant invalidation feed and private-feed removal.
+- `20261019000002`: partial completed-recording retention index.
+- `20261019000003`: durable call settlement status, atomic settlement RPC and debit idempotency lock ordering.
+- `20261019000004`: worker lease metadata, renewal and bounded crash reconciliation.
+- `20261019000005`: unique session claim and atomic organization slot admission.
+
+Security/financial downgrades deliberately refuse to reopen access or discard
+pending work. Use an approved forward repair. These revisions do not seed paid
+plans, alter customer credentials or change existing credit overdraft policy.
+
 ## Real-time Tables
 
-The following tables have Supabase Realtime enabled for automatic UI synchronization:
-
-- `voice_agents`
-- `agent_tools`
-
-These tables are configured in `scripts/setup-supabase-realtime.sql` and allow the frontend to receive live updates when data changes (e.g., when OAuth tokens are refreshed, when tools are configured/disabled).
+Only `agent_change_events` is used by the browser for agent/tool invalidation.
+Its ACLs, RLS policy, triggers, organization index and publication are Alembic-owned; private rows
+are fetched through authorized backend APIs. See [Data API security boundary](#data-api-security-boundary).
 
 ---
 
@@ -2652,14 +2732,25 @@ source .venv/bin/activate
 alembic revision --autogenerate -m "description of changes"
 ```
 
-### Setting Up Real-time
+### Checking Realtime security
+
+After approved migrations, use the read-only gate:
 
 ```bash
-# Run in Supabase SQL Editor
-cat scripts/setup-supabase-realtime.sql
+python scripts/deploy/verify_data_api_security.py --env-file .env.prod
 ```
 
+The SQL reference script is inspection-only. Never restore client grants on
+private application tables to repair a subscription.
+
 ---
+
+Recording expiry is enforced at playback and in download-link/call-list metadata.
+The backend scheduler removes at most 100 expired completed recordings per pass;
+provider/database failures remain retryable. Objects are deleted before audited
+metadata tombstones. `ix_call_artifacts_pending_retention` indexes expiry for
+completed recording rows. Null legacy retention dates retain their old behavior;
+malformed/non-timezone-aware dates deny playback.
 
 ## Schema Change Policy
 
@@ -2684,4 +2775,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-10-01
+**Last Updated**: 2026-10-19

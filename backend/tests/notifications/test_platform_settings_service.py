@@ -18,6 +18,29 @@ from src.notifications.platform_settings_service import (
 ADMIN_ID = UUID("11111111-1111-1111-1111-111111111111")
 
 
+@pytest.mark.parametrize(
+    "environment,sender,override,expected",
+    [
+        ("production", False, None, True),
+        ("production", True, None, True),
+        ("development", False, None, False),
+        ("development", True, None, True),
+        ("development", True, False, False),
+        ("development", False, True, True),
+    ],
+)
+def test_verification_policy_is_independent_of_incomplete_production_sender(
+    monkeypatch, environment, sender, override, expected
+):
+    from src.notifications.platform_settings_service import settings
+
+    monkeypatch.setattr(settings, "environment", environment)
+    monkeypatch.setattr(settings, "email_verification_required", override)
+    assert (
+        PlatformNotificationSettingsService._verification_required(sender) is expected
+    )
+
+
 @pytest.fixture
 def settings_service(mock_supabase_client):
     with patch("src.notifications.platform_settings_service.supabase_config") as cfg:
@@ -101,7 +124,7 @@ class TestPlatformNotificationSettingsService:
         assert await settings_service.is_email_verification_required() is True
 
     @pytest.mark.asyncio
-    async def test_is_email_verification_required_false_when_sender_incomplete(
+    async def test_is_email_verification_required_even_when_sender_incomplete(
         self, settings_service, mock_supabase_client
     ):
         table_mock = MagicMock()
@@ -114,7 +137,7 @@ class TestPlatformNotificationSettingsService:
             )
         )
 
-        assert await settings_service.is_email_verification_required() is False
+        assert await settings_service.is_email_verification_required() is True
         assert verification_sender_configured("verify@example.com", None) is False
 
     @pytest.mark.asyncio
@@ -152,7 +175,7 @@ class TestPlatformNotificationSettingsService:
         assert update_data["verification_from_name"] is None
         assert update_data["telegram_chat_id"] is None
         assert update_data["telegram_bot_token_encrypted"] is None
-        assert result.email_verification_active is False
+        assert result.email_verification_active is True
 
     @pytest.mark.asyncio
     async def test_update_settings_leaves_omitted_optional_fields_unchanged(

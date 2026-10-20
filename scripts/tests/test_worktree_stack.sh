@@ -47,6 +47,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=source-anon-key
 SUPABASE_URL=https://placeholder.supabase.co
 SUPABASE_SERVICE_KEY=source-service-key
 DATABASE_URL=postgresql://placeholder
+REDIS_URL=redis://external-fixture.invalid:6379/0
 JWT_SECRET_KEY=source-jwt-secret
 GEMINI_API_KEY=your-gemini-api-key
 EOF
@@ -75,6 +76,11 @@ config_file="$state_dir/supabase-project/supabase/config.toml"
 app_env="$state_dir/app.env"
 [[ -f "$config_file" ]] || { echo "Missing generated Supabase config" >&2; exit 1; }
 [[ -f "$app_env" ]] || { echo "Missing generated app env" >&2; exit 1; }
+assert_file_contains "$app_env" 'REDIS_URL='
+if grep -Fq 'external-fixture.invalid' "$app_env"; then
+  echo "Worktree reused a shared Redis quota store" >&2
+  exit 1
+fi
 
 assert_file_contains "$config_file" 'project_id = "247ai-wt-appointment-worktree-'
 assert_file_contains "$config_file" 'port = 54341'

@@ -62,6 +62,7 @@ class TestTwilioIncomingPipecat:
 
     async def test_pipecat_returns_media_stream_twiml(self) -> None:
         mock_request = MagicMock()
+        mock_request.headers = {}
         mock_request.form = AsyncMock(
             return_value={
                 "To": "+1234567890",
@@ -119,6 +120,7 @@ class TestTwilioIncomingPipecat:
 
     async def test_pipecat_missing_twilio_url_returns_config_error(self) -> None:
         mock_request = MagicMock()
+        mock_request.headers = {}
         mock_request.form = AsyncMock(
             return_value={
                 "To": "+1234567890",
@@ -156,6 +158,7 @@ class TestTwilioIncomingPipecat:
 
     async def test_pipecat_localhost_url_rejected(self) -> None:
         mock_request = MagicMock()
+        mock_request.headers = {}
         mock_request.form = AsyncMock(
             return_value={
                 "To": "+1234567890",
@@ -195,6 +198,7 @@ class TestTwilioIncomingPipecat:
     ) -> None:
         """A PSTN caller receives useful guidance without billing internals."""
         mock_request = MagicMock()
+        mock_request.headers = {}
         mock_request.form = AsyncMock(
             return_value={
                 "To": "+1234567890",

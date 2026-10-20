@@ -90,6 +90,7 @@ fi
 if [[ "$DO_VERIFY" == "true" ]]; then
   echo "==> [3/5] Verifying phone-number data migration..."
   python3 "${ROOT}/scripts/deploy/verify_phone_number_backfill.py" --env-file "$ENV_FILE"
+  python3 "${ROOT}/scripts/deploy/verify_data_api_security.py" --env-file "$ENV_FILE"
   echo ""
 fi
 

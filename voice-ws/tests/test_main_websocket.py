@@ -13,8 +13,12 @@ from shared.voice_agents.voice_session_service import voice_session_service
 
 
 @pytest.fixture
-def client() -> TestClient:
-    from src.main import app
+def client(monkeypatch) -> TestClient:
+    from src.main import app, session_service
+
+    secret = "isolated-voice-test-signing-key-at-least-32-bytes"
+    monkeypatch.setattr(voice_session_service, "jwt_secret", secret)
+    monkeypatch.setattr(session_service, "jwt_secret", secret)
 
     return TestClient(app)
 

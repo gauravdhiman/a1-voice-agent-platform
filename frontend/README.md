@@ -394,3 +394,16 @@ collector credentials.
 
 See [dashboard behavior and API contracts](../docs/02_features/dashboard.md) for
 role scope, live metric definitions, authorization and reporting limits.
+
+## Production boundaries
+
+The Node 22 Docker images are pinned by digest and use the npm lockfile. Browser
+telemetry uses the OpenTelemetry SDK 2 constructor-based processor/reader API.
+Agent/tool Realtime subscriptions receive only `agent_change_events` identifiers;
+private metadata is refetched through authorized backend APIs.
+
+Security headers allow microphone access and customer call embeds while denying
+cross-origin framing elsewhere. Both admin notification forms can send fixed
+tests to saved email/Telegram destinations; provider acceptance requires a human
+receipt check. Production email verification cannot be disabled by clearing the
+sender fields. See the [release guide](../docs/05_operations/production-readiness-remediation-2026-10-19.md).

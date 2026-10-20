@@ -380,3 +380,24 @@ Run backend and voice suites separately because both own a `src` package.
 The `Observability contracts` workflow enforces separate 90% statement and branch floors
 and alert-rule cases on pull requests and main. Other affected suites still need
 local validation; this gate does not claim 90% coverage of the entire platform.
+
+## Isolated production-hardening regression lane
+
+Root `pytest` runs backend/shared suites. Run voice tests in a separate process:
+`pytest -c voice-ws/pytest.ini voice-ws/tests -q`. The runtimes have distinct
+top-level `src` packages. Use their separate dependency environments.
+
+The application CI creates disposable loopback Postgres and Redis. Security
+tests require `DATA_API_TEST_DATABASE_URL` at revision `20261012000001` and roll
+back the real lockdown migration per test. Then upgrade to head, run the
+read-only security guard and the financial/admission suite with
+`SETTLEMENT_TEST_DATABASE_URL`. `RATE_LIMIT_TEST_REDIS_URL` exercises quotas
+across two limiter instances and removes only its exact test key. All mutation
+fixtures refuse remote hosts; never point them at a shared environment.
+
+Tests cover private table/RPC denial, tenant invalidation scope, future default
+grants, trigger payload privacy, concurrent admission, session replay, atomic
+ledger linkage, failed-settlement rollback, demo/zero rates, historical data,
+overdraft preservation, worker lease loss/recovery, recording expiry/retry,
+notification authorization and provider failure. The notification E2E journey
+uses boundary mocks and proves UI wiring, not actual provider receipt.

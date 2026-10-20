@@ -27,7 +27,12 @@ from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketTransport,
 )
 from src.call_failure import CallFailureState, classify_pipeline_failure
-from src.call_tracking import end_call_tracking, mark_call_answered, start_call_tracking
+from src.call_tracking import (
+    end_call_tracking,
+    mark_call_answered,
+    renew_call_lease,
+    start_call_tracking,
+)
 from src.recording import RecordingAudioTap, RecordingCoordinator
 from src.recording_policy import should_record_agent_call
 from src.serialization.browser_protobuf import BrowserWebSocketFrameSerializer
@@ -76,6 +81,27 @@ async def _close_mcp_clients(clients: list[object]) -> None:
             logger.exception("Failed to close MCP client")
 
 
+async def _maintain_call_lease(
+    task: PipelineTask,
+    call_log_id: str,
+    session_id: str,
+    failure_state: CallFailureState,
+) -> None:
+    """Stop provider work promptly if its tracked lease can no longer be renewed."""
+    while True:
+        await asyncio.sleep(20)
+        try:
+            renewed = await asyncio.wait_for(
+                renew_call_lease(call_log_id, session_id), timeout=8
+            )
+        except Exception:
+            renewed = False
+        if not renewed:
+            failure_state.capture(classify_pipeline_failure("CALL_STORAGE_UNAVAILABLE"))
+            await task.cancel()
+            return
+
+
 @observe_call
 async def run_bot(
     websocket: WebSocket,
@@ -96,6 +122,23 @@ async def run_bot(
     with operation("voice.setup"):
         bundle = await prepare_voice_session(claims)
         annotate_speech_configuration(bundle.speech_config)
+    call_log_id = None
+    try:
+        if bundle.agent.organization_id:
+            call_log_id = await start_call_tracking(
+                session_id=claims.session_id,
+                call_sid=claims.call_sid,
+                organization_id=bundle.agent.organization_id,
+                agent_id=bundle.agent.id,
+                source_type=claims.source_type,
+                source_url=claims.source_url,
+                source_domain=claims.source_domain,
+            )
+        if not call_log_id:
+            raise RuntimeError("CALL_STORAGE_UNAVAILABLE")
+    finally:
+        if not call_log_id:
+            await _close_mcp_clients(bundle.tools.mcp_clients)
     transport = FastAPIWebsocketTransport(
         websocket=websocket,
         params=FastAPIWebsocketParams(
@@ -118,21 +161,9 @@ async def run_bot(
     for name, handler in bundle.tools.handlers.items():
         llm.register_function(name, observe_tool(name, handler))
 
-    call_log_id = None
     recording_coordinator: Optional[RecordingCoordinator] = None
     caller_recording_tap: Optional[RecordingAudioTap] = None
     agent_recording_tap: Optional[RecordingAudioTap] = None
-    if bundle.agent.organization_id:
-        call_log_id = await start_call_tracking(
-            session_id=claims.session_id,
-            call_sid=claims.call_sid,
-            organization_id=bundle.agent.organization_id,
-            agent_id=bundle.agent.id,
-            source_type=claims.source_type,
-            source_url=claims.source_url,
-            source_domain=claims.source_domain,
-        )
-
     correlation.set(
         {
             **correlation.get(),
@@ -235,7 +266,11 @@ async def run_bot(
         """Stop the active pipeline after its only participant leaves."""
         await task.cancel()
 
+    lease_task = None
     try:
+        lease_task = asyncio.create_task(
+            _maintain_call_lease(task, call_log_id, claims.session_id, failure_state)
+        )
         await PipelineRunner(handle_sigint=False).run(task)
     except Exception as exc:
         # Some provider failures surface as runner exceptions instead of an
@@ -243,6 +278,10 @@ async def run_bot(
         failure_state.capture(classify_pipeline_failure(exc))
         raise
     finally:
+        if lease_task is not None:
+            lease_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await lease_task
         if duration_task is not None:
             duration_task.cancel()
             with suppress(asyncio.CancelledError):

@@ -59,6 +59,21 @@ export interface OrganizationNotificationSettingsUpdate {
 class NotificationSettingsService {
   private baseUrl = "/api/v1/notifications/admin/settings";
 
+  /** Send one fixed test to the saved admin destination; provider acceptance requires receipt confirmation. */
+  async testDelivery(channel: "email" | "telegram", organizationId?: string): Promise<{
+    success: boolean; error?: string; data?: { status: "accepted"; message: string };
+  }> {
+    const url = organizationId
+      ? `/api/v1/notifications/organizations/${encodeURIComponent(organizationId)}/settings/test`
+      : `${this.baseUrl}/test`;
+    try {
+      const response = await apiClient.post<{ status: "accepted"; message: string }>(url, { channel });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : "Notification test failed." };
+    }
+  }
+
   async getSettings(): Promise<{
     success: boolean;
     error?: string;

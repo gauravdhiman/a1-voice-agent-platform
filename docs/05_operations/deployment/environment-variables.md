@@ -258,3 +258,15 @@ Set in the shell when deploying voice-ws:
 - [ ] All **Secret?=Yes** values stored in a team password manager
 
 See [runbook.md](runbook.md) for full deployment steps.
+
+## Launch hardening settings
+
+| Variable | Runtime | Contract |
+| --- | --- | --- |
+| `EMAIL_VERIFICATION_REQUIRED` | backend | Production default true even with incomplete sender fields. Versioned production/staging configs explicitly require it; local example false. |
+| `REDIS_URL` | backend managed secret | Shared rate-limit store across instances; use authenticated TLS Redis for deployed environments. Memory is the local fallback only. Provider/storage errors do not silently switch to a per-instance quota. |
+
+Redis URLs are secret inventory entries and backend-only deployment values. Add
+a blank `REDIS_URL=` entry to the environment's public config only when opting
+into the corresponding managed secret; never store the URL there. Isolated
+worktree launchers clear copied Redis settings to avoid shared mutable state.
