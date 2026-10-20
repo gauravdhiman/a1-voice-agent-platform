@@ -107,6 +107,11 @@ describe("public SEO routes", () => {
         priority: 0.6,
       },
       { url: `${SITE_URL}/ai-tools`, changeFrequency: "weekly", priority: 0.7 },
+      {
+        url: `${SITE_URL}/ai-tools/savings-calculator`,
+        changeFrequency: "monthly",
+        priority: 0.7,
+      },
       ...TOOL_CATEGORIES.map((category) => ({
         url: `${SITE_URL}/ai-tools/${category.slug}`,
         changeFrequency: "weekly",
