@@ -50,8 +50,10 @@ jobs:
         run: >-
           python -m pytest -c pytest.ini -o 'pythonpath=. voice-ws shared'
           shared/tests/observability voice-ws/tests/test_telemetry.py
+          voice-ws/tests/test_console_privacy.py
           --cov=shared.observability --cov=shared.config.opentelemetry
-          --cov=src.telemetry --cov-branch --cov-fail-under=90
+          --cov=src.telemetry --cov=src.console_privacy
+          --cov-branch --cov-fail-under=90
           --cov-report=json:coverage.json
       - name: Enforce statement and branch floors independently
         run: |

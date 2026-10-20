@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from pipecat.runner.utils import parse_telephony_websocket
 from src.bot import run_bot
+from src.console_privacy import protect_loguru_logs
 from src.twilio_session import build_twilio_serializer, resolve_session_token
 
 from shared.billing.voice_session_entitlement import (
@@ -37,7 +38,7 @@ from shared.config.opentelemetry import (
     shutdown_opentelemetry,
 )
 from shared.observability.health import Readiness
-from shared.observability.privacy import protect_console_logs, protect_loguru_logs
+from shared.observability.privacy import protect_console_logs
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.voice_session_service import VoiceSessionService
 

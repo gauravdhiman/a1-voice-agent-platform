@@ -3,8 +3,7 @@
 import io
 
 from loguru import logger
-
-from shared.observability import privacy
+from src import console_privacy as privacy
 
 
 def test_provider_console_is_content_free_and_idempotent(monkeypatch):
