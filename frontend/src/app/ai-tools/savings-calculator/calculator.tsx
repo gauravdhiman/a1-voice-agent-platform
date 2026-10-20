@@ -307,8 +307,8 @@ export function SavingsCalculator() {
                       onClick={() => setSize(option.id)}
                       className={
                         selected
-                          ? "bg-primary px-2 py-2 text-sm font-semibold text-primary-foreground"
-                          : "bg-background px-2 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
+                          ? "whitespace-nowrap bg-primary px-2 py-2 text-sm font-semibold text-primary-foreground"
+                          : "whitespace-nowrap bg-background px-2 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
                       }
                     >
                       {option.label}
