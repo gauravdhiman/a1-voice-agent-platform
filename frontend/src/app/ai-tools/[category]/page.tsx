@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Check, X } from "lucide-react";
 import { createMarketingMetadata } from "@/lib/marketing-seo";
 import { SITE_URL } from "@/lib/site-config";
 import { getCategories, getCategory, getToolsByCategory } from "@/lib/ai-tools";
@@ -94,13 +95,51 @@ export default async function AiToolsCategoryPage({
           ))}
         </div>
 
+        {data.decisionShortcuts && data.decisionShortcuts.length > 0 ? (
+          <section aria-label="Our recommendations" className="mt-12">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              If you just want an answer
+            </h2>
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              {data.decisionShortcuts.map((shortcut) => (
+                <div
+                  key={shortcut.label}
+                  className="rounded-xl border border-border bg-card p-5"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+                    {shortcut.label}
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-foreground">
+                    {shortcut.tool}
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {shortcut.reason}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <section aria-label="Quick comparison" className="mt-12">
           <h2 className="text-2xl font-semibold tracking-tight text-foreground">
             Quick comparison
           </h2>
           <BlogTable
-            headers={["Tool", "Starting price", "Best for"]}
-            rows={tools.map((tool) => [tool.name, tool.pricing, tool.bestFor])}
+            headers={[
+              "Tool",
+              "What it does",
+              "Free tier",
+              "Starting price",
+              "Best for",
+            ]}
+            rows={tools.map((tool) => [
+              tool.name,
+              tool.tagline,
+              tool.quickFacts ? tool.quickFacts.freeTier : "See the full review",
+              tool.pricing,
+              tool.bestFor,
+            ])}
             caption={`${data.name} compared for small business budgets. Pricing researched October 2026.`}
           />
         </section>
@@ -115,6 +154,69 @@ export default async function AiToolsCategoryPage({
             ))}
           </div>
         </section>
+
+        {data.howToChoose && data.howToChoose.length > 0 ? (
+          <section aria-label="How to choose" className="mt-12">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              How to choose
+            </h2>
+            <p className="mt-2 max-w-3xl text-muted-foreground">
+              Before you buy, ask yourself these questions. Your answers point
+              straight at the right tool.
+            </p>
+            <ol className="mt-6 max-w-3xl list-decimal space-y-3 pl-6 text-muted-foreground marker:font-semibold marker:text-foreground">
+              {data.howToChoose.map((question, i) => (
+                <li key={i} className="pl-1">
+                  {question}
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
+
+        {data.expectations &&
+        (data.expectations.will.length > 0 ||
+          data.expectations.wont.length > 0) ? (
+          <section aria-label="Honest expectations" className="mt-12">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              Set honest expectations
+            </h2>
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-border bg-card p-5">
+                <h3 className="text-lg font-semibold text-foreground">
+                  What {data.name.toLowerCase()} will do
+                </h3>
+                <ul className="mt-4 space-y-3">
+                  {data.expectations.will.map((item, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                      <Check
+                        className="mt-0.5 h-4 w-4 shrink-0 text-primary"
+                        aria-hidden="true"
+                      />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-5">
+                <h3 className="text-lg font-semibold text-foreground">
+                  What it will not do
+                </h3>
+                <ul className="mt-4 space-y-3">
+                  {data.expectations.wont.map((item, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                      <X
+                        className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section aria-label="Frequently asked questions" className="mt-12">
           <h2 className="text-2xl font-semibold tracking-tight text-foreground">
