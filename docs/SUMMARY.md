@@ -57,6 +57,7 @@ Comprehensive documentation organized by feature.
 #### Legal Documents
 
 - **[Legal Documents](02_features/legal-documents.md)** - Versioned Terms & Conditions and Privacy Policy, signup/OAuth acceptance capture, platform-admin draft/publish UI, and publish-time user notification emails
+- **[Terms review draft](legal-review/terms-of-service-review-draft.md)** and **[Privacy review draft](legal-review/privacy-policy-review-draft.md)** - Counsel review copies; not published customer policies
 
 #### Voice Agents
 
