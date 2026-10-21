@@ -12,14 +12,17 @@ by email.
 Product name in the documents is **24x7 AI**; public pages are
 `https://247ai.live/terms` and `https://247ai.live/privacy`.
 
-> **Counsel review required**: the initial content in
-> `backend/src/legal/content.py` contains bracketed placeholders
-> (`[LEGAL ENTITY NAME]`, `[REGISTERED ADDRESS]`, governing law/arbitration
-> venue, `[DPO CONTACT]`, publication date) that MUST be replaced and the text
-> reviewed by legal counsel before the documents are relied on. The content is
-> a strong first draft modeled on voice-AI industry terms (recording consent,
-> TCPA, PHI/PCI carve-outs, AI-output disclaimers, liability cap), not legal
-> advice.
+> **Reviewed and approved by the founder — 21 October 2026.** The final
+> documents are [`docs/legal-review/terms-of-service.md`](../legal-review/terms-of-service.md)
+> and [`docs/legal-review/privacy-policy.md`](../legal-review/privacy-policy.md),
+> with the full review in
+> [`docs/legal-review/legal-review-memo.md`](../legal-review/legal-review-memo.md).
+> The earlier `*-review-draft.md` copies are superseded and kept for history
+> only. The seed content in `backend/src/legal/content.py` is still not the
+> approved text: to take the finals live, load them through the versioned
+> legal-document workflow below (seed update for fresh environments, then
+> publish from `/platform/legal`) — merging this documentation does not by
+> itself change the live pages.
 
 ## Document model
 
