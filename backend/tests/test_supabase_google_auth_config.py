@@ -26,3 +26,12 @@ def test_local_google_auth_uses_env_backed_provider_credentials() -> None:
         == "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET)"
     )
     assert google_config["skip_nonce_check"] is False
+
+
+def test_local_supabase_blocks_direct_signup_for_invite_only_onboarding() -> None:
+    """Keep local Auth aligned with the backend's invitation-only signup gate."""
+    with SUPABASE_CONFIG_PATH.open("rb") as config_file:
+        config = tomllib.load(config_file)
+
+    assert config["auth"]["enable_signup"] is False
+    assert config["auth"]["email"]["enable_signup"] is False

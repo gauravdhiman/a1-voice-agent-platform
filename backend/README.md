@@ -155,6 +155,11 @@ must use an invitation or the platform-admin allowlist
 their verified credentials or OAuth provider; only genuinely new accounts are
 directed to the interest form. See `src/auth/signup_gate.py`.
 
+For an invite-only hosted project, also disable direct new-user signup in
+Supabase Auth (`disable_signup=true`). The backend gate cannot intercept direct
+requests to the Supabase Auth API; invited users are provisioned by the
+backend's service-role flow.
+
 | Endpoint                     | Method | Description                                                              |
 | ---------------------------- | ------ | ------------------------------------------------------------------------ |
 | `/api/v1/auth/signup-status` | GET    | Public flag for the signup-page redirect (backend gate is authoritative) |

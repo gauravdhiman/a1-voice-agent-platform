@@ -231,6 +231,21 @@ Production non-secret values belong in the reviewed, version-controlled
 | `DEBUG` | `false` |
 | `MCP_ALLOW_LOCAL_URLS` | `false` |
 
+### Invite-only Supabase Auth
+
+The application signup gate (`PUBLIC_SIGNUP_ENABLED=false`) does not disable
+the hosted Supabase Auth signup API. For the controlled customer pilot, set
+`disable_signup=true` for both the staging and production Supabase projects in
+the Supabase dashboard (Authentication → Settings). This prevents direct
+client-created accounts while preserving existing-user sign-in; invited users
+continue to be provisioned by the backend's service-role flow. The normal
+Cloud Run promotion does not apply `supabase/config.toml` to persistent hosted
+projects, so verify this setting in both dashboards after changing it.
+
+The isolated local Supabase config keeps both global and email signup disabled
+to match the invite-only pilot. See
+[Supabase Auth config](https://supabase.com/docs/reference/api/v1-update-auth-service-config).
+
 `JWT_SECRET_KEY` is shared by backend and voice-ws. Both services receive it
 from GCP Secret Manager / OCI Vault in the managed cloud path. See
 [secret management](secret-management.md) for the required mirrored values.
