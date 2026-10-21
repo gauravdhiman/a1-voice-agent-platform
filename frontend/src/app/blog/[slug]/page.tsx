@@ -5,6 +5,7 @@ import { getPostSlugs, getPostMeta } from "@/lib/blog";
 import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
 import { PublicHeader } from "@/components/public-theme/public-header";
 import { SiteFooter } from "@/components/public-theme/site-footer";
+import { ShareBar } from "@/components/blog/share-bar";
 
 export async function generateStaticParams() {
   return getPostSlugs().map((slug) => ({ slug }));
@@ -56,6 +57,10 @@ export default async function BlogPostPage({
         <article className="prose dark:prose-invert mt-8 max-w-none">
           <Post />
         </article>
+        <ShareBar
+          url={`https://www.247ai.live/blog/${slug}`}
+          title={meta.title}
+        />
       </main>
       <SiteFooter />
     </PublicThemeRoot>
