@@ -1,5 +1,8 @@
 # Privacy Policy — 24x7 AI
 
+> **SUPERSEDED — 21 October 2026.** This counsel-review draft was reviewed in full and replaced by the final [Privacy Policy](privacy-policy.md) (see [legal review memo](legal-review-memo.md)). Kept for review history only. Do not publish this draft.
+
+
 > **Counsel review draft — not effective and not published.** Prepared 21 October 2026. This draft uses stable descriptions of our data practices rather than listing every tool setting or internal retention value. It must be checked against actual production settings, the first customer markets, and applicable law before publication.
 
 - **Proposed effective date:** [DATE OF PUBLICATION]

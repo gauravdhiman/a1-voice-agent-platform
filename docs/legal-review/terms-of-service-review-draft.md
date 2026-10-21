@@ -1,5 +1,8 @@
 # Terms & Conditions — 24x7 AI
 
+> **SUPERSEDED — 21 October 2026.** This counsel-review draft was reviewed in full and replaced by the final [Terms of Service](terms-of-service.md) (see [legal review memo](legal-review-memo.md)). Kept for review history only. Do not publish this draft.
+
+
 > **Counsel review draft — not effective and not published.** Prepared 21 October 2026. This is a general business agreement draft, not legal advice. Replace the marked company/contact fields and complete the counsel review notes before publishing or relying on it.
 
 - **Proposed effective date:** [DATE OF PUBLICATION]
