@@ -228,7 +228,7 @@ export function PlatformNotificationSettingsForm() {
             <Input
               id="verification_from_email"
               type="email"
-              placeholder="noreply@yourdomain.com"
+              placeholder="team@notify.247ai.live"
               value={verificationFromEmail}
               onChange={(e) => setVerificationFromEmail(e.target.value)}
             />

@@ -327,7 +327,7 @@ The platform uses Resend.com for email notifications.
 3. **Add the key to the selected root environment file**:
    ```bash
    RESEND_API_KEY=re_your_api_key
-   RESEND_FROM_EMAIL=noreply@yourdomain.com
+   RESEND_FROM_EMAIL=team@notify.247ai.live
    RESEND_FROM_NAME=24x7 AI
    ```
 
