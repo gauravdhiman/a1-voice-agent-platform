@@ -99,7 +99,7 @@ copy an environment file into a root `.env`.
 # Resend Settings
 EMAIL_PROVIDER=resend
 RESEND_API_KEY=re_your_resend_api_key_here
-RESEND_FROM_EMAIL=noreply@yourdomain.com
+RESEND_FROM_EMAIL=team@notify.247ai.live
 RESEND_FROM_NAME=24x7 AI
 PHONE_NUMBER_BILLING_CHECK_INTERVAL_HOURS=24
 NOTIFICATION_RETRY_CHECK_INTERVAL_HOURS=1
@@ -108,6 +108,10 @@ NOTIFICATION_RETRY_CHECK_INTERVAL_MINUTES=5
 # Required for encrypting Telegram bot tokens in platform settings
 ENCRYPTION_KEY=your-fernet-key
 ```
+
+Verify `notify.247ai.live` in Resend before sending, and restrict the platform API
+key to sending from that domain. For a non-human delivery check, Resend provides
+`delivered@resend.dev` as a test recipient ([Resend test email guide](https://resend.com/changelog/sending-test-emails)).
 
 Platform admins can override the verification **from email/name** at
 `/platform/settings?section=notifications` without redeploying. The Resend API key remains
@@ -452,7 +456,7 @@ Response:
 {
   "status": "healthy",
   "resend_configured": true,
-  "from_email": "noreply@yourdomain.com"
+  "from_email": "team@notify.247ai.live"
 }
 ```
 

@@ -26,7 +26,7 @@ Add to your `.env` file:
 
 ```bash
 RESEND_API_KEY=re_your_resend_api_key_here
-RESEND_FROM_EMAIL=noreply@yourdomain.com
+RESEND_FROM_EMAIL=team@notify.247ai.live
 RESEND_FROM_NAME=24x7 AI
 EMAIL_PROVIDER=resend
 NOTIFICATION_RETRY_CHECK_INTERVAL_MINUTES=5
