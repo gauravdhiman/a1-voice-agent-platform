@@ -2,10 +2,10 @@
 
 > **Counsel review draft — not effective and not published.** Prepared 21 October 2026. This draft uses stable descriptions of our data practices rather than listing every tool setting or internal retention value. It must be checked against actual production settings, the first customer markets, and applicable law before publication.
 
-**Proposed effective date:** [DATE OF PUBLICATION]  
-**Provider:** [FULL LEGAL NAME OF THE COMPANY OPERATING 24x7 AI], a [JURISDICTION AND ENTITY TYPE], with a notice address at [BUSINESS POSTAL ADDRESS] (“24x7 AI,” “we,” “us,” or “our”)  
-**Website:** <https://247ai.live>  
-**Privacy requests and questions:** [ONE MONITORED COMPANY EMAIL ADDRESS]
+- **Proposed effective date:** [DATE OF PUBLICATION]
+- **Provider:** [FULL LEGAL NAME OF THE COMPANY OPERATING 24x7 AI], a [JURISDICTION AND ENTITY TYPE], with a notice address at [BUSINESS POSTAL ADDRESS] (“24x7 AI,” “we,” “us,” or “our”)
+- **Website:** <https://247ai.live>
+- **Privacy requests and questions:** [ONE MONITORED COMPANY EMAIL ADDRESS]
 
 This Privacy Policy explains how 24x7 AI collects, uses, stores, and shares personal information through its business platform and website. It covers account users and people who communicate with an organization through its configured agents or workflows. An organization may also have its own privacy notice for callers and employees; this Policy does not replace that notice.
 

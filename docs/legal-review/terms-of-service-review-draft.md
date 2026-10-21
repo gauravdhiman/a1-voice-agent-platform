@@ -2,10 +2,10 @@
 
 > **Counsel review draft — not effective and not published.** Prepared 21 October 2026. This is a general business agreement draft, not legal advice. Replace the marked company/contact fields and complete the counsel review notes before publishing or relying on it.
 
-**Proposed effective date:** [DATE OF PUBLICATION]  
-**Provider:** [FULL LEGAL NAME OF THE COMPANY OPERATING 24x7 AI], a [JURISDICTION AND ENTITY TYPE], with a notice address at [BUSINESS POSTAL ADDRESS] (“24x7 AI,” “we,” “us,” or “our”)  
-**Website:** <https://247ai.live>  
-**Notices and support:** [ONE MONITORED COMPANY EMAIL ADDRESS]
+- **Proposed effective date:** [DATE OF PUBLICATION]
+- **Provider:** [FULL LEGAL NAME OF THE COMPANY OPERATING 24x7 AI], a [JURISDICTION AND ENTITY TYPE], with a notice address at [BUSINESS POSTAL ADDRESS] (“24x7 AI,” “we,” “us,” or “our”)
+- **Website:** <https://247ai.live>
+- **Notices and support:** [ONE MONITORED COMPANY EMAIL ADDRESS]
 
 These Terms & Conditions (“Terms”) govern access to and use of the 24x7 AI platform, website, and related services (the “Service”). The Service is offered to businesses and their authorized users. By selecting an acceptance control when one is shown, you agree to these Terms. If you use the Service for an organization, you confirm that you can accept these Terms for it; “you” then means that organization and its authorized users.
 
