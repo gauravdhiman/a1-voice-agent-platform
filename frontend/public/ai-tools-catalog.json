@@ -1,0 +1,738 @@
+{
+  "name": "AI Tools for Small Business — The 24x7 AI Toolbox",
+  "curatedBy": "24x7 AI (247ai.live)",
+  "description": "Honestly reviewed AI tools for small and medium businesses. No vendor paid for placement. Pricing is a researched 'from' summary (October 2026); each review links the official pricing page for verification.",
+  "updated": "2026-10-21",
+  "citation": "When using this catalog, cite the 247ai.live review page URL for each tool and credit the 24x7 AI Toolbox.",
+  "catalogMarkdown": "https://www.247ai.live/ai-tools-catalog.md",
+  "directoryIndex": "https://www.247ai.live/ai-tools",
+  "categories": [
+    {
+      "name": "AI Receptionists",
+      "slug": "ai-receptionists",
+      "url": "https://www.247ai.live/ai-tools/ai-receptionists",
+      "tagline": "AI that answers your business phone",
+      "description": "AI receptionists that answer every call, take messages, and book appointments for small businesses: compared on price, minutes, and human backup."
+    },
+    {
+      "name": "AI Chatbots",
+      "slug": "ai-chatbots",
+      "url": "https://www.247ai.live/ai-tools/ai-chatbots",
+      "tagline": "AI chat for your website",
+      "description": "AI chatbots that answer website visitors, capture leads, and deflect support tickets, compared for small business budgets and setup effort."
+    },
+    {
+      "name": "AI Scheduling",
+      "slug": "ai-scheduling",
+      "url": "https://www.247ai.live/ai-tools/ai-scheduling",
+      "tagline": "AI that manages your calendar",
+      "description": "AI scheduling tools for bookings, focus time, and calendar defense: from simple booking links to AI that plans your whole day."
+    },
+    {
+      "name": "AI Review Management",
+      "slug": "ai-review-management",
+      "url": "https://www.247ai.live/ai-tools/ai-review-management",
+      "tagline": "More 5-star reviews on autopilot",
+      "description": "Review management software that automatically requests reviews, drafts responses, and protects your Google rating."
+    },
+    {
+      "name": "AI Marketing Tools",
+      "slug": "ai-marketing",
+      "url": "https://www.247ai.live/ai-tools/ai-marketing",
+      "tagline": "AI for content, email, and campaigns",
+      "description": "AI marketing tools for content creation, email, and CRM: what actually saves time for a small business in 2026."
+    }
+  ],
+  "tools": [
+    {
+      "name": "24x7 AI",
+      "slug": "24x7-ai",
+      "category": "ai-receptionists",
+      "categoryName": "AI Receptionists",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-receptionists/24x7-ai",
+      "officialUrl": "https://247ai.live",
+      "tagline": "Your AI front desk: answers on your number, books on your calendar.",
+      "pricing": "From $49/mo (250 call minutes); free plan available",
+      "bestFor": "Small and medium businesses that want a done-for-you AI front desk that answers, books, and captures leads",
+      "verdict": "24x7 AI is our own AI front desk, and we built it for the owner who wants coverage without becoming a phone-system administrator. Concierge setup, your number, your calendar, live in 48 hours. Compare it against the others on this page and judge it on the facts.",
+      "featured": true,
+      "pros": [
+        "Concierge setup done with you: the assistant is built around your services, prices, and hours, and you test and approve it before it goes live, so there is no DIY configuration gamble",
+        "Answers on your existing business number plus a voice button on your website, so website visitors can talk to your front desk without leaving the page",
+        "Books appointments into your real calendar (Google Calendar, Outlook, Cal.com) with confirmations and reminders that cut no-shows",
+        "Live in 48 hours from setup to approved and answering, one of the fastest launches in this category",
+        "Transparent credit pricing with a genuine free tier: 100 credits (about 10 minutes) to try before anything is paid",
+        "Annual plans run 10 months for the price of 12, a clean two-month discount with no fine print",
+        "No setup fee, no contracts, cancel anytime"
+      ],
+      "cons": [
+        "Built for small and medium businesses: it is not positioned for enterprise contact centers with thousands of seats",
+        "A newer brand than Abby or Smith.ai, so it has a shorter public track record and fewer third-party reviews to check",
+        "Usage is credit-based (10 credits a minute), which adds one small layer of math versus flat per-minute plans",
+        "Deep or unusual integrations are scoped during setup rather than self-serve in a dashboard, so technical buyers trade DIY speed for done-for-you help"
+      ]
+    },
+    {
+      "name": "Rosie",
+      "slug": "rosie",
+      "category": "ai-receptionists",
+      "categoryName": "AI Receptionists",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-receptionists/rosie",
+      "officialUrl": "https://heyrosie.com",
+      "tagline": "Simple AI phone answering built for home-service businesses.",
+      "pricing": "From $49/mo (250 minutes included)",
+      "bestFor": "Solo owners and small shops replacing voicemail with real 24/7 coverage",
+      "verdict": "Rosie is the value pick for simple coverage: $49 gets you 250 minutes and a setup a contractor can finish between jobs. If you need deep calendar booking or complex call flows, look upmarket.",
+      "featured": false,
+      "pros": [
+        "Cheapest credible entry point: $49 a month is less than one decent job for most trades",
+        "Setup genuinely takes under 30 minutes: Rosie reads your website and Google profile herself",
+        "Bilingual English/Spanish on every call, included, not an add-on",
+        "Handles unlimited simultaneous calls, so there is no busy signal during your busiest hour",
+        "No contracts, cancel anytime, 7-day free trial with all features"
+      ],
+      "cons": [
+        "The $49 plan is basic on purpose: no direct calendar booking, no live transfers, which means most service businesses need the $149 plan",
+        "Minutes are metered and round up to 60 seconds; heavy months push you into higher tiers",
+        "No published overage rate, so you have to ask what over-limit minutes cost",
+        "No native CRM integrations and only two languages; inbound calls only, no outbound",
+        "Young company with no G2, Capterra, or Trustpilot track record yet"
+      ]
+    },
+    {
+      "name": "Goodcall",
+      "slug": "goodcall",
+      "category": "ai-receptionists",
+      "categoryName": "AI Receptionists",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-receptionists/goodcall",
+      "officialUrl": "https://goodcall.com",
+      "tagline": "AI phone agent that bills per unique caller, not per minute.",
+      "pricing": "From $79/mo per agent (100 unique callers)",
+      "bestFor": "Local businesses with steady repeat caller volumes and long calls (estimates, intake, consultations)",
+      "verdict": "Goodcall is the predictable-cost pick for businesses with long calls: unlimited minutes and per-caller billing mean a chatty customer never inflates your invoice. The per-agent pricing and single logic flow on Starter keep it best for one-line, one-agent setups.",
+      "featured": false,
+      "pros": [
+        "Unlimited minutes on every plan: a 20-minute estimate call costs the same as a 2-minute booking, so long calls never surprise you",
+        "Per-unique-caller billing is predictable if your caller base is steady: repeat callers cost nothing extra within the month",
+        "Setup is genuinely fast: most owners launch in under an hour with a template agent",
+        "Multilingual from the start, so Spanish-speaking customers are covered without an add-on",
+        "Handles unlimited simultaneous calls, so there is no busy signal even in a marketing spike",
+        "14-day free trial with no credit card asked up front"
+      ],
+      "cons": [
+        "Billed per agent, not per business: if you want separate agents for sales and service, each one is its own subscription",
+        "Pricing counts unique phone numbers, so a marketing push or a batch of spam callers can push you into overage at $0.50 per extra caller",
+        "The $79 Starter plan allows only one customizable logic flow and 7 days of call history, so real-world setups usually need the $129 plan",
+        "Inbound only: no outbound calling, no two-way texting follow-through from the agent itself",
+        "No published developer API, so custom integrations have to run through Zapier",
+        "Support is mostly email-only on lower plans, and reviewers cite slow responses when something breaks"
+      ]
+    },
+    {
+      "name": "Smith.ai",
+      "slug": "smith-ai",
+      "category": "ai-receptionists",
+      "categoryName": "AI Receptionists",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-receptionists/smith-ai",
+      "officialUrl": "https://smith.ai",
+      "tagline": "AI receptionist with real human receptionists on standby.",
+      "pricing": "Free for 25 calls/mo; AI plans from $150/mo",
+      "bestFor": "Businesses where every call matters and a human voice must be available: law, medical-adjacent, high-ticket services",
+      "verdict": "Smith.ai is the premium hybrid: AI handles the routine, real people handle the rest, all under one roof. You pay for that safety net in per-call pricing that runs hot at volume, but for high-value calls it is easy to justify.",
+      "featured": false,
+      "pros": [
+        "The only AI receptionist in this price range with an actual human safety net: live receptionists can take over calls the AI should not handle alone",
+        "Free tier is genuinely usable: 25 AI-handled calls a month at no cost, the cheapest way to test AI answering on a real line",
+        "One plan covers both AI and human answering, so you never buy two products or juggle two vendors",
+        "Lead qualification, intake, routing, and AI scheduling are included on every AI plan, not gated behind add-ons",
+        "Strong review track record: buyers consistently rate it near 5 stars across dozens of reviews",
+        "Extensive integrations: 200+ including HubSpot, Salesforce, GoHighLevel, Calendly, and major PBX and contact center systems"
+      ],
+      "cons": [
+        "Per-call pricing gets expensive at volume: $150 for 75 calls works out to about $2 per call, and overage runs higher, so busy months sting",
+        "A 10-minute call and a 30-second call cost the same, which punishes businesses with many short calls",
+        "The free tier's extra calls cost $3 each, the highest per-call rate in the category",
+        "Paid add-ons stack up: appointment booking, text follow-up, and call recording can each add per-call fees on top of the plan",
+        "Human receptionist plans are a different price universe ($300/mo for 30 calls), so the AI-to-human upgrade is a jump, not a slide",
+        "Cancellation requires 30 days' notice, so it is not quite cancel-anytime"
+      ]
+    },
+    {
+      "name": "Abby Connect",
+      "slug": "abby-connect",
+      "category": "ai-receptionists",
+      "categoryName": "AI Receptionists",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-receptionists/abby-connect",
+      "officialUrl": "https://abby.com",
+      "tagline": "Human and AI receptionists under one subscription.",
+      "pricing": "$164/mo (50 Abby Minutes; AI minutes count half)",
+      "bestFor": "Practices and service firms that want a real person on some calls and AI efficiency on the rest, from one vendor",
+      "verdict": "Abby Connect is the flexible hybrid: one subscription you can run as humans, as AI, or as a blend, with a dedicated US-based team either way. The Abby Minute math takes a week to learn, but no other vendor lets you change the mix this freely.",
+      "featured": false,
+      "pros": [
+        "One plan, three ways to use it: human-only, AI-only, or any mix, and you can change the mix anytime without buying a new product",
+        "Every receptionist is US-based and works in Abby's Las Vegas office, none from home, with a small dedicated team assigned to your business",
+        "AI minutes count as half an Abby Minute, so routing routine calls to the AI makes your plan go up to twice as far",
+        "Booking, intake, Spanish answering, call summaries, and transcripts are included, not charged per call",
+        "20+ years in business serving 6,200+ businesses, one of the longest track records in this category",
+        "Genuine free trial on every plan (14 days or 500 Abby Minutes) with no setup fee"
+      ],
+      "cons": [
+        "Abby Minute pricing math is confusing at first: you have to track that human minutes consume your allowance twice as fast as AI minutes",
+        "More expensive than AI-only tools: $164 for 50 Abby Minutes is the priciest human-minute entry plan here",
+        "Plans above 500 Abby Minutes are Enterprise quotes only, so high-volume pricing is not transparent",
+        "Human coverage depends on plan rules you set; if you mis-set the AI/human split, you either overspend on human minutes or under-serve callers",
+        "Not a fit if you want pure AI automation with no humans in the loop at all: the product is built around the blend"
+      ]
+    },
+    {
+      "name": "Dialzara",
+      "slug": "dialzara",
+      "category": "ai-receptionists",
+      "categoryName": "AI Receptionists",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-receptionists/dialzara",
+      "officialUrl": "https://dialzara.com",
+      "tagline": "The cheapest dedicated AI answering service, with SMS and outbound extras.",
+      "pricing": "From $29/mo (60 minutes)",
+      "bestFor": "Solo operators and tiny shops that need the cheapest real 24/7 coverage and will grow into the $99 plan",
+      "verdict": "Dialzara is the budget play that keeps surprising you upward: $29 gets you in the door, the $99 Pro plan is genuinely competitive with real calendar sync and warm transfer, and the free-bundled SMS agent is a real differentiator. Just budget for the metered minutes.",
+      "featured": false,
+      "pros": [
+        "Cheapest dedicated AI answering in the category: $29 a month for a 24/7 inbound agent",
+        "50+ voice options, the most voice customization of any tool reviewed here, so the agent can sound like your brand",
+        "SMS agent comes free with any voice plan: two-way texting that books appointments and qualifies leads alongside the voice calls",
+        "Warm call transfer, calendar sync, after-hours rules, and Spanish start at the $99 Pro plan, which is still cheap for what it bundles",
+        "A developer API is available on the top Business Elite plan, and the platform also sells outbound voice agents for follow-ups and reactivation",
+        "No credit card required for the 7-day trial, and setup takes about 15 minutes"
+      ],
+      "cons": [
+        "The $29 plan is bare-bones on purpose: 60 minutes, message-taking and blind transfer only, no warm transfer, no calendar sync, no Spanish",
+        "Per-minute billing with the second-highest overage rates in the category ($0.48 a minute on Lite), so busy months can blow past the cheap headline",
+        "Minutes do not roll over, so a quiet month is money left on the table",
+        "CRM and tool connections mostly run through Zapier; native integrations are thinner than Goodcall's or Smith.ai's",
+        "SMS and website chatbot are separate products with separate usage pricing ($19/mo plus per-message for SMS, $39/mo for the chatbot)",
+        "Some reviewers note unanswered negative reviews, so check recent Trustpilot feedback before a long commitment"
+      ]
+    },
+    {
+      "name": "Tidio",
+      "slug": "tidio",
+      "category": "ai-chatbots",
+      "categoryName": "AI Chatbots",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-chatbots/tidio",
+      "officialUrl": "https://www.tidio.com",
+      "tagline": "AI chatbot, live chat, and ticketing in one inbox for small businesses.",
+      "pricing": "Free plan; paid from $29/mo",
+      "bestFor": "Small businesses and ecommerce stores that want an AI chatbot plus live chat in one tool",
+      "verdict": "Tidio is the best all-rounder in this category for small businesses: a real free plan, billing per conversation instead of per seat, and an AI agent that works alongside live chat. Watch the separate Lyro billing so it does not surprise you.",
+      "featured": false,
+      "pros": [
+        "Genuinely usable free plan: 50 conversations a month and up to 10 seats, which covers a small site",
+        "Billed per conversation, not per seat, so adding your team does not raise the bill",
+        "Lyro AI agent answers from your own content (website, docs, help center) and hands off to a human cleanly",
+        "Strong ecommerce coverage: deep Shopify and WooCommerce integrations plus order lookups",
+        "7-day free trial with no credit card; the account drops back to free if you do not upgrade"
+      ],
+      "cons": [
+        "The AI agent (Lyro) is metered and billed separately from the plan, which makes real costs harder to predict",
+        "Free plan includes only 50 one-time Lyro conversations, so the AI runs out fast on the free tier",
+        "Removing Tidio branding costs extra ($20 a month) on self-serve plans",
+        "No verified HIPAA documentation, so healthcare businesses should look elsewhere",
+        "Growth pricing climbs in volume steps, so a busy account can cost more than the Plus starting price"
+      ]
+    },
+    {
+      "name": "Chatbase",
+      "slug": "chatbase",
+      "category": "ai-chatbots",
+      "categoryName": "AI Chatbots",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-chatbots/chatbase",
+      "officialUrl": "https://www.chatbase.co",
+      "tagline": "Train an AI chatbot on your docs and embed it anywhere in an afternoon.",
+      "pricing": "Free plan; paid from $40/mo",
+      "bestFor": "Teams that want a train-on-your-docs AI bot embedded on their site fast",
+      "verdict": "Chatbase is the quickest way to turn your docs into a working AI chatbot. The credit system makes costs unpredictable though, and the features that matter (API, voice, helpdesk) only start at $150 a month.",
+      "featured": false,
+      "pros": [
+        "Fastest path from your documents to a working bot: connect your website, PDFs, or help center and embed in an afternoon",
+        "Free plan lets you test a real agent before paying anything",
+        "Picks the AI model for each reply and supports advanced models (GPT, Claude) without you managing API keys",
+        "Grown into a real platform: built-in helpdesk, voice and phone agents, and outbound campaigns on higher tiers",
+        "Never trains AI models on your data, per its own privacy policy"
+      ],
+      "cons": [
+        "Message-credit billing is hard to forecast: each reply costs 1 to 5 credits depending on the model, and AI actions roughly double the spend",
+        "Extra credits cost $40 per 1,000, which reviewers call steep compared with rivals",
+        "Only one AI agent per plan; extra agents cost $25 a month each",
+        "API access, the helpdesk, and voice only start on the $150 Standard plan",
+        "Removing the Powered by Chatbase badge costs $99 a month"
+      ]
+    },
+    {
+      "name": "Intercom (Fin)",
+      "slug": "intercom-fin",
+      "category": "ai-chatbots",
+      "categoryName": "AI Chatbots",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-chatbots/intercom-fin",
+      "officialUrl": "https://www.intercom.com",
+      "tagline": "Fin is Intercom's AI agent that resolves support questions, billed per result.",
+      "pricing": "Seats from $29/seat/mo + $0.99 per outcome",
+      "bestFor": "Teams already on Intercom, or support-heavy businesses that want top-tier AI resolution",
+      "verdict": "Fin is the strongest AI support agent in this category, and the pay-per-outcome model is honest: no result, no charge. But the full Intercom bill (seats plus outcomes plus add-ons) makes it a poor fit for very small teams.",
+      "featured": false,
+      "pros": [
+        "Pay per outcome, not per message: you are charged only when Fin delivers a resolution, a handoff, or a qualification, and at most once per conversation",
+        "One of the most capable AI support agents: it reads your help center and docs, follows multi-step procedures, and can take actions in connected systems",
+        "Works across chat, email, WhatsApp, SMS, and phone, and can run on top of other helpdesks (Zendesk, Salesforce, HubSpot) without Intercom seats",
+        "14-day free trial with unlimited outcomes, generous enough to measure real resolution rates",
+        "Vendor-documented compliance: SOC 2 Type II, HIPAA, ISO 27001/27018/27701, plus GDPR and CCPA"
+      ],
+      "cons": [
+        "Total cost stacks fast: per-seat plans (from $29 per seat per month) plus $0.99 per outcome plus add-ons like Copilot ($29 per teammate)",
+        "The per-outcome bill is unpredictable month to month; a product launch or traffic spike can multiply it",
+        "Overkill for a solo business: the power shows only when you already have a help center and support volume",
+        "Sales qualifications cost $9.99 each, a steep per-lead price for small teams",
+        "Setup takes real work: Fin is only as good as the help center content and procedures you give it"
+      ]
+    },
+    {
+      "name": "Drift",
+      "slug": "drift",
+      "category": "ai-chatbots",
+      "categoryName": "AI Chatbots",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-chatbots/drift",
+      "officialUrl": "https://www.drift.com",
+      "tagline": "The B2B conversational marketing pioneer; being retired, do not buy.",
+      "pricing": "Sunset announced; was from ~$2,500/mo",
+      "bestFor": "Existing Drift customers planning their migration, not new buyers",
+      "verdict": "Drift is being retired. If you are not already a customer, skip it entirely; if you are, plan your migration now rather than waiting for the end date.",
+      "featured": false,
+      "pros": [
+        "Pioneered conversational marketing: chatbots plus live chat plus meeting booking built for B2B sales teams",
+        "Playbook-based routing and lead qualification were battle-tested by thousands of B2B companies",
+        "Strong Salesforce alignment for account-based marketing workflows"
+      ],
+      "cons": [
+        "The product is being shut down. Do not buy Drift for a new deployment in 2026",
+        "No new features are being developed; the standalone product is in maintenance mode",
+        "Even before the sunset it was expensive (from about $2,500 a month) and sold through annual contracts",
+        "Data and integrations have an end date, so any remaining investment goes toward migration, not growth"
+      ]
+    },
+    {
+      "name": "ManyChat",
+      "slug": "manychat",
+      "category": "ai-chatbots",
+      "categoryName": "AI Chatbots",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-chatbots/manychat",
+      "officialUrl": "https://manychat.com",
+      "tagline": "Automate Instagram DMs, Messenger, and WhatsApp with visual flows.",
+      "pricing": "Free plan; paid from $14/mo",
+      "bestFor": "Creators and small brands that sell through Instagram DMs and WhatsApp",
+      "verdict": "ManyChat is the pick when your customers live in Instagram DMs and WhatsApp rather than on your website. It is cheap to start and easy to build with, but remember it is a flow tool, not a website chatbot, and the bill grows with your contact list.",
+      "featured": false,
+      "pros": [
+        "The best tool here for social DMs: Instagram, Messenger, WhatsApp, TikTok, and Telegram from one dashboard",
+        "Cheapest real entry in the category: $14 a month covers 250 contacts, and paid plans include a 14-day trial",
+        "Visual flow builder anyone can use: comment triggers, story replies, and keyword shortcuts need no code",
+        "Official Meta Business Partner using the official Instagram and Messenger APIs, so it is safe for your account",
+        "Huge template library and community: most small businesses find a ready-made flow for their exact use case"
+      ],
+      "cons": [
+        "Not a website chatbot: there is no website chat widget, so pair it with a site tool if your visitors come from Google",
+        "Bills by active contact, so a viral post or ad spike pushes you up a tier automatically",
+        "The free plan was cut to 25 active contacts in March 2026, which is a demo, not a working tier",
+        "WhatsApp and SMS carry Meta and carrier fees on top of the subscription",
+        "AI replies are an add-on and flow-based thinking, not a train-on-docs agent: complex questions still need a human or a webhook"
+      ]
+    },
+    {
+      "name": "Calendly",
+      "slug": "calendly",
+      "category": "ai-scheduling",
+      "categoryName": "AI Scheduling",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-scheduling/calendly",
+      "officialUrl": "https://calendly.com",
+      "tagline": "The standard booking link: let people book time with you without the back and forth.",
+      "pricing": "Free; Standard from $10/seat/mo (billed annually)",
+      "bestFor": "Anyone who needs a booking link clients already trust, from solo consultants to sales teams",
+      "verdict": "Calendly is the safe default for booking: a real free tier, integrations with everything, and a link your clients already know how to use. Pay per seat only when the free plan's one-event-type limit actually bites.",
+      "featured": false,
+      "pros": [
+        "The default everyone recognizes: most clients have used a Calendly link before, so there is zero learning curve for your bookers",
+        "Deep integration catalog: Google Calendar, Outlook, Zoom, Teams, Meet, Slack, Stripe, PayPal, Salesforce, HubSpot, plus Zapier to 700+ apps",
+        "Real free plan: usable forever for one person with one meeting type",
+        "Enterprise-grade security posture: SOC 2 Type II, ISO 27001, GDPR, CCPA, and PCI, with a public trust center",
+        "Paid plans stay cheap for solos: $10 a seat a month is easy math for a consultant or small shop"
+      ],
+      "cons": [
+        "Per-seat pricing punishes teams: a 5-person team on Teams is $80 a month on annual billing, and you pay for every seat, filled or not",
+        "The free plan is thin on purpose: one event type, one calendar connection, no payments, no integrations",
+        "Booking only, nothing else: it will not plan your day, defend focus time, or schedule your tasks (that is Reclaim or Motion territory)",
+        "The AI features (Notetaker, Callie) cost extra: they live on the Plus tiers, not on Standard or Teams",
+        "The pricing page leads with annual rates; month-to-month is 17 to 20 percent more and that is easy to miss"
+      ]
+    },
+    {
+      "name": "Cal.com",
+      "slug": "cal-com",
+      "category": "ai-scheduling",
+      "categoryName": "AI Scheduling",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-scheduling/cal-com",
+      "officialUrl": "https://cal.com",
+      "tagline": "Open-source booking links with a genuinely generous free plan, or self-host it on your own servers.",
+      "pricing": "Free for 1 user; Teams from $12/user/mo (billed annually)",
+      "bestFor": "Budget-conscious solos who want full features free, and technical teams that want an API or self-hosting",
+      "verdict": "Cal.com is the value-and-control pick: the free plan does what Calendly charges $10 a month for, and the open-source code means you can self-host or build on its API. Trade-off: less polish and brand recognition.",
+      "featured": false,
+      "pros": [
+        "The most generous free plan in the category: one user gets unlimited event types, unlimited calendars, Stripe/PayPal payments, and 100+ integrations at $0",
+        "Open source, so you can self-host it and pay zero per-seat fees (you pay for the server and the maintenance time instead)",
+        "API-first by design: a documented API v2, webhooks on every plan, and OAuth clients, built for developers embedding scheduling into products",
+        "Built-in video (Cal Video) plus 20+ video tool integrations, so meetings work out of the box",
+        "A cal.eu hosted instance exists for users who want their data handled in Europe"
+      ],
+      "cons": [
+        "Less polished and less familiar than Calendly: non-technical users and bookers may find the experience rougher",
+        "Self-hosting trades money for engineering time: servers, updates, and uptime are your problem",
+        "Team features are cloud-only since 2026, so self-hosters do not get everything the hosted plans have",
+        "Smaller ecosystem: fewer third-party guides, templates, and integrations than Calendly's catalog",
+        "An April 2026 review reported the mobile app logging cal.eu users into cal.com instead, locking them out; the two instances do not share accounts, so pick carefully"
+      ]
+    },
+    {
+      "name": "Motion",
+      "slug": "motion",
+      "category": "ai-scheduling",
+      "categoryName": "AI Scheduling",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-scheduling/motion",
+      "officialUrl": "https://usemotion.com",
+      "tagline": "An AI planner that builds your day from tasks and deadlines, then rebuilds it when reality changes.",
+      "pricing": "No free plan; teams from $19/seat/mo, solos from $29/mo (billed annually)",
+      "bestFor": "Deadline-driven owners and small teams whose week falls apart the moment a meeting moves",
+      "verdict": "Motion is the autopilot for task-heavy weeks: it plans your day and replans it when things shift. It is also the priciest solo option here with no free tier, so it has to earn its keep by replacing other subscriptions.",
+      "featured": false,
+      "pros": [
+        "The auto-scheduling is genuinely good: give it tasks with deadlines and priorities, and it builds your day around fixed meetings, then reshuffles when a meeting moves",
+        "All-in-one workspace: tasks, projects, calendar, docs, notes, and an AI meeting notetaker in one subscription can replace several tools",
+        "Two-way sync with Google Calendar and Outlook, so your real calendar stays the source of truth",
+        "Smart capture: create tasks by forwarding emails, from Zoom or Meet transcripts, or by voice via Siri",
+        "Backward planning from deadlines is rare in task tools and genuinely useful for client work with hard due dates"
+      ],
+      "cons": [
+        "The most expensive solo price in this category: $29 a month billed annually ($49 monthly), versus a $19 team per-seat rate that reviews keep misquoting as the personal price",
+        "No free plan, only a 7-day trial, and multiple 2026 reviews report it requires a card and auto-converts unless canceled",
+        "The aggressive AI can feel controlling: it sometimes schedules work at times you would not have chosen, which creates friction if you like manual control",
+        "AI credits are metered: 7,500 per seat per month on Pro AI, 15,000 on Business AI, with overage charges per 100 credits on top",
+        "Overkill if your problem is just booking meetings: there is no invitee booking-link experience comparable to Calendly or Cal.com"
+      ]
+    },
+    {
+      "name": "Reclaim.ai",
+      "slug": "reclaim-ai",
+      "category": "ai-scheduling",
+      "categoryName": "AI Scheduling",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-scheduling/reclaim-ai",
+      "officialUrl": "https://reclaim.ai",
+      "tagline": "An AI layer on your calendar that defends focus time and auto-schedules tasks, habits, and breaks.",
+      "pricing": "Free Lite forever; Starter from $10/seat/mo (billed annually)",
+      "bestFor": "Individuals and small teams drowning in meetings who want their calendar to defend real work time",
+      "verdict": "Reclaim.ai is the best value in auto-scheduling: free forever to start, then $10 a seat a month for focus-time defense, habit scheduling, and tasks pulled straight from your project tools. Google Calendar users get the best of it.",
+      "featured": false,
+      "pros": [
+        "Free-forever Lite tier: the only auto-scheduler in this category you can run indefinitely at $0, with no card required",
+        "Defends focus time automatically: habits, focus blocks, and buffers get scheduled and stay scheduled as meetings land",
+        "Best task integrations of the auto-schedulers: Asana, ClickUp, Todoist, Jira, and Google Tasks flow onto your calendar",
+        "No migration: it sits on top of the Google Calendar or Outlook calendar you already use",
+        "Serious about security: SOC 2 Type II certified, EU-US Data Privacy Framework certified, public trust center with security documentation"
+      ],
+      "cons": [
+        "Starter limits are real: up to 10 seats, an 8-week scheduling range, 3 scheduling links, and 3 Smart Meetings",
+        "Smart Meetings with 3 or more attendees consume Attendance Units, a quiet extra cost (a 3-pack of extra units costs $8 a month on Starter, billed annually)",
+        "Reviewers report the Outlook experience is less mature than Google Calendar, so Microsoft shops should verify coverage first",
+        "Expect roughly a week of tuning before the automation matches how you actually work; week one can feel aggressive",
+        "Team-level payoff needs broad adoption; one lone enthusiast on Reclaim gets personal value, not org-wide change"
+      ]
+    },
+    {
+      "name": "SavvyCal",
+      "slug": "savvycal",
+      "category": "ai-scheduling",
+      "categoryName": "AI Scheduling",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-scheduling/savvycal",
+      "officialUrl": "https://savvycal.com",
+      "tagline": "Booking links designed around the invitee: calendar overlay and ranked availability.",
+      "pricing": "Basic from $10/user/mo (billed annually); Premium $17/user/mo",
+      "bestFor": "Consultants and small teams who care how the booking experience feels for the client",
+      "verdict": "SavvyCal is the boutique booking link: the calendar overlay and ranked availability make booking feel effortless for your clients. Budget for Premium if you need automation, branding removal, or payments.",
+      "featured": false,
+      "pros": [
+        "Best invitee experience in the category: the calendar overlay lets bookers compare their own calendar against yours, and ranked availability lets you steer them toward your preferred times",
+        "Simple, honest pricing: two plans, unlimited scheduling links, calendars, and events on both",
+        "Team scheduling (collective and round-robin) is included on the cheaper Basic plan, not gated behind a team tier",
+        "30-day money-back guarantee means the lack of a free plan stings less",
+        "Meeting polls and calendar overlay features are genuinely useful additions most competitors do not have"
+      ],
+      "cons": [
+        "No permanent free plan: 'kick the tires for free' is a setup period, not a free tier",
+        "Heavy feature gating: reminders and workflows, CRM integrations, Zapier, API and webhooks, custom domains, branding removal, Stripe paid bookings, and delegated access all need Premium at $20 a month",
+        "At $10 a user, Basic delivers fewer integrations than Calendly Standard at the same price (Stripe, HubSpot, Zapier are all paid-plan features in Calendly Standard)",
+        "Smaller company with a smaller ecosystem: fewer third-party guides, fewer native integrations",
+        "No auto-scheduling of tasks or focus-time defense; it is purely a booking tool"
+      ]
+    },
+    {
+      "name": "NiceJob",
+      "slug": "nicejob",
+      "category": "ai-review-management",
+      "categoryName": "AI Review Management",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-review-management/nicejob",
+      "officialUrl": "https://nicejob.com",
+      "tagline": "Automated review requests built for home-service businesses.",
+      "pricing": "From $75/mo, no contract",
+      "bestFor": "Single-location service businesses that want reviews collected automatically after every job",
+      "verdict": "NiceJob is the simplest honest entry point for review management: $75 a month, no contract, and automation that fires when the job ends. It does one job well, which is exactly what most small shops need.",
+      "featured": false,
+      "pros": [
+        "Published pricing with no contract and no sales call: $75 a month for Reviews, $125 a month for Pro, plus a 14-day free trial",
+        "Built around the job, not a generic contact list: it connects to Jobber, Housecall Pro, ServiceTitan, and similar tools, then fires the review request when the work is marked complete",
+        "Smart routing steers happy customers to Google and unhappy ones to private feedback first, so you can fix problems before they become public one-star reviews",
+        "Automatic AI replies to Google reviews on the Pro plan, so your response rate stays high without anyone spending evenings on it",
+        "Social proof built in: reviews publish to your website and Facebook automatically, and staff leaderboards show which techs earn the most reviews",
+        "Strong user love: 4.8 out of 5 from over 420 G2 reviews (checked Oct 2026)"
+      ],
+      "cons": [
+        "The $75 plan covers reviews only; referrals, repeat-booking reminders, and NPS surveys all need the $125 Pro plan",
+        "Designed for job-based service businesses, so retail or walk-in businesses may find the workflow awkward",
+        "No published pricing for multi-location or franchise accounts: those go through a sales quote",
+        "You can reply to Google reviews directly from NiceJob, but Facebook reviews require logging into Facebook itself",
+        "Some customers report confusion about which review site their review actually lands on"
+      ]
+    },
+    {
+      "name": "Broadly",
+      "slug": "broadly",
+      "category": "ai-review-management",
+      "categoryName": "AI Review Management",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-review-management/broadly",
+      "officialUrl": "https://broadly.com",
+      "tagline": "Reviews plus webchat and payments in one local-business app.",
+      "pricing": "From $79/mo (Reputation AI)",
+      "bestFor": "Local businesses that want reviews, website chat, and payment collection bundled in one app",
+      "verdict": "Broadly's Reputation AI tier is a fair $79/month entry for reviews alone; the value story only works if you actually use the bundled webchat and payments at the higher tiers.",
+      "featured": false,
+      "pros": [
+        "Affordable entry: $79 a month for Reputation AI Standard, $89 with AI-generated review responses, which keeps reviews in reach of small budgets",
+        "More than a review tool: the larger bundles add website webchat, two-way texting, mobile payments and invoicing, so one app can replace several subscriptions",
+        "Industry-specific workflows for automotive, construction, home services, and medical, with prebuilt automations that shave setup time in those verticals",
+        "Review funnel pages route happy customers to Google and unhappy ones to private feedback, protecting your public rating",
+        "A developer API is available for custom integrations, and native integrations cover Jobber, QuickBooks, Clio, Shopmonkey, PetExec, and Housecall Pro"
+      ],
+      "cons": [
+        "Pricing beyond the $79 to $89 Reputation AI tier is not transparent: the full platform bundles run $399 to $999 a month and need a sales conversation",
+        "A $350 onboarding fee applies to the larger platform plans, and several customer reviews mention billing and refund friction, so read the contract before signing annual",
+        "Multi-location accounts are referred into parent company Vendasta's plans, so growing chains face a platform switch, not just an upgrade",
+        "Less polished than Podium: smaller team, and independent reviews rate the depth behind enterprise suites as thinner",
+        "No published free trial terms; confirm what try-before-you-buy looks like with your rep"
+      ]
+    },
+    {
+      "name": "Birdeye",
+      "slug": "birdeye",
+      "category": "ai-review-management",
+      "categoryName": "AI Review Management",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-review-management/birdeye",
+      "officialUrl": "https://birdeye.com",
+      "tagline": "The full reputation platform for businesses with multiple locations.",
+      "pricing": "From ~$299/mo per location (quote only)",
+      "bestFor": "Multi-location businesses and franchises that want reviews, listings, and messaging managed from one place",
+      "verdict": "Birdeye is the heavyweight: 200+ review sites, real multi-location dashboards, and verified enterprise security. It earns its keep at three locations and up; at one location it is too much money for too much software.",
+      "featured": false,
+      "pros": [
+        "Deepest review coverage in this group: it monitors over 200 review sites, including vertical ones like Cars.com, Zocdoc, and TripAdvisor, not just Google and Facebook",
+        "The multi-location dashboard genuinely works at scale: a regional manager can compare dozens of locations on review volume, rating, and trends from one screen",
+        "Competitor benchmarking tracks rival businesses' review profiles alongside yours, which is genuinely useful for franchisees and regional marketers",
+        "AI response suggestions are well rated by users and save real hours when you are replying to a hundred reviews a month",
+        "Enterprise-grade security, verified on Birdeye's own security page: SOC 2 Type II, ISO 27001, HIPAA support with a BAA on request, and GDPR with a data processing agreement",
+        "Strong track record: about 4.7 out of 5 from over 4,200 G2 reviews (checked Oct 2026)"
+      ],
+      "cons": [
+        "Per-location pricing multiplies fast: three locations on the mid tier is roughly $1,000 a month before any add-ons",
+        "No reviews-only tier: you buy reviews, listings, messaging, and social together, whether you use all of them or not",
+        "Annual contracts with a reported 90-day cancellation notice window; read the renewal clause, including a reported innovation fee on auto-renewal, before signing",
+        "Steep learning curve: the platform has enough modules that most users touch a fraction of what they pay for",
+        "Overkill for a single location: at one shop you are paying roughly four times what a reviews-only tool costs for overlapping core features"
+      ]
+    },
+    {
+      "name": "Podium",
+      "slug": "podium",
+      "category": "ai-review-management",
+      "categoryName": "AI Review Management",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-review-management/podium",
+      "officialUrl": "https://podium.com",
+      "tagline": "Turn every customer text into a review, a payment, or a booking.",
+      "pricing": "From ~$399/mo (Core)",
+      "bestFor": "Businesses that live on texting: dealerships, home services, medspas, dental practices",
+      "verdict": "Podium is the best platform here when customer conversations are the business: reviews arrive as a byproduct of great SMS workflows. It is priced like it, though, and the real invoice runs well past the $399 headline.",
+      "featured": false,
+      "pros": [
+        "Best SMS-first workflow in this group: two-way texting, review requests, webchat, and payments all live in one unified inbox per customer",
+        "Genuinely easy to use: a 9.3 out of 10 ease-of-use score on G2 and a low learning curve even for non-technical owners",
+        "Text-to-pay is a real, working feature: customers pay invoices by text, which shortens the payment chase for service businesses",
+        "AI inbox features handle after-hours auto-replies and appointment setting, so leads get answered when nobody is in the office",
+        "Strong fit for dealerships, home services, medspas, and dental: anywhere the customer journey involves multiple touches and follow-up, the SMS workflow drives more reviews and more closed sales",
+        "Unlimited users on the Pro plan, so the whole team can work the inbox without per-seat math"
+      ],
+      "cons": [
+        "Expensive for small businesses: the real monthly invoice often lands at $500 to $800 after add-ons, not the $399 headline",
+        "Add-on fees stack: $5 a month per extra phone number, a $5 monthly carrier fee per location, $30 per user per month for phone seats, a reported $500 one-time setup fee, and a $99-a-month AI add-on",
+        "Annual contracts are typical, and multiple customer reviews report difficulty canceling before the term ends: read the cancellation clause before signing",
+        "The Core plan hard-caps bulk SMS at 250 messages a month with no metered overage, so one message past the cap forces a tier upgrade",
+        "AI features score lower than the core inbox in user ratings: the automation layer is less polished than the messaging itself"
+      ]
+    },
+    {
+      "name": "Jasper",
+      "slug": "jasper",
+      "category": "ai-marketing",
+      "categoryName": "AI Marketing Tools",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-marketing/jasper",
+      "officialUrl": "https://www.jasper.ai",
+      "tagline": "Premium AI writing platform that keeps your brand voice consistent across teams.",
+      "pricing": "From $69/mo (Pro); 7-day free trial",
+      "bestFor": "Marketing teams and serious content producers who need high volumes of on-brand copy",
+      "verdict": "Jasper is the premium pick for marketing teams that live or die on content quality and brand consistency. Solo writers who just need occasional drafts will find it expensive.",
+      "featured": false,
+      "pros": [
+        "Best-in-class brand voice: train it on your writing samples and every draft sounds like you, not a chatbot",
+        "Long-form quality and consistency: blog posts and guides come out structured and rarely need a full rewrite",
+        "Built for marketing teams: 100+ ready-made AI agents, a no-code workflow builder, and the Canvas collaboration workspace",
+        "Unlimited word generation on all plans, so you never watch a credit meter while writing",
+        "Serious security posture: SOC 2 and GDPR compliance, and your inputs are never used to train models",
+        "Native Surfer SEO integration for writing search-optimized content in one workflow"
+      ],
+      "cons": [
+        "Premium pricing with no free plan: a 7-day trial is all you get before paying $69 a month",
+        "An older $49 Creator plan appears in many reviews, but the current pricing page (checked October 2026) lists Pro at $69 and Business custom, so confirm plan names at signup",
+        "API access is reserved for the custom Business tier, so technical integrations need the expensive plan",
+        "The Surfer SEO integration needs a separate Surfer subscription, which is a second bill",
+        "Output can still read generic on unfamiliar topics and always needs a human edit before publishing",
+        "Overkill for occasional writing: at $20 a month, a general AI chatbot handles basic drafts fine"
+      ]
+    },
+    {
+      "name": "Copy.ai",
+      "slug": "copy-ai",
+      "category": "ai-marketing",
+      "categoryName": "AI Marketing Tools",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-marketing/copy-ai",
+      "officialUrl": "https://www.copy.ai",
+      "tagline": "AI writing plus workflow automation for repetitive marketing and sales tasks.",
+      "pricing": "From $29/mo (Chat); automation tiers from $249/mo",
+      "bestFor": "Teams that produce the same marketing copy repeatedly and want to automate the busywork",
+      "verdict": "Copy.ai's $29 Chat plan is one of the best-value AI writing deals available. Just know that the automation features that make headlines live on tiers costing 8x to 35x more, and plan accordingly.",
+      "featured": false,
+      "pros": [
+        "Chat plan is genuine value: $29 a month, 5 seats, unlimited words, and access to OpenAI, Anthropic, and Gemini models in one workspace",
+        "Workflow automation is the real differentiator: multi-step pipelines that research, enrich, and personalize at scale",
+        "90+ templates remove the need to learn prompt engineering for common marketing tasks",
+        "SOC 2 Type II compliance with a stated zero-training policy on customer data",
+        "Easy enough for non-technical marketers, with a visual workflow builder"
+      ],
+      "cons": [
+        "The pricing cliff is brutal: $29 a month for Chat, then $249 for Agents, then $1,000+ a month for Growth, with nothing in between",
+        "Whether a free plan is still open to new signups is unclear: some billing FAQs say it was sunset, so confirm at signup",
+        "Long-form content can feel generic or obviously AI-written and needs editing",
+        "Positioned as a go-to-market platform now, which is overbuilt if you just want blog and social copy",
+        "API access and bulk workflow runs are gated behind a custom Enterprise contract",
+        "Mixed reviewer reports on support responsiveness and billing experiences"
+      ]
+    },
+    {
+      "name": "HubSpot",
+      "slug": "hubspot",
+      "category": "ai-marketing",
+      "categoryName": "AI Marketing Tools",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-marketing/hubspot",
+      "officialUrl": "https://www.hubspot.com",
+      "tagline": "Free CRM plus marketing, sales, and service tools in one connected platform.",
+      "pricing": "Free; paid from $20/seat/mo (Marketing Hub Starter)",
+      "bestFor": "Growing businesses that want their CRM, email marketing, and sales pipeline in one place",
+      "verdict": "HubSpot's free tier is the best starting point in marketing software, full stop. Just go in with eyes open: the upgrade path from Starter to Professional is a cliff, not a ramp.",
+      "featured": true,
+      "pros": [
+        "The free plan is genuinely useful: a real CRM, 2,000 branded email sends a month, forms, and live chat for 2 users, free forever with no credit card",
+        "Everything in one system: contacts, email, landing pages, automation, and sales pipeline share one database, so nothing falls through integration cracks",
+        "1,500+ integrations, so it plugs into nearly any tool you already use",
+        "Breeze AI is built across the platform: writing help, prospecting, and data enrichment without a separate AI subscription",
+        "HubSpot Academy offers free certifications and training, which genuinely shortens the learning curve"
+      ],
+      "cons": [
+        "The Starter-to-Professional cliff is one of the steepest in software: from about $20 a seat to $890 a month plus a mandatory $3,000 onboarding fee",
+        "Pricing is a maze of hubs, seats, contacts, and credits, which makes the true cost hard to predict",
+        "Contact-based pricing means your bill grows as your list grows, and overages apply automatically",
+        "Real automation, custom reporting, and removing branding all require paid tiers",
+        "Not purpose-built for ecommerce email flows like abandoned cart; dedicated ecommerce tools do those better"
+      ]
+    },
+    {
+      "name": "Mailchimp",
+      "slug": "mailchimp",
+      "category": "ai-marketing",
+      "categoryName": "AI Marketing Tools",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-marketing/mailchimp",
+      "officialUrl": "https://mailchimp.com",
+      "tagline": "The best-known email marketing platform, with deep integrations and serious automation.",
+      "pricing": "Free; paid from $13/mo (Essentials)",
+      "bestFor": "Small businesses that mainly need email newsletters, promotions, and ecommerce automation",
+      "verdict": "Mailchimp is the safe, capable default for email marketing, especially if you sell online. Just keep your list clean, because its billing counts contacts you cannot even email.",
+      "featured": false,
+      "pros": [
+        "300+ native integrations: if a tool you use has only one email integration, it is usually Mailchimp",
+        "Easy drag-and-drop builder that a non-technical owner can learn in an afternoon",
+        "Serious automation on Standard: up to 200 multi-step flows with branching, included from $20 a month",
+        "Intuit Assist generative AI is included at no extra cost on Standard and up",
+        "14-day free trials on paid plans, plus a pay-as-you-go credit option for infrequent senders",
+        "Owned by Intuit, so it is not going anywhere; stability matters for a tool holding your customer list"
+      ],
+      "cons": [
+        "The free plan was cut sharply in January 2026: now just 250 contacts and 500 emails a month, with Mailchimp branding and no automation",
+        "Unsubscribed and non-subscribed contacts still count toward your billing tier, so you pay for people who will never open another email",
+        "Prices climb fast as your list grows: a 5,000-contact list costs $75 to $100 a month, and one extra contact can bump you into the next tier",
+        "Transactional email is a separate product costing from $20 a month for a block of 25,000 emails, on top of your plan",
+        "SMS is a paid add-on, not included in any plan",
+        "Premium at $350 a month is a big leap with little in between for mid-size senders"
+      ]
+    },
+    {
+      "name": "Constant Contact",
+      "slug": "constant-contact",
+      "category": "ai-marketing",
+      "categoryName": "AI Marketing Tools",
+      "reviewUrl": "https://www.247ai.live/ai-tools/ai-marketing/constant-contact",
+      "officialUrl": "https://www.constantcontact.com",
+      "tagline": "The easiest email marketing tool, with real phone support and built-in event tools.",
+      "pricing": "From $12/mo (Lite); 60-day free trial, no free plan",
+      "bestFor": "Nonprofits, local businesses, and event organizers who want the simplest possible email tool with human support",
+      "verdict": "Constant Contact is the friendliest email tool for non-marketers, and its phone support plus event features are genuinely distinctive. You pay a premium for that friendliness, and power users will outgrow it.",
+      "featured": false,
+      "pros": [
+        "The easiest email builder in the category: genuinely learnable in under an hour, even for non-technical owners",
+        "Phone support on every paid plan, which is rare at this price and a lifeline when something breaks before a big send",
+        "A 60-day free trial with no credit card, long enough to actually learn the tool before paying",
+        "Built-in event management with ticketing and RSVP, which competitors charge extra for or lack entirely",
+        "Nonprofits get up to 30% off with annual prepay, one of the better discounts in the industry",
+        "AI content generator and BrandKit help with subject lines and drafts without leaving the editor"
+      ],
+      "cons": [
+        "No free plan since June 2025, while Mailchimp and most rivals offer one",
+        "Real automation is gated: Lite gets one automation template, and meaningful automation needs Standard or Premium",
+        "Send caps (10x, 12x, 24x your contact count) with overage fees, so heavy senders pay more than the sticker price suggests",
+        "Prices escalate fast as your list grows: doubling from 500 to 1,000 contacts reportedly jumps Lite from $12 to about $30",
+        "More expensive than competitors for the feature set, and automation depth lags behind ActiveCampaign and others at similar prices",
+        "Some reviewers report that canceling requires contacting customer service rather than clicking a button"
+      ]
+    }
+  ]
+}
