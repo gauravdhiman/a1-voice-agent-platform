@@ -102,6 +102,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.6,
     },
+    {
+      path: "/blog/how-much-does-an-ai-receptionist-cost",
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
     ...aiToolsPages,
   ];
   return pages.map((page) => ({
