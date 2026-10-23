@@ -106,6 +106,11 @@ describe("public SEO routes", () => {
         changeFrequency: "monthly",
         priority: 0.6,
       },
+      {
+        url: `${SITE_URL}/blog/how-much-does-an-ai-receptionist-cost`,
+        changeFrequency: "monthly",
+        priority: 0.6,
+      },
       { url: `${SITE_URL}/ai-tools`, changeFrequency: "weekly", priority: 0.7 },
       {
         url: `${SITE_URL}/ai-tools/savings-calculator`,
