@@ -6,6 +6,7 @@ import { SiteFooter } from "@/components/public-theme/site-footer";
 import { BlogFaq } from "@/components/blog/blog-faq";
 import { BlogCTA } from "@/components/blog/blog-cta";
 import { SavingsCalculator } from "./calculator";
+import { NewsletterForm } from "./newsletter-form";
 
 export const metadata: Metadata = createMarketingMetadata({
   path: "/ai-tools/savings-calculator",
@@ -74,11 +75,7 @@ export default function SavingsCalculatorPage() {
             practical tip each week, no hype.
           </p>
           <div className="mt-4">
-            <script
-              async
-              src="https://subscribe-forms.beehiiv.com/v3/loader.js"
-              data-beehiiv-form="76696728-99f0-49cf-9472-faba9d9e13ff"
-            />
+            <NewsletterForm />
           </div>
         </section>
 
