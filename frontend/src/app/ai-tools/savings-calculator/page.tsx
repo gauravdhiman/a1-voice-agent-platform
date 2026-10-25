@@ -62,6 +62,26 @@ export default function SavingsCalculatorPage() {
           <SavingsCalculator />
         </div>
 
+        <section
+          aria-label="Newsletter signup"
+          className="mt-16 rounded-xl border border-border bg-card p-6 shadow-sm"
+        >
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+            Get one AI tip in your inbox every week
+          </h2>
+          <p className="mt-2 max-w-2xl text-muted-foreground">
+            Join AI for Business Owners: one plain-English tool pick and one
+            practical tip each week, no hype.
+          </p>
+          <div className="mt-4">
+            <script
+              async
+              src="https://subscribe-forms.beehiiv.com/v3/loader.js"
+              data-beehiiv-form="76696728-99f0-49cf-9472-faba9d9e13ff"
+            />
+          </div>
+        </section>
+
         <section aria-label="Common questions" className="mt-16">
           <h2 className="text-2xl font-semibold tracking-tight text-foreground">
             Common questions
