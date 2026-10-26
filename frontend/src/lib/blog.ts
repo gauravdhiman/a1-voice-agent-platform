@@ -31,6 +31,8 @@ export async function getPostMeta(slug: string): Promise<BlogPostMeta> {
 /** All posts, newest first. */
 export async function getAllPostMetas(): Promise<BlogPostMeta[]> {
   const slugs = getPostSlugs();
-  const metas = await Promise.all(slugs.map((slug) => getPostMeta(slug)));
+  const metas = await Promise.all(
+    slugs.map(async (slug) => ({ ...(await getPostMeta(slug)), slug }))
+  );
   return metas.sort((a, b) => (a.date < b.date ? 1 : -1));
 }

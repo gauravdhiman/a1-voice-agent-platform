@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 320" role="img">
+<title>Journey of one call through an AI receptionist</title>
+<rect x="0" y="0" width="720" height="320" rx="20" fill="#0f172a"/>
+<text x="36" y="48" font-family="Arial, Helvetica, sans-serif" font-size="14" letter-spacing="2" fill="#94a3b8">WHAT HAPPENS WHEN SOMEONE CALLS</text>
+<circle cx="100" cy="140" r="42" fill="#134e4a" stroke="#2dd4bf" stroke-width="1.5"/>
+<path d="M 114 124 A 22 22 0 0 1 114 156" fill="none" stroke="#2dd4bf" stroke-width="2.5" stroke-linecap="round"/>
+<path d="M 126 114 A 36 36 0 0 1 126 166" fill="none" stroke="#2dd4bf" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
+<circle cx="280" cy="140" r="42" fill="#134e4a" stroke="#2dd4bf" stroke-width="1.5"/>
+<path d="M 258 126 h 44 a 10 10 0 0 1 10 10 v 14 a 10 10 0 0 1 -10 10 h -22 l -12 14 v -14 h -10 a 10 10 0 0 1 -10 -10 v -14 a 10 10 0 0 1 10 -10 z" fill="#0f172a" stroke="#2dd4bf" stroke-width="2"/>
+<circle cx="460" cy="140" r="42" fill="#134e4a" stroke="#2dd4bf" stroke-width="1.5"/>
+<rect x="432" y="118" width="56" height="44" rx="8" fill="#0f172a" stroke="#2dd4bf" stroke-width="2"/>
+<rect x="432" y="118" width="56" height="12" rx="6" fill="#2dd4bf"/>
+<circle cx="640" cy="140" r="42" fill="#134e4a" stroke="#2dd4bf" stroke-width="1.5"/>
+<rect x="616" y="116" width="48" height="48" rx="8" fill="#0f172a" stroke="#2dd4bf" stroke-width="2"/>
+<rect x="626" y="128" width="28" height="6" rx="3" fill="#2dd4bf"/>
+<rect x="626" y="140" width="28" height="6" rx="3" fill="#5eead4" opacity="0.7"/>
+<rect x="626" y="152" width="18" height="6" rx="3" fill="#5eead4" opacity="0.5"/>
+<path d="M 146 140 L 232 140" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>
+<path d="M 232 140 L 220 132 L 220 148" fill="#2dd4bf"/>
+<path d="M 326 140 L 412 140" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>
+<path d="M 412 140 L 400 132 L 400 148" fill="#2dd4bf"/>
+<path d="M 506 140 L 592 140" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>
+<path d="M 592 140 L 580 132 L 580 148" fill="#2dd4bf"/>
+<text x="100" y="222" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle" fill="#e2e8f0">Caller rings your</text>
+<text x="100" y="244" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle" fill="#e2e8f0">existing number</text>
+<text x="280" y="222" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle" fill="#e2e8f0">Greeted in your</text>
+<text x="280" y="244" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle" fill="#e2e8f0">business name</text>
+<text x="460" y="222" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle" fill="#e2e8f0">Booked, answered,</text>
+<text x="460" y="244" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle" fill="#e2e8f0">or ordered</text>
+<text x="640" y="222" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle" fill="#e2e8f0">You get a summary</text>
+<text x="640" y="244" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="middle" fill="#e2e8f0">seconds later</text>
+</svg>

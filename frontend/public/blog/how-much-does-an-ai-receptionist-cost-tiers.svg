@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" role="img">
+<title>Monthly price ranges for AI receptionist tiers</title>
+<rect x="0" y="0" width="720" height="400" rx="20" fill="#0f172a"/>
+<text x="36" y="48" font-family="Arial, Helvetica, sans-serif" font-size="14" letter-spacing="2" fill="#94a3b8">MONTHLY PRICE BY TIER</text>
+<text x="190" y="108" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="end" fill="#e2e8f0">Under $49</text>
+<rect x="200" y="82" width="45" height="40" rx="8" fill="#64748b"/>
+<text x="257" y="108" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#e2e8f0">Usually smart voicemail</text>
+<text x="190" y="188" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="end" fill="#e2e8f0">$49 to $149</text>
+<rect x="245" y="162" width="92" height="40" rx="8" fill="#2dd4bf"/>
+<text x="349" y="188" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#2dd4bf">Sweet spot for most small businesses</text>
+<text x="190" y="268" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="end" fill="#e2e8f0">$150 to $349</text>
+<rect x="338" y="242" width="183" height="40" rx="8" fill="#2dd4bf" opacity="0.75"/>
+<text x="533" y="268" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#e2e8f0">Deeper integrations</text>
+<text x="190" y="348" font-family="Arial, Helvetica, sans-serif" font-size="15" text-anchor="end" fill="#e2e8f0">$350 and up</text>
+<rect x="522" y="322" width="138" height="40" rx="8" fill="#64748b"/>
+<path d="M 660 322 L 684 342 L 660 362" fill="#64748b"/>
+<text x="36" y="388" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#94a3b8">Enterprise territory: custom voices, dedicated onboarding, and compliance features.</text>
+</svg>
