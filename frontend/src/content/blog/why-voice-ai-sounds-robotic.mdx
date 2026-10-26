@@ -1,0 +1,144 @@
+import { BlogCTA } from "@/components/blog/blog-cta";
+import { BlogTable } from "@/components/blog/blog-table";
+import { BlogFaq } from "@/components/blog/blog-faq";
+
+export const metadata = {
+  title: "Why AI Voices Sound Robotic and What Is Changing",
+  description:
+    "AI voices sound robotic because most turn speech into text first, losing tone and timing. Here is what that means for your phone line.",
+  date: "2026-10-26",
+};
+
+# Why AI voices sound robotic (and why that is about to change)
+
+You have heard it. You call a business, or a support line, and the voice that answers is almost right. The words are correct. The grammar is fine. And yet something feels off within about three seconds. It is too even, too patient, too smooth in exactly the wrong places. It sounds like someone reading a script while smiling very hard.
+
+I build an AI receptionist, so I spend an embarrassing amount of time listening to AI voices. I also hear the same worry from business owners on demo calls: "I love the idea, but I do not want my customers talking to a robot." That is a fair worry. A voice that sounds wrong does not just feel awkward, it changes how a caller behaves. People get shorter with it. They repeat themselves. Sometimes they just hang up and call a competitor.
+
+So let me explain, in plain English, why AI voices have sounded robotic, and why a launch last week made me think that era is closer to ending than most people realize.
+
+## What you actually hear when a voice sounds robotic
+
+When people say "robotic," they usually do not mean the voice sounds like a 1980s movie robot. They mean it sounds flat in a very human way. Here is what is actually going on.
+
+First, the melody is wrong. Human speech goes up and down constantly. We stress one word and rush through the next. We trail off at the end of a thought, or lift our voice at the end of a question even when the words themselves are not a question. Most AI voices keep the melody too level. Every sentence gets about the same rise and fall, so the ear notices the pattern and files it under "not a person."
+
+Second, the timing is wrong. Real conversation is full of tiny pauses, false starts, and filler sounds. We say "um" while we think. We pause before an important number, like a price or a date, because we know the other person needs a second to take it in. Older AI voices either rush straight through or insert pauses in places no human would pause, like right in the middle of a phone number. Both feel strange.
+
+Third, the turn-taking is wrong. This is the big one, and it is the one most people cannot name but instantly feel. In a real conversation, two people talk over each other a little. You say "mm-hmm" while I am still talking, to show you are listening. You cut in when you already know what I am about to say. I slow down when I hear you hesitate. That back-and-forth is constant, and it is how we know the other person is actually with us.
+
+Most voice AI, until very recently, could not do any of that. It had to wait for you to finish, then think, then speak, then wait again. That stop-start rhythm is what your brain registers as robotic, even when the voice itself sounds perfectly pleasant.
+
+## The speech-to-text bottleneck, explained simply
+
+Here is the part that surprised me when I first learned it, because it explains almost everything else.
+
+Most voice assistants you have used do not actually listen to your voice the way a person does. They run your speech through three separate steps, one after another.
+
+Step one turns your speech into text. A transcription model listens to your words and writes them down, the way a court reporter would. Step two sends that text to a language model, which figures out what you meant and writes a reply, also as text. Step three turns that reply text back into speech, using a voice synthesizer.
+
+That pipeline works, and it is how most of today's phone AI, including ours, is built. But every step throws information away. When your speech becomes text, the text keeps your words and loses almost everything else. It loses your tone. It loses whether you sounded rushed, annoyed, confused, or relieved. It loses the laugh in the middle of your sentence, the sigh before you said "actually, never mind," and the way your voice rose at the end because you were not sure.
+
+The language model then has to guess, from the bare words alone, how you felt and what you really wanted. Then the voice synthesizer has to invent the tone back from scratch, based on punctuation and a few rules. It is a bit like someone describing a song to you in words, and then you trying to sing it back. You might get the lyrics right, but the feeling will be approximate at best.
+
+That is also why these systems pause. Transcription, thinking, and speech generation each take a moment, and they happen one after another. Add them up and you get that familiar half-second of silence after you stop talking, the silence that makes you wonder if the thing heard you at all.
+
+None of this means the old approach is useless. Far from it. It is reliable, it works with the business tools a receptionist needs, like calendars and booking systems, and it handles most calls well. But it has a ceiling, and that ceiling is exactly the robotic feeling callers complain about.
+
+## What Block just launched, and why it matters
+
+On October 23, 2026, Block, the company behind Square and Cash App, announced a voice model called Dessa. I am not writing about it because it is shiny. I am writing about it because it attacks the exact bottleneck I just described, in a way nobody had quite done before.
+
+According to Block, Dessa was trained from scratch on nothing but human conversation. No text, no pre-existing language model underneath, just recorded people talking to each other. The team behind it, a small research lab inside Block led by Ragavan Thurairatnam, says the model learned language by listening, the way a child does, rather than by reading.
+
+Dessa is also what engineers call full-duplex, which is a fancy way of saying it listens and talks at the same time. It takes audio in and puts audio out, with no transcription step in between. Because it never turns your voice into text, it never throws the tone away in the first place. Block says it can hear emotion, sarcasm, and laughter, cut in when you interrupt, and backchannel with a quick "yeah" or "got it" while you are still talking, the way a person does. Block also says it runs locally on a MacBook Pro with an M4 Max chip or better, and that its replies come faster than real time, which would remove a lot of that awkward pause.
+
+Jack Dorsey, Block's co-founder, called it the most authentic full-duplex speech model ever built, and said talking with it feels like talking with a person, full of emotion, nuance, pauses, and a natural cadence. That is marketing language, so take the superlative with a pinch of salt. But the demo recordings Block published are genuinely striking. In one, the model sounds tired while describing a long day at work. In another, it laughs mid-sentence and finishes the other speaker's thought. That is not the kind of thing you can fake by adding a laugh sound effect to a text-to-speech voice. It is the sound of a model that learned timing from real conversation.
+
+I want to be honest about the limits too, because a founder hyping someone else's research demo helps nobody. Dessa is a research preview, not a product you can buy. Early access is limited to a small group of AI safety researchers, and everyone else joins a waitlist. Block has not published a parameter count, benchmarks, latency figures, or an API. The demos are Block's own recordings, and at least one reviewer noted an awkward moment where the model mistook the speaker for someone else. So Dessa is a signpost, not a finish line. It shows what speech-native models can do. It does not, by itself, answer your business phone tomorrow.
+
+But signposts matter in this industry. When the best-known approach has a structural ceiling, and someone demonstrates a different structure that clears it, the rest of the field moves. Expect every serious voice company to be working on speech-native models now, if they were not already. The voices your customers hear in two years will likely sound much less like a pipeline and much more like a person, because they will be built the way Dessa is built.
+
+## Old pipeline vs speech-native, side by side
+
+Here is the comparison in one place, because it is easier to see the shift this way.
+
+<BlogTable
+  headers={["", "Today's common voice AI", "Speech-native models like Dessa"]}
+  rows={[
+    ["How it hears you", "Turns your speech into text first", "Listens to audio directly, no text step"],
+    ["What it keeps", "Your words, mostly", "Your words plus tone, pace, laughter, and hesitation"],
+    ["Interruptions", "Usually waits for you to finish", "Can listen while talking, so it can be interrupted"],
+    ["Backchanneling", "Rare, often sounds inserted", "Natural 'yeah' and 'got it' while you talk"],
+    ["Pauses", "A beat after you stop, while it thinks in stages", "Shorter, more human timing, per Block's demos"],
+    ["Emotion", "Guessed from words, then acted out", "Heard directly in your voice"],
+    ["Business tools", "Mature: calendars, booking, CRM", "Early: still a research preview, not a product"],
+    ["Available today", "Yes, in real products", "No, waitlist and safety researchers only"],
+  ]}
+/>
+
+Notice the last two rows. That is the honest trade-off right now. The older approach is less natural but it is a finished product, with booking, handoffs, and all the unglamorous plumbing a business phone line needs. The new approach is more natural but it is not a product yet. The interesting moment comes when the two meet, when a speech-native voice also knows your services, your prices, and your calendar. That is the version I am watching for, and it is the version that will change what callers expect from every business phone line.
+
+## What this means for your business phone line
+
+You might be thinking, fine, interesting research, but what do I do on Monday? Here is how I would think about it as a business owner.
+
+First, do not wait for the perfect voice. Callers already prefer a good AI receptionist to voicemail, even with today's voices, because the alternative on a missed call is not a perfect human, it is silence. A caller who gets a clear answer, a booked appointment, and a text confirmation is usually happy, even if the voice was a touch too even. The robotic feeling matters most when the call goes wrong, when the AI misunderstands, talks over the caller, or loops. That is a product quality problem, not just a voice problem, and it is one you can test today.
+
+Second, judge any voice AI by its turn-taking, not just its voice quality. A pretty voice that cannot be interrupted will still frustrate people. On a demo, try interrupting it mid-sentence. Try talking over it. Try saying "no wait, actually" and changing your mind halfway through. The systems that handle that gracefully are the ones your callers will actually like. The ones that plow on regardless, or restart from the beginning, will cost you patience even if they sound lovely in a scripted demo.
+
+Third, expect caller expectations to rise. Right now, most callers forgive a slightly robotic voice because they have heard worse. As speech-native voices spread, first in consumer products and then in business tools, that forgiveness will shrink. A voice that sounded fine in 2025 may sound dated in 2027. That does not mean you should replace your phone system every six months. It means that when you choose a vendor, you should ask how their voice technology is evolving, not just how it sounds in today's demo.
+
+That last point is especially sharp for businesses where the phone call is emotional. An [HVAC company](/hvac) taking a call at 1 a.m. from someone whose furnace died in January is not selling a product, it is calming a person down. A [dental office](/dental) hearing from a patient in pain needs warmth before it needs efficiency. In those moments, tone is not decoration. It is the service. A voice that hears worry and slows down will book more jobs than a voice that cheerfully barrels through a script.
+
+## How to test any AI receptionist voice before you buy
+
+If you are shopping for an AI receptionist, do not judge it from a polished demo video. Run it through the situations your real callers create. Here is the quick test I would run, and the one I would want any vendor to pass, us included.
+
+Start with an interruption. Call the demo, let it start answering, then cut in with a correction. A good system acknowledges the interruption and adjusts. A weak one talks over you or pretends it did not happen.
+
+Then try a messy caller. Give a wrong date, correct yourself, change the service you want halfway through, and mumble a phone number. Real callers do all of this. The system should ask a clarifying question instead of confidently booking the wrong thing.
+
+Then try emotion. Call sounding rushed and a little stressed, the way a real customer with a burst pipe sounds. Does the voice slow down at all? Does it acknowledge the urgency, or does it chirp through a greeting script as if nothing is wrong? You do not need it to be a therapist. You need it to not sound oblivious.
+
+Then try a handoff. Ask something it cannot answer, like a strange warranty question or a price for a job you have not defined yet. A good receptionist says so plainly and gets you to a human fast, with a summary of what was already discussed, so the caller does not have to start over. That handoff matters more than voice quality, because every system, human or AI, hits questions it cannot answer.
+
+Finally, listen for the basics. Does it pronounce your business name right? Does it say prices and dates clearly, with a pause after the number? Does it confirm the booking back to you before ending the call? These are small things, and they are the difference between a caller who hangs up confident and a caller who calls back to check.
+
+You can read [how our setup works](/how-it-works) before you talk to us, and our live demos let you hear the current generation of voice on real business scenarios. I will not claim it sounds like Dessa yet. Nobody's production receptionist does. What I will claim is that it handles interruptions, corrections, and handoffs well, because those are the things that decide whether a caller stays on the line, and they are the things you should test in any vendor.
+
+## What will not change, even when voices get perfect
+
+It is tempting to think that once AI voices sound fully human, the phone problem is solved. It is not, and I think it is worth saying why, because it keeps the hype in proportion.
+
+A receptionist's job was never just sounding nice. It is knowing things. It is knowing that your shop does not take walk-ins on Tuesdays, that the dentist is out on Friday, that a water heater replacement needs a different appointment length than a drain cleaning. It is knowing when a call is an emergency and when it is a quote request that can wait until morning. It is knowing when to stop answering and get a human, and doing that handoff without making the caller repeat everything.
+
+None of that comes from voice quality. It comes from the business knowledge behind the voice, the calendar it can actually book into, and the judgment about when to escalate. Speech-native models will make the conversation feel better. They will not, by themselves, know your business. The vendors who win will be the ones who pair a natural voice with deep, correct business knowledge and reliable booking, not the ones with the prettiest voice alone.
+
+There is also a trust question that gets sharper as voices get more human. If a caller cannot tell they are talking to an AI, should they be told? I think yes, plainly and early. Our receptionist identifies itself as an AI assistant, and I think that is the right standard for the industry. A voice that is honest about what it is earns more trust over time than a voice that fools someone for thirty seconds and then gets caught on a question it cannot answer. As voices improve, that honesty will matter more, not less.
+
+## The bottom line
+
+AI voices have sounded robotic for a specific, fixable reason: most of them turned your speech into text, threw away the tone, and then tried to act the tone back from the words. That pipeline made voices flat, slow to respond, and bad at the back-and-forth that makes conversation feel human.
+
+Dessa, announced by Block on October 23, 2026, points at a different way: train on human conversation alone, listen and talk at the same time, and keep the tone all the way through. It is still a research preview, with no public product, no benchmarks, and no API yet, so do not buy anything on the strength of a demo recording. But it is a credible preview of where voices are heading, and it is a good reason to judge any voice AI you consider by how it handles interruptions, emotion, and handoffs, not just by how smooth it sounds in a script.
+
+If you run a small business, the practical move has not changed. Get a receptionist, human or AI, that answers every call, books correctly, and hands off gracefully when it is out of its depth. Then, as speech-native voices reach real products, expect the experience to get noticeably more human, and expect your callers to notice. The businesses that will benefit most are the ones whose phones already work well, because a better voice on top of a good system is a genuine upgrade, while a better voice on top of a broken system is still a broken system.
+
+<BlogFaq
+  items={[
+    { q: "Why do AI voices sound robotic?", a: "Most AI voices today turn your speech into text, send the text to a language model, and then turn the reply back into speech. That pipeline keeps your words but loses your tone, pace, laughter, and hesitation, and it adds pauses while each step runs in turn. The result sounds flat and stop-start, which is what people hear as robotic." },
+    { q: "What is Block's Dessa?", a: "Dessa is a voice model announced by Block on October 23, 2026. Block says it was trained from scratch on human conversation only, with no text and no pre-existing language model, and that it listens and talks at the same time. It is a research preview, not a product you can buy yet, with early access limited to safety researchers and a waitlist for everyone else." },
+    { q: "What does full-duplex mean?", a: "Full-duplex means the model listens while it talks, the way people do. That lets it be interrupted, cut in, and backchannel with a quick 'yeah' or 'got it' while you are still speaking, instead of waiting for you to finish before it starts thinking." },
+    { q: "Will Dessa replace AI receptionists?", a: "Not by itself, and not soon. Dessa is a research model with no public API, benchmarks, or booking tools yet. The change it signals is in voice quality and conversation timing. A business receptionist still needs business knowledge, calendar booking, and human handoffs, which are separate from how natural the voice sounds." },
+    { q: "How can I tell if an AI receptionist voice is good?", a: "Test it the way real callers behave. Interrupt it mid-sentence, correct yourself halfway through, change your request, and ask something it cannot answer. A good system adjusts to interruptions, asks clarifying questions instead of booking the wrong thing, and hands off to a human with a summary. A pretty voice that cannot do those things will still frustrate callers." },
+    { q: "Should an AI receptionist tell callers it is AI?", a: "Yes. Being upfront builds trust and avoids an awkward moment when the caller realizes they were fooled. Our receptionist identifies itself as an AI assistant, and that honesty matters even more as voices get harder to distinguish from humans." },
+    { q: "When will speech-native voices reach small business phone lines?", a: "No vendor can give you a reliable date yet, because models like Dessa are still research previews. The direction is clear, though: expect natural, interruptible voices to reach business products over the next few years, and expect caller expectations to rise with them. In the meantime, choose a system that answers every call, books correctly, and hands off well, because those fundamentals will not change." },
+  ]}
+/>
+
+## One last thought
+
+I started this post with the voice that sounds almost right, because that is the experience most of us have had. The next version of that voice, the one trained on conversation itself rather than on text about conversation, will probably not sound almost right. It will sound right. When it arrives on a business phone line, with real booking and real handoffs behind it, callers will not think about voice technology at all. They will just get their appointment booked, their emergency triaged, and their question answered, and they will hang up thinking they dealt with a competent business. That, in the end, is the whole point of a receptionist, whatever it sounds like.
+
+<BlogCTA />

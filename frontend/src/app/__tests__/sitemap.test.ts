@@ -26,6 +26,7 @@ describe("sitemap", () => {
       `${SITE_URL}/blog/ai-receptionist-explained`,
       `${SITE_URL}/blog/how-much-does-a-missed-call-cost`,
       `${SITE_URL}/blog/how-much-does-an-ai-receptionist-cost`,
+      `${SITE_URL}/blog/why-voice-ai-sounds-robotic`,
       `${SITE_URL}/ai-tools`,
       `${SITE_URL}/ai-tools/savings-calculator`,
       ...TOOL_CATEGORIES.map(
