@@ -1,22 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" role="img">
-<title>Older voice AI pipeline versus speech-native voice AI</title>
-<rect x="0" y="0" width="720" height="380" rx="20" fill="#0f172a"/>
-<text x="36" y="44" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="bold" fill="#f1f5f9">How voice AI turns speech into a reply</text>
-<text x="36" y="92" font-family="Arial, Helvetica, sans-serif" font-size="13" letter-spacing="2" fill="#94a3b8">OLDER PIPELINE</text>
-<rect x="36" y="108" width="140" height="56" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/><text x="106.0" y="141.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#f1f5f9">Your speech</text>
-<text x="188" y="143" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">→</text>
-<rect x="200" y="108" width="140" height="56" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/><text x="270.0" y="141.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#f1f5f9">Written text</text>
-<text x="352" y="143" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">→</text>
-<rect x="364" y="108" width="150" height="56" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/><text x="439.0" y="141.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#f1f5f9">Language model</text>
-<text x="526" y="143" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">→</text>
-<rect x="538" y="108" width="146" height="56" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/><text x="611.0" y="141.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#f1f5f9">Spoken reply</text>
-<text x="36" y="196" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#fbbf24">Tone, pace, and emotion are lost when speech becomes text.</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" role="img">
+<title>A caller voice traveling through clunky machines versus flowing straight through</title>
+<rect x="0" y="0" width="720" height="400" rx="20" fill="#0f172a"/>
+<text x="36" y="52" font-family="Arial, Helvetica, sans-serif" font-size="14" letter-spacing="2" fill="#94a3b8">THE OLD WAY</text>
+<circle cx="64" cy="130" r="10" fill="#fbbf24"/><path d="M 80 116 A 20 20 0 0 1 80 144" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"/><path d="M 90 108 A 32 32 0 0 1 90 152" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
+<path d="M100,130.0 L106,143.3 L112,146.9 L118,139.9 L124,128.0 L130,119.3 L136,118.3 L142,124.4 L148,132.7 L154,138.2 L160,138.1 L166,133.3 L172,126.8 L178,122.4 L184,122.7 L190,127.7 L196,134.8 L202,139.9 L208,139.1 L214,131.7 L220,121.6 L226,115.4 L232,118.4" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/><path d="M320,130.0 L326,137.4 L332,140.2 L338,136.6 L344,128.5 L350,121.0 L356,118.8 L362,123.9 L368,133.3 L374,141.2 L380,142.3" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/><path d="M470,130.0 L476,135.4 L482,137.3 L488,134.4 L494,129.1 L500,124.8 L506,124.1 L512,127.1 L518,131.4 L524,134.4 L530,134.4" fill="none" stroke="#a8a29e" stroke-width="3" stroke-linecap="round"/><path d="M620,130.0 L626,131.5 L632,132.0 L638,131.3 L644,129.7" fill="none" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+<rect x="240" y="95" width="70" height="70" rx="12" fill="#475569" stroke="#64748b" stroke-width="1.5"/><circle cx="275" cy="130" r="13" fill="#334155" stroke="#94a3b8" stroke-width="1.5"/><circle cx="275" cy="130" r="4" fill="#94a3b8"/>
+<rect x="390" y="95" width="70" height="70" rx="12" fill="#475569" stroke="#64748b" stroke-width="1.5"/><circle cx="425" cy="130" r="13" fill="#334155" stroke="#94a3b8" stroke-width="1.5"/><circle cx="425" cy="130" r="4" fill="#94a3b8"/>
+<rect x="540" y="95" width="70" height="70" rx="12" fill="#475569" stroke="#64748b" stroke-width="1.5"/><circle cx="575" cy="130" r="13" fill="#334155" stroke="#94a3b8" stroke-width="1.5"/><circle cx="575" cy="130" r="4" fill="#94a3b8"/>
+<circle cx="662" cy="130" r="10" fill="#94a3b8"/>
+<text x="36" y="198" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#fbbf24">It arrives flat, clipped, and robotic.</text>
 <line x1="36" y1="222" x2="684" y2="222" stroke="#334155" stroke-width="1"/>
-<text x="36" y="252" font-family="Arial, Helvetica, sans-serif" font-size="13" letter-spacing="2" fill="#94a3b8">SPEECH-NATIVE</text>
-<rect x="36" y="268" width="200" height="56" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/><text x="136.0" y="301.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#f1f5f9">Audio in</text>
-<text x="248" y="303" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">→</text>
-<rect x="260" y="268" width="200" height="56" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/><text x="360.0" y="301.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#f1f5f9">Audio understanding</text>
-<text x="472" y="303" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#64748b">→</text>
-<rect x="484" y="268" width="200" height="56" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/><text x="584.0" y="301.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#f1f5f9">Audio out</text>
-<text x="36" y="356" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#2dd4bf">Tone and timing stay in the audio from start to finish.</text>
+<text x="36" y="258" font-family="Arial, Helvetica, sans-serif" font-size="14" letter-spacing="2" fill="#94a3b8">THE NEW WAY</text>
+<circle cx="64" cy="318" r="10" fill="#2dd4bf"/><path d="M 80 304 A 20 20 0 0 1 80 332" fill="none" stroke="#2dd4bf" stroke-width="2.5" stroke-linecap="round"/><path d="M 90 296 A 32 32 0 0 1 90 340" fill="none" stroke="#2dd4bf" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
+<path d="M100,318.0 L106,331.3 L112,334.9 L118,327.9 L124,316.0 L130,307.3 L136,306.3 L142,312.4 L148,320.7 L154,326.2 L160,326.1 L166,321.3 L172,314.8 L178,310.4 L184,310.7 L190,315.7 L196,322.8 L202,327.9 L208,327.1 L214,319.7 L220,309.6 L226,303.4 L232,306.4 L238,318.0 L244,331.5 L250,337.6 L256,331.1 L262,315.0 L268,299.6 L274,295.3 L280,305.7 L286,324.5 L292,339.3 L298,340.5 L304,327.4 L310,308.9 L316,297.1 L322,299.1 L328,312.5 L334,327.9 L340,335.5 L346,331.6 L352,320.1 L358,309.2 L364,305.2 L370,309.5 L376,318.0 L382,325.1 L388,327.0 L394,323.3 L400,316.9 L406,311.5 L412,310.1 L418,313.7 L424,320.4 L430,326.5 L436,327.8 L442,322.5 L448,313.0 L454,305.1 L460,304.7 L466,313.6 L472,327.1 L478,336.4 L484,334.3 L490,320.9 L496,304.1 L502,295.3 L508,300.9 L514,318.0 L520,335.5 L526,341.9 L532,333.0 L538,314.8 L544,299.4 L550,296.5 L556,307.1 L562,323.4 L568,334.7 L574,334.5 L580,324.5 L586,312.0 L592,305.1 L598,306.9 L604,314.9 L610,323.4 L616,327.3 L622,325.2 L628,319.1 L634,312.9 L640,310.0" fill="none" stroke="#2dd4bf" stroke-width="3" stroke-linecap="round"/>
+<circle cx="662" cy="318" r="10" fill="#2dd4bf"/>
+<text x="36" y="382" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#2dd4bf">It arrives sounding like a person.</text>
 </svg>
