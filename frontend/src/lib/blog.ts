@@ -6,6 +6,7 @@ export interface BlogPostMeta {
   description: string;
   date: string;
   slug: string;
+  image?: string;
 }
 
 // Note: process.cwd() is the frontend/ directory at build time.

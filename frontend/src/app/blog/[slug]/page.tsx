@@ -19,9 +19,32 @@ export async function generateMetadata({
   const { slug } = await params;
   try {
     const meta = await getPostMeta(slug);
-    return {
+    const base = {
       title: `${meta.title} - 24x7 AI`,
       description: meta.description,
+    };
+    if (!meta.image) return base;
+    return {
+      ...base,
+      openGraph: {
+        title: `${meta.title} - 24x7 AI`,
+        description: meta.description,
+        type: "article",
+        images: [
+          {
+            url: meta.image,
+            width: 1200,
+            height: 630,
+            alt: meta.title,
+          },
+        ],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: `${meta.title} - 24x7 AI`,
+        description: meta.description,
+        images: [meta.image],
+      },
     };
   } catch {
     return { title: "Post not found - 24x7 AI" };

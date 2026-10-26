@@ -7,6 +7,7 @@ export const metadata = {
   description:
     "AI voices sound robotic because most turn speech into text first, losing tone and timing. Here is what that means for your phone line.",
   date: "2026-10-26",
+  image: "/blog/why-voice-ai-sounds-robotic-hero.jpg",
 };
 
 # Why AI voices sound robotic (and why that is about to change)
@@ -16,6 +17,11 @@ You have heard it. You call a business, or a support line, and the voice that an
 I build an AI receptionist, so I spend an embarrassing amount of time listening to AI voices. I also hear the same worry from business owners on demo calls: "I love the idea, but I do not want my customers talking to a robot." That is a fair worry. A voice that sounds wrong does not just feel awkward, it changes how a caller behaves. People get shorter with it. They repeat themselves. Sometimes they just hang up and call a competitor.
 
 So let me explain, in plain English, why AI voices have sounded robotic, and why a launch last week made me think that era is closer to ending than most people realize.
+
+<figure>
+  <img src="/blog/why-voice-ai-sounds-robotic-hero.jpg" alt="A person speaking, their words flowing out as warm, natural sound waves" />
+  <figcaption>Human speech is more than words: tone, pace, and pauses ride along with it. That is what older voice AI loses, and what speech-native models keep.</figcaption>
+</figure>
 
 ## What you actually hear when a voice sounds robotic
 
@@ -29,6 +35,11 @@ Third, the turn-taking is wrong. This is the big one, and it is the one most peo
 
 Most voice AI, until very recently, could not do any of that. It had to wait for you to finish, then think, then speak, then wait again. That stop-start rhythm is what your brain registers as robotic, even when the voice itself sounds perfectly pleasant.
 
+<figure>
+  <img src="/blog/why-voice-ai-sounds-robotic-waveforms.svg" alt="Two sound waveforms: one flat and even like a robotic voice, one rising, falling, and pausing like natural human speech" />
+  <figcaption>Melody, timing, and turn-taking are what your ear actually notices. A flat, even voice reads as robotic even when the words are perfect.</figcaption>
+</figure>
+
 ## The speech-to-text bottleneck, explained simply
 
 Here is the part that surprised me when I first learned it, because it explains almost everything else.
@@ -36,6 +47,11 @@ Here is the part that surprised me when I first learned it, because it explains 
 Most voice assistants you have used do not actually listen to your voice the way a person does. They run your speech through three separate steps, one after another.
 
 Step one turns your speech into text. A transcription model listens to your words and writes them down, the way a court reporter would. Step two sends that text to a language model, which figures out what you meant and writes a reply, also as text. Step three turns that reply text back into speech, using a voice synthesizer.
+
+<figure>
+  <img src="/blog/why-voice-ai-sounds-robotic-pipeline.svg" alt="Diagram comparing the older voice AI pipeline, speech to text to language model to speech, with speech-native AI, audio in to audio out" />
+  <figcaption>The older pipeline throws tone away at the text step and rebuilds it from scratch. Speech-native models skip the text step entirely.</figcaption>
+</figure>
 
 That pipeline works, and it is how most of today's phone AI, including ours, is built. But every step throws information away. When your speech becomes text, the text keeps your words and loses almost everything else. It loses your tone. It loses whether you sounded rushed, annoyed, confused, or relieved. It loses the laugh in the middle of your sentence, the sigh before you said "actually, never mind," and the way your voice rose at the end because you were not sure.
 
