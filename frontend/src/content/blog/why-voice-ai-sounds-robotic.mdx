@@ -1,6 +1,7 @@
 import { BlogCTA } from "@/components/blog/blog-cta";
 import { BlogTable } from "@/components/blog/blog-table";
 import { BlogFaq } from "@/components/blog/blog-faq";
+import { XEmbed } from "@/components/blog/x-embed";
 
 export const metadata = {
   title: "Why AI Voices Sound Robotic and What Is Changing",
@@ -69,6 +70,11 @@ According to Block, Dessa was trained from scratch on nothing but human conversa
 Dessa is also what engineers call full-duplex, which is a fancy way of saying it listens and talks at the same time. It takes audio in and puts audio out, with no transcription step in between. Because it never turns your voice into text, it never throws the tone away in the first place. Block says it can hear emotion, sarcasm, and laughter, cut in when you interrupt, and backchannel with a quick "yeah" or "got it" while you are still talking, the way a person does. Block also says it runs locally on a MacBook Pro with an M4 Max chip or better, and that its replies come faster than real time, which would remove a lot of that awkward pause.
 
 Jack Dorsey, Block's co-founder, called it the most authentic full-duplex speech model ever built, and said talking with it feels like talking with a person, full of emotion, nuance, pauses, and a natural cadence. That is marketing language, so take the superlative with a pinch of salt. But the demo recordings Block published are genuinely striking. In one, the model sounds tired while describing a long day at work. In another, it laughs mid-sentence and finishes the other speaker's thought. That is not the kind of thing you can fake by adding a laugh sound effect to a text-to-speech voice. It is the sound of a model that learned timing from real conversation.
+
+<XEmbed
+  statusUrl="https://x.com/blocks/status/2113721026324615173"
+  caption="Block's Dessa demo: the model laughs mid-sentence and speaks louder as the conversation builds, with waveforms for the human speaker and Dessa."
+/>
 
 I want to be honest about the limits too, because a founder hyping someone else's research demo helps nobody. Dessa is a research preview, not a product you can buy. Early access is limited to a small group of AI safety researchers, and everyone else joins a waitlist. Block has not published a parameter count, benchmarks, latency figures, or an API. The demos are Block's own recordings, and at least one reviewer noted an awkward moment where the model mistook the speaker for someone else. So Dessa is a signpost, not a finish line. It shows what speech-native models can do. It does not, by itself, answer your business phone tomorrow.
 
