@@ -32,6 +32,7 @@ const mockUseOrganization = vi.fn();
 const mockUseUserPermissions = vi.fn();
 const mockUseMyAgents = vi.fn();
 const mockUseOrgAgents = vi.fn();
+const mockUseAgentToolAttention = vi.fn();
 const mockUseDeleteAgent = vi.fn();
 const mockUseSearchParams = vi.fn();
 const mockPush = vi.fn();
@@ -69,6 +70,8 @@ vi.mock("@/hooks/use-user-permissions", () => ({
 vi.mock("@/hooks/use-agent-queries", () => ({
   useMyAgents: (enabled?: boolean) => mockUseMyAgents(enabled),
   useOrgAgents: (orgId: string) => mockUseOrgAgents(orgId),
+  useAgentToolAttention: (organizationId: string | null, enabled?: boolean) =>
+    mockUseAgentToolAttention(organizationId, enabled),
   useDeleteAgent: () => mockUseDeleteAgent(),
 }));
 
@@ -132,6 +135,11 @@ describe("/agents page (N1 permission-aware UI)", () => {
     });
     mockUseDeleteAgent.mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue(undefined),
+    });
+    mockUseAgentToolAttention.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
     });
     mockUseOrgAgents.mockImplementation(() => mockUseMyAgents());
   });
@@ -217,6 +225,82 @@ describe("/agents page (N1 permission-aware UI)", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.getByText("Fixture Agent")).toBeInTheDocument();
     expect(screen.queryByText("Other Org Agent")).not.toBeInTheDocument();
+  });
+
+  it("marks the list-view Tools button red when a connected tool needs attention", () => {
+    mockUseOrgAgents.mockReturnValue({
+      data: [FIXTURE_AGENT],
+      isLoading: false,
+      error: null,
+    });
+    mockUseAgentToolAttention.mockReturnValue({
+      data: [
+        {
+          agent_id: "agent-1",
+          needs_attention: true,
+          has_resend_email_tool: false,
+        },
+      ],
+      isLoading: false,
+      error: null,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(<AgentsPage />, { wrapper: makeWrapper(queryClient) });
+
+    const toolsButton = screen.getByRole("button", {
+      name: "Tools need attention",
+    });
+    expect(toolsButton.className).toContain("text-destructive");
+  });
+
+  it("marks the grid-view Configure Tools button red for a missing Resend credential", () => {
+    mockUseSearchParams.mockReturnValue({
+      get: vi.fn().mockReturnValue("grid"),
+    });
+    mockUseOrganization.mockReturnValue({
+      organizations: [
+        {
+          id: "org-1",
+          name: "Acme",
+          provider_credentials_status: { resend: false },
+        },
+      ],
+      currentOrganization: {
+        id: "org-1",
+        name: "Acme",
+        provider_credentials_status: { resend: false },
+      },
+      loading: false,
+    });
+    mockUseOrgAgents.mockReturnValue({
+      data: [FIXTURE_AGENT],
+      isLoading: false,
+      error: null,
+    });
+    mockUseAgentToolAttention.mockReturnValue({
+      data: [
+        {
+          agent_id: "agent-1",
+          needs_attention: false,
+          has_resend_email_tool: true,
+        },
+      ],
+      isLoading: false,
+      error: null,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(<AgentsPage />, { wrapper: makeWrapper(queryClient) });
+
+    const toolsButton = screen.getByRole("button", {
+      name: "Configure Tools, needs attention",
+    });
+    expect(toolsButton.className).toContain("text-destructive");
   });
 
   it("keeps a platform admin cross-organization even without an active org", () => {

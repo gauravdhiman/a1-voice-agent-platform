@@ -4,7 +4,7 @@
 
 Tool connection states provide visual feedback to users about the authentication and configuration status of tools associated with voice agents. This system helps users quickly understand which tools are ready to use, which need authentication, and which are not connected at all.
 
-## Four Connection States
+## Five Connection States
 
 ### 1. NOT_CONNECTED
 **Status**: Tool is not associated with the agent
@@ -86,6 +86,19 @@ graph LR
 - Gmail with no tokens yet
 - OAuth flow was started but not completed
 
+### 5. CONFIGURATION_REQUIRED
+**Status**: A connected tool is missing required configuration
+
+**Visual**: Light red card, light red badge "Configuration required"
+
+**When shown**:
+- An `agent_tools` record exists
+- The saved attachment configuration is incomplete or invalid
+
+**Actions**:
+- "Edit Configuration" opens the tool drawer so an admin can complete setup
+- The tool is not ready for use until its configuration is corrected
+
 ## Connection Flow
 
 ```mermaid
@@ -112,6 +125,7 @@ class ConnectionStatus(str, Enum):
     CONNECTED_NO_AUTH = "connected_no_auth"
     CONNECTED_AUTH_VALID = "connected_auth_valid"
     CONNECTED_AUTH_INVALID = "connected_auth_invalid"
+    CONFIGURATION_REQUIRED = "configuration_required"
 ```
 
 ### get_connection_status() Helper Function
@@ -278,6 +292,26 @@ or has selected another filter, the normal `No tools match your current
 filters.` message is shown instead.
 
 ## User Experience
+
+### Agent list attention indicator
+
+The agent list and grid views surface connected-tool problems on the card's
+**Tools** / **Configure Tools** button. The button uses the destructive color
+when any connected tool needs authentication or configuration. It also turns
+red when the agent has the Resend tool but the organization's Resend credential
+is not configured. Selecting the button opens that agent's Tools tab.
+
+The list page loads these flags in one read-only request rather than fetching
+tool details for every card:
+
+| Request | Scope | Response |
+| --- | --- | --- |
+| `GET /api/v1/tools/agent-attention?organization_id={id}` | Caller must have `agent:read` in that organization | `agent_id`, `needs_attention`, and `has_resend_email_tool` per agent |
+| `GET /api/v1/tools/agent-attention` | Platform admins only | The same summary across organizations |
+
+The endpoint returns status flags only; it does not return credentials or tool
+configuration. Its organization filter follows the same read permission as the
+agent list and Tools tab.
 
 ### Connect Flow
 

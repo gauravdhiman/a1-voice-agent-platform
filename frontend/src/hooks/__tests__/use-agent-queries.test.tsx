@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const {
   getAgentTools,
+  getAgentToolAttention,
   getAgentSystemPrompt,
   getPlatformTools,
   getMyAgents,
@@ -13,6 +14,7 @@ const {
   deleteAgent,
 } = vi.hoisted(() => ({
   getAgentTools: vi.fn(),
+  getAgentToolAttention: vi.fn(),
   getAgentSystemPrompt: vi.fn(),
   getPlatformTools: vi.fn(),
   getMyAgents: vi.fn(),
@@ -24,6 +26,7 @@ const {
 vi.mock("@/services/agent-service", () => ({
   agentService: {
     getAgentTools,
+    getAgentToolAttention,
     getAgentSystemPrompt,
     getPlatformTools,
     getMyAgents,
@@ -36,6 +39,7 @@ vi.mock("@/services/agent-service", () => ({
 import {
   useAgentSystemPrompt,
   useAgentTools,
+  useAgentToolAttention,
   useCreateAgent,
   useDeleteAgent,
   useMyAgents,
@@ -64,6 +68,32 @@ describe("agent detail query loading", () => {
     });
 
     expect(getAgentTools).not.toHaveBeenCalled();
+  });
+
+  it("loads one organization-scoped tool-attention summary", async () => {
+    const summaries = [
+      {
+        agent_id: "agent-1",
+        needs_attention: true,
+        has_resend_email_tool: false,
+      },
+    ];
+    getAgentToolAttention.mockResolvedValueOnce(summaries);
+
+    const { result } = renderHook(() => useAgentToolAttention("org-1"), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toEqual(summaries));
+    expect(getAgentToolAttention).toHaveBeenCalledWith("org-1");
+  });
+
+  it("does not fetch tool-attention summaries when the caller is not scoped", () => {
+    renderHook(() => useAgentToolAttention(null, false), {
+      wrapper: createWrapper(),
+    });
+
+    expect(getAgentToolAttention).not.toHaveBeenCalled();
   });
 
   it("does not generate the system prompt preview until requested", () => {

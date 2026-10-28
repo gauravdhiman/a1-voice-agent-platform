@@ -24,6 +24,7 @@ import {
   useMyAgents,
   useOrgAgents,
   useDeleteAgent,
+  useAgentToolAttention,
 } from "@/hooks/use-agent-queries";
 import { AgentDeleteDialog } from "@/components/agents/agent-delete-dialog";
 import { AgentCard } from "@/components/agents/agent-card";
@@ -89,6 +90,15 @@ export default function AgentsPage() {
   // platform admins retain the cross-organization view and filter.
   const myAgentsQuery = useMyAgents(isPlatformAdmin);
   const orgAgentsQuery = useOrgAgents(currentOrganization?.id ?? "");
+  const toolAttentionOrganizationId = isPlatformAdmin
+    ? selectedOrgId === "all"
+      ? null
+      : selectedOrgId
+    : (currentOrganization?.id ?? null);
+  const agentToolAttentionQuery = useAgentToolAttention(
+    toolAttentionOrganizationId,
+    isPlatformAdmin || Boolean(currentOrganization?.id),
+  );
   const agents = useMemo(
     () => (isPlatformAdmin ? myAgentsQuery.data : orgAgentsQuery.data) ?? [],
     [isPlatformAdmin, myAgentsQuery.data, orgAgentsQuery.data],
@@ -100,6 +110,34 @@ export default function AgentsPage() {
 
   // Fetch organizations (reuse from context if available, otherwise get all)
   const allOrganizations = useMemo(() => organizations || [], [organizations]);
+  const organizationsById = useMemo(
+    () =>
+      new Map(
+        allOrganizations.map(
+          (organization) => [organization.id, organization] as const,
+        ),
+      ),
+    [allOrganizations],
+  );
+  const toolAttentionByAgentId = useMemo(
+    () =>
+      new Map(
+        (agentToolAttentionQuery.data ?? []).map(
+          (summary) => [summary.agent_id, summary] as const,
+        ),
+      ),
+    [agentToolAttentionQuery.data],
+  );
+  const agentToolsNeedAttention = useCallback(
+    (agent: VoiceAgent): boolean => {
+      const summary = toolAttentionByAgentId.get(agent.id);
+      const organization = organizationsById.get(agent.organization_id);
+      return Boolean(summary?.needs_attention) ||
+        (summary?.has_resend_email_tool === true &&
+          organization?.provider_credentials_status?.resend !== true);
+    },
+    [organizationsById, toolAttentionByAgentId],
+  );
 
   // Memoize filtered agents to avoid recalculation on every render
   const filteredAgents = useMemo(() => {
@@ -303,6 +341,7 @@ export default function AgentsPage() {
                       canDelete={canAct}
                       canEdit={canAct}
                       canConfigure={canAct}
+                      toolsNeedAttention={agentToolsNeedAttention(agent)}
                     />
                   );
                 })}
@@ -396,6 +435,7 @@ export default function AgentsPage() {
                     canDelete={canAct}
                     canEdit={canAct}
                     canConfigure={canAct}
+                    toolsNeedAttention={agentToolsNeedAttention(agent)}
                   />
                 );
               })}

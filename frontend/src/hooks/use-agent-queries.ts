@@ -26,6 +26,10 @@ export const agentQueryKeys = {
   platformToolUsage: (toolId: string) =>
     ["tools", "platform", toolId, "usage"] as const,
   agentTools: (agentId: string) => ["tools", "agent", agentId] as const,
+  agentToolAttention: (organizationId?: string | null) =>
+    organizationId === undefined
+      ? (["tools", "agent-attention"] as const)
+      : (["tools", "agent-attention", organizationId ?? "all"] as const),
 };
 
 // Get all agents for the current user. The optional enabled flag lets pages
@@ -121,6 +125,23 @@ export function useAgentTools(agentId: string, enabled = true) {
     queryFn: () => agentService.getAgentTools(agentId),
     staleTime: 30 * 1000,
     enabled: !!agentId && enabled,
+  });
+}
+
+/**
+ * Load safe tool-attention flags for all agents in one organization, or all
+ * organizations when the caller is a platform admin.
+ */
+export function useAgentToolAttention(
+  organizationId: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: agentQueryKeys.agentToolAttention(organizationId),
+    queryFn: () => agentService.getAgentToolAttention(organizationId),
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
+    enabled,
   });
 }
 
@@ -304,6 +325,9 @@ export function useConfigureAgentTool() {
       queryClient.invalidateQueries({
         queryKey: agentQueryKeys.agentTools(variables.agent_id),
       });
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.agentToolAttention(),
+      });
     },
     onError: () => {
       toast.error("Failed to connect tool");
@@ -358,6 +382,11 @@ export function useUpdateAgentTool() {
         });
       }
       toast.error("Failed to update tool");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.agentToolAttention(),
+      });
     },
   });
 }
@@ -456,6 +485,9 @@ export function useStartOAuth() {
         queryClient.invalidateQueries({
           queryKey: agentQueryKeys.platformTools(),
         });
+        queryClient.invalidateQueries({
+          queryKey: agentQueryKeys.agentToolAttention(),
+        });
       }, 3000);
     },
     onError: () => {
@@ -479,6 +511,9 @@ export function useLogoutAgentTool() {
         queryKey: agentQueryKeys.agentTools(""),
       });
       queries.forEach((query) => query.invalidate());
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.agentToolAttention(),
+      });
     },
     onError: () => {
       toast.error("Failed to log out");
@@ -501,6 +536,9 @@ export function useDeleteAgentTool() {
         queryKey: agentQueryKeys.agentTools(""),
       });
       queries.forEach((query) => query.invalidate());
+      queryClient.invalidateQueries({
+        queryKey: agentQueryKeys.agentToolAttention(),
+      });
     },
     onError: () => {
       toast.error("Failed to disconnect tool");

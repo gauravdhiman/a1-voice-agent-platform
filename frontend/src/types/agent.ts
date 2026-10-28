@@ -313,6 +313,15 @@ export interface AgentTool {
   tool?: PlatformTool;
 }
 
+/** Safe tool-health flags returned for one agent on the agents list page. */
+export interface AgentToolAttentionSummary {
+  agent_id: string;
+  /** True when any connected tool needs authentication or configuration. */
+  needs_attention: boolean;
+  /** True when the agent has the organization-configured Resend tool attached. */
+  has_resend_email_tool: boolean;
+}
+
 /** Read-only tab/header metadata returned while configuring Google Sheets. */
 export interface GoogleSheetsDiscoveredSheet {
   title: string;
