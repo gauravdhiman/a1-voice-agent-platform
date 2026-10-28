@@ -399,3 +399,17 @@ class AgentToolResponse(BaseModel):
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
     tool: Optional[PlatformTool] = Field(None, description="Tool details")
+
+
+class AgentToolAttentionSummary(BaseModel):
+    """Safe per-agent summary for surfacing connected-tool issues in lists."""
+
+    agent_id: UUID = Field(..., description="Agent ID")
+    needs_attention: bool = Field(
+        ...,
+        description="Whether any connected tool needs authentication or configuration",
+    )
+    has_resend_email_tool: bool = Field(
+        default=False,
+        description="Whether this agent has the organization-configured Resend tool attached",
+    )

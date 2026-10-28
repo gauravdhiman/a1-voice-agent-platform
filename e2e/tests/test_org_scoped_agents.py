@@ -13,10 +13,9 @@ conftest default mocks would break them.
 import json
 import re
 
-from playwright.sync_api import Page, expect
-
+import pytest
 from helpers import signin_user
-
+from playwright.sync_api import Page, expect
 
 TEST_ORG_ID = "00000000-0000-0000-0000-000000000001"
 SECOND_ORG_ID = "00000000-0000-0000-0000-000000000002"
@@ -119,6 +118,53 @@ def test_agents_page_org_scoped_empty_state(page: Page, base_url: str, step):
     expect(page.get_by_role("heading", name=re.compile(r"Voice Agents", re.I))).to_be_visible(timeout=10000)
     # Platform admin with no agents sees the generic empty state; org users see the org-scoped one.
     expect(page.get_by_text(re.compile(r"You haven't created any voice agents yet|There are no voice agents", re.I))).to_be_visible(timeout=10000)
+
+
+@pytest.mark.parametrize(
+    ("view", "accessible_name"),
+    [
+        ("list", "Tools need attention"),
+        ("grid", "Configure Tools, needs attention"),
+    ],
+)
+def test_agent_tool_attention_button_opens_tools_tab(
+    page: Page, base_url: str, step, view: str, accessible_name: str
+):
+    """Both agent card layouts surface tool issues and open the Tools tab."""
+    agent_id = "agent-attention"
+    agents = [_agent(agent_id, "Needs Attention Agent", TEST_ORG_ID)]
+    _setup_my_agents_mocks(page, agents)
+    _setup_org_scoped_mocks(page, TEST_ORG_ID, agents)
+    page.route(
+        re.compile(r".*/api/v1/tools/agent-attention(?:\?.*)?$"),
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                [
+                    {
+                        "agent_id": agent_id,
+                        "needs_attention": True,
+                        "has_resend_email_tool": False,
+                    }
+                ]
+            ),
+        ),
+    )
+
+    step(f"Sign in and open the Agents page in {view} view")
+    signin_user(page, base_url)
+    page.goto(f"{base_url}/agents?tab={view}")
+    page.wait_for_load_state("networkidle")
+
+    step("Verify the Tools button is red and labelled for attention")
+    tools_button = page.get_by_role("button", name=accessible_name)
+    expect(tools_button).to_be_visible(timeout=10000)
+    expect(tools_button).to_have_class(re.compile("text-destructive"))
+
+    step("Open the agent Tools tab from its attention button")
+    tools_button.click()
+    expect(page).to_have_url(re.compile(rf".*/agents/{agent_id}/tools$"))
 
 
 def test_agents_page_platform_admin_cross_org_filter(page: Page, base_url: str, step):

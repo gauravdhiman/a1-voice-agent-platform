@@ -9,6 +9,7 @@ import type {
   PlatformTool,
   PlatformToolUsage,
   AgentTool,
+  AgentToolAttentionSummary,
   AgentToolCreate,
   AgentToolUpdate,
   DiscoveredMcpTool,
@@ -252,6 +253,19 @@ class AgentService {
   async getAgentTools(agentId: string): Promise<AgentTool[]> {
     const response = await apiClient.get<AgentTool[]>(
       `${this.toolBaseUrl}/agent/${agentId}`,
+    );
+    return response.data;
+  }
+
+  /** Load one safe attention summary per agent in the requested scope. */
+  async getAgentToolAttention(
+    organizationId?: string | null,
+  ): Promise<AgentToolAttentionSummary[]> {
+    const query = organizationId
+      ? `?organization_id=${encodeURIComponent(organizationId)}`
+      : "";
+    const response = await apiClient.get<AgentToolAttentionSummary[]>(
+      `${this.toolBaseUrl}/agent-attention${query}`,
     );
     return response.data;
   }

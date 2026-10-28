@@ -2,6 +2,7 @@
 Tool API routes for the platform.
 """
 
+import asyncio
 import base64
 import inspect
 import logging
@@ -25,6 +26,7 @@ from src.billing.entitlement_service import entitlement_service
 from shared.config import settings
 from shared.voice_agents.service import voice_agent_service
 from shared.voice_agents.tool_models import (
+    AgentToolAttentionSummary,
     AgentToolCreate,
     AgentToolResponse,
     AgentToolUpdate,
@@ -995,6 +997,69 @@ async def configure_agent_tool(
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     return agent_tool
+
+
+@tool_router.get("/agent-attention", response_model=List[AgentToolAttentionSummary])
+@tracer.start_as_current_span("tool.routes.get_agent_tool_attention")
+async def get_agent_tool_attention(
+    organization_id: Optional[UUID] = Query(
+        default=None,
+        description=(
+            "Organization to summarize. Omit only for a platform-admin "
+            "cross-organization summary."
+        ),
+    ),
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Return safe connected-tool attention flags for readable agents.
+
+    Organization-scoped callers must provide an organization ID and hold
+    ``agent:read`` there. Only platform admins may omit it to inspect all
+    organizations. The response contains booleans only, never tool config or
+    credentials.
+    """
+    _, user_profile = user_data
+    if organization_id is None:
+        if not user_profile.has_role("platform_admin"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organization scope is required to view agent tool status",
+            )
+    else:
+        assert_has_permission(
+            user_profile,
+            "agent",
+            "read",
+            organization_id,
+            error_message="Insufficient permissions to view tools for this organization",
+        )
+
+    agent_query = voice_agent_service.supabase.table("voice_agents").select("id")
+    if organization_id is not None:
+        agent_query = agent_query.eq("organization_id", str(organization_id))
+
+    try:
+        agent_response = await asyncio.to_thread(agent_query.execute)
+        agent_ids = [
+            UUID(str(row["id"])) for row in (agent_response.data or []) if row.get("id")
+        ]
+    except Exception as exc:
+        logger.error(
+            "Failed to load agents for connected-tool attention summary",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent tool status is currently unavailable",
+        ) from exc
+
+    summaries, error = await tool_service.get_agent_tool_attention_summaries(agent_ids)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent tool status is currently unavailable",
+        )
+    return summaries
 
 
 @tool_router.get("/agent/{agent_id}", response_model=List[AgentToolResponse])

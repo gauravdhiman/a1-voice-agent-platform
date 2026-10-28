@@ -2,6 +2,7 @@
 Tool service for managing platform tools and agent-specific tool configurations.
 """
 
+import asyncio
 import logging
 import time
 from datetime import datetime
@@ -23,6 +24,7 @@ from supabase import Client
 
 from .tool_models import (
     AgentTool,
+    AgentToolAttentionSummary,
     AgentToolCreate,
     AgentToolResponse,
     AgentToolUpdate,
@@ -1593,6 +1595,79 @@ class ToolService:
         except Exception as e:
             logger.error(f"Error configuring agent tool: {e}")
             return None, str(e)
+
+    @tracer.start_as_current_span("tool.get_agent_tool_attention_summaries")
+    async def get_agent_tool_attention_summaries(
+        self, agent_ids: List[UUID]
+    ) -> tuple[List[AgentToolAttentionSummary], Optional[str]]:
+        """Summarize red-state tools for multiple agents with one database query.
+
+        Args:
+            agent_ids: Authorized agent IDs whose connected tools should be checked.
+
+        Returns:
+            One safe attention summary per requested agent, including agents
+            without connected tools. No credentials or tool configuration are
+            included in the response.
+        """
+        unique_agent_ids = list(dict.fromkeys(agent_ids))
+        summaries = {
+            str(agent_id): {
+                "agent_id": agent_id,
+                "needs_attention": False,
+                "has_resend_email_tool": False,
+            }
+            for agent_id in unique_agent_ids
+        }
+        if not unique_agent_ids:
+            return [], None
+
+        try:
+            query = (
+                self.supabase.table("agent_tools")
+                .select(
+                    "agent_id, config, sensitive_config, "
+                    "tool:platform_tools(name, auth_type, requires_auth)"
+                )
+                .in_("agent_id", [str(agent_id) for agent_id in unique_agent_ids])
+            )
+            response = await asyncio.to_thread(query.execute)
+
+            for item in response.data or []:
+                agent_id = str(item.get("agent_id"))
+                summary = summaries.get(agent_id)
+                if summary is None:
+                    continue
+
+                tool_data = item.get("tool") or {}
+                tool_name = tool_data.get("name")
+                auth_status = validate_token_status(
+                    item.get("sensitive_config"),
+                    auth_type=tool_data.get("auth_type") or "oauth2",
+                )
+                connection_status = get_connection_status(
+                    bool(tool_data.get("requires_auth")), auth_status
+                )
+                if check_tool_configuration(tool_name, item.get("config")):
+                    connection_status = ConnectionStatus.CONFIGURATION_REQUIRED
+
+                if connection_status in {
+                    ConnectionStatus.CONNECTED_AUTH_INVALID,
+                    ConnectionStatus.CONFIGURATION_REQUIRED,
+                }:
+                    summary["needs_attention"] = True
+                if str(tool_name or "").casefold() == "resend_email":
+                    summary["has_resend_email_tool"] = True
+
+            return [
+                AgentToolAttentionSummary(**summaries[str(agent_id)])
+                for agent_id in unique_agent_ids
+            ], None
+        except Exception:
+            logger.error(
+                "Failed to load connected-tool attention summaries", exc_info=True
+            )
+            return [], "Unable to load connected-tool attention summaries"
 
     @tracer.start_as_current_span("tool.get_agent_tools")
     async def get_agent_tools(

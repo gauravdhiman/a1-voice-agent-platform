@@ -49,6 +49,8 @@ interface AgentCardProps {
    * Default `true` for the same backward-compat reason.
    */
   canConfigure?: boolean;
+  /** True when one or more connected tools need authentication or configuration. */
+  toolsNeedAttention?: boolean;
 }
 
 interface AgentListCardProps extends AgentCardProps {
@@ -69,6 +71,7 @@ export function AgentCard({
   canDelete = true,
   canEdit = true,
   canConfigure = true,
+  toolsNeedAttention = false,
 }: AgentCardFinalProps) {
   const router = useRouter();
 
@@ -175,7 +178,19 @@ export function AgentCard({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="flex-1 sm:flex-none"
+                  className={cn(
+                    "flex-1 sm:flex-none",
+                    toolsNeedAttention &&
+                      "border-destructive/50 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive",
+                  )}
+                  aria-label={
+                    toolsNeedAttention ? "Tools need attention" : undefined
+                  }
+                  title={
+                    toolsNeedAttention
+                      ? "One or more connected tools need attention."
+                      : undefined
+                  }
                   onClick={handleConfigureTools}
                 >
                   <Wrench className="h-4 w-4 mr-2" />
@@ -281,7 +296,19 @@ export function AgentCard({
           <Button
             variant="outline"
             size="sm"
-            className="w-full text-xs h-8"
+            className={cn(
+              "w-full text-xs h-8",
+              toolsNeedAttention &&
+                "border-destructive/50 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive",
+            )}
+            aria-label={
+              toolsNeedAttention ? "Configure Tools, needs attention" : undefined
+            }
+            title={
+              toolsNeedAttention
+                ? "One or more connected tools need attention."
+                : undefined
+            }
             onClick={handleConfigureTools}
           >
             <Wrench className="h-3.5 w-3.5 mr-2" />
