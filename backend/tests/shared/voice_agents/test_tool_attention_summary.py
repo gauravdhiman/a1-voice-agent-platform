@@ -17,16 +17,18 @@ AGENT_WITHOUT_TOOLS = UUID("00000000-0000-0000-0000-000000000004")
 
 @pytest.mark.asyncio
 async def test_summary_batches_tools_and_returns_only_attention_flags():
-    """Summarize auth/config issues in one query without returning tool data."""
+    """Summarize enabled auth/config issues without returning tool data."""
     supabase = MagicMock()
     query = MagicMock()
     supabase.table.return_value = query
     query.select.return_value = query
     query.in_.return_value = query
+    query.eq.return_value = query
     query.execute.return_value = SimpleNamespace(
         data=[
             {
                 "agent_id": str(AGENT_WITH_AUTH_ISSUE),
+                "is_enabled": True,
                 "sensitive_config": "encrypted-oauth",
                 "config": {},
                 "tool": {
@@ -37,6 +39,7 @@ async def test_summary_batches_tools_and_returns_only_attention_flags():
             },
             {
                 "agent_id": str(AGENT_WITH_CONFIG_ISSUE),
+                "is_enabled": True,
                 "sensitive_config": None,
                 "config": {"from_email": ""},
                 "tool": {
@@ -47,12 +50,24 @@ async def test_summary_batches_tools_and_returns_only_attention_flags():
             },
             {
                 "agent_id": str(AGENT_WITH_HEALTHY_TOOL),
+                "is_enabled": True,
                 "sensitive_config": None,
                 "config": {},
                 "tool": {
                     "name": "google_calendar",
                     "auth_type": None,
                     "requires_auth": False,
+                },
+            },
+            {
+                "agent_id": str(AGENT_WITHOUT_TOOLS),
+                "is_enabled": False,
+                "sensitive_config": "expired-oauth",
+                "config": {},
+                "tool": {
+                    "name": "Resend_email",
+                    "auth_type": "oauth2",
+                    "requires_auth": True,
                 },
             },
         ]
@@ -96,10 +111,13 @@ async def test_summary_batches_tools_and_returns_only_attention_flags():
     assert summaries[1].has_resend_email_tool is True
     assert summaries[2].needs_attention is False
     assert summaries[2].has_resend_email_tool is False
+    # A disabled legacy row with expired auth and missing configuration is not
+    # a current connection, so it must not turn on either summary flag.
     assert summaries[3].needs_attention is False
     assert summaries[3].has_resend_email_tool is False
     assert not hasattr(summaries[1], "config")
     query.execute.assert_called_once()
+    query.eq.assert_called_once_with("is_enabled", True)
     query.in_.assert_called_once_with(
         "agent_id",
         [
