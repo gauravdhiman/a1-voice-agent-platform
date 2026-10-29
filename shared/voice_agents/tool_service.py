@@ -1602,6 +1602,9 @@ class ToolService:
     ) -> tuple[List[AgentToolAttentionSummary], Optional[str]]:
         """Summarize red-state tools for multiple agents with one database query.
 
+        Only enabled agent-tool attachments count as connected. Disabled rows
+        are retained for compatibility but are excluded from attention checks.
+
         Args:
             agent_ids: Authorized agent IDs whose connected tools should be checked.
 
@@ -1626,14 +1629,20 @@ class ToolService:
             query = (
                 self.supabase.table("agent_tools")
                 .select(
-                    "agent_id, config, sensitive_config, "
+                    "agent_id, is_enabled, config, sensitive_config, "
                     "tool:platform_tools(name, auth_type, requires_auth)"
                 )
                 .in_("agent_id", [str(agent_id) for agent_id in unique_agent_ids])
+                .eq("is_enabled", True)
             )
             response = await asyncio.to_thread(query.execute)
 
             for item in response.data or []:
+                # Defend against disabled rows if a client or test double
+                # returns records without applying the database filter.
+                if not item.get("is_enabled", True):
+                    continue
+
                 agent_id = str(item.get("agent_id"))
                 summary = summaries.get(agent_id)
                 if summary is None:

@@ -301,6 +301,11 @@ when any connected tool needs authentication or configuration. It also turns
 red when the agent has the Resend tool but the organization's Resend credential
 is not configured. Selecting the button opens that agent's Tools tab.
 
+Only enabled agent-tool attachments count as current connections for this
+indicator. Disabled legacy rows and their retained credentials do not trigger
+attention. Organization catalogs require a tool to be both active and
+published; publishing alone does not make an inactive tool available.
+
 The list page loads these flags in one read-only request rather than fetching
 tool details for every card:
 
