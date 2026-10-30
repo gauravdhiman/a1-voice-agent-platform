@@ -64,7 +64,7 @@ describe("Homepage experience", () => {
         .getAttribute("href"),
     ).toBe("/demo/verdi-table-restaurant");
     expect(screen.queryByText(/acme corp|techstart|sarah chen/i)).toBeNull();
-    expect(screen.getByText(/monthly plans from \$79/i)).toBeTruthy();
+    expect(screen.getByText(/plans from \$79\/month/i)).toBeTruthy();
     expect(screen.queryByText(/\$99|\$0/)).toBeNull();
   });
 

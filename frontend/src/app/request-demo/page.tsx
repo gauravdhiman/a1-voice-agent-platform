@@ -144,7 +144,7 @@ export default function RequestDemoPage() {
                 </li>
                 <li>
                   <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
-                  <span>Plans from $49/month, including up to 250 call minutes</span>
+                  <span>Plans from $79/month, including up to 250 call minutes</span>
                 </li>
               </ul>
             </div>

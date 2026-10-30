@@ -799,7 +799,7 @@ export function HomePage() {
             <p>
               Start with a concierge pilot, built around you.
               <br />
-              Monthly plans from $49/month, including up to 250 call minutes.
+              Monthly plans from $79/month, including up to 250 call minutes.
             </p>
             <div className={styles.ctaRow}>
               <Link className={styles.primary} href="/request-demo">
