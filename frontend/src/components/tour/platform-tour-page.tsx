@@ -136,7 +136,7 @@ export function PlatformTourPage() {
               <p className={styles.closingCopy}>
                 Start with a concierge pilot, built around you.
                 <br />
-                Monthly plans from $49/month, including up to 250 call minutes.
+                Monthly plans from $79/month, including up to 250 call minutes.
               </p>
               <div className={pt.industryHeroActions} style={{ justifyContent: "flex-start" }}>
                 <Link className={pt.primary} href="/request-demo">
