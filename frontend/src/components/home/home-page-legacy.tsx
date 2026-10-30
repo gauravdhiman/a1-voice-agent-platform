@@ -187,7 +187,7 @@ export function HomePageLegacy() {
               </div>
               <p className={styles.heroNote}>
                 Concierge setup with you · You approve every word · No coding
-                required. Plans from $49/month, including up to 250 call minutes.
+                required. Plans from $79/month, including up to 250 call minutes.
               </p>
             </div>
             <div className={styles.fieldLabel} aria-hidden="true">

@@ -143,19 +143,19 @@ export function HomePage() {
                 waiting on hold, even after you close.
               </p>
               <div className={styles.ctaRow}>
-                <Link className={styles.primary} href="/request-demo">
-                  Meet your AI front desk <ArrowUpRight size={18} />
-                </Link>
-                <a className={styles.secondaryBtn} href="#demos">
+                <a className={styles.primary} href="#demos">
                   <span className={styles.playCircle}>
                     <Play size={11} fill="currentColor" />
                   </span>{" "}
-                  Hear it handle a real call
+                  Try a live demo call
                 </a>
+                <Link className={styles.secondaryBtn} href="/request-demo">
+                  Request setup call <ArrowUpRight size={16} />
+                </Link>
               </div>
               <p className={styles.heroNote}>
                 Concierge setup with you · You test and approve before it goes
-                live · No coding required. Plans from $49/month, including up to 250 call minutes.
+                live · No coding required. Plans from $79/month, including up to 250 call minutes.
               </p>
             </div>
             <div className={styles.heroVisual}>
