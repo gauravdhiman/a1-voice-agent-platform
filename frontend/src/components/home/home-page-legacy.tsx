@@ -565,8 +565,7 @@ export function HomePageLegacy() {
               <h3>Business calendar</h3>
               <p>
                 Bookings, reschedules, and reminders land in the calendar or
-                scheduling system you choose. Examples include Google Calendar,
-                Microsoft Outlook, Cal.com, and more.
+                scheduling system you choose. Live: Google Calendar and Cal.com. Outlook and others available on request.
               </p>
             </div>
             <div className={styles.integrationCard}>
@@ -587,7 +586,7 @@ export function HomePageLegacy() {
               <p>
                 Every call is logged with name, number, and outcome. We can send
                 that context to a spreadsheet, CRM, dispatch system, or another
-                workflow, such as Google Sheets or HubSpot.
+                workflow. Live: Google Sheets and HubSpot. Others available on request.
               </p>
             </div>
             <div className={styles.integrationCard}>

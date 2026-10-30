@@ -679,7 +679,7 @@ export function HomePage() {
               {
                 icon: CalendarDays,
                 title: "Business calendar",
-                body: "Bookings, reschedules, and reminders land in the calendar or scheduling system you choose. Examples include Google Calendar, Microsoft Outlook, Cal.com, and more.",
+                body: "Bookings, reschedules, and reminders land in the calendar or scheduling system you choose. Live: Google Calendar and Cal.com. Outlook and others available on request.",
               },
               {
                 icon: Mail,
@@ -689,7 +689,7 @@ export function HomePage() {
               {
                 icon: Database,
                 title: "Records & CRM",
-                body: "Every call is logged with name, number, and outcome. We can send that context to a spreadsheet, CRM, dispatch system, or another workflow, such as Google Sheets or HubSpot.",
+                body: "Every call is logged with name, number, and outcome. We can send that context to a spreadsheet, CRM, dispatch system, or another workflow. Live: Google Sheets and HubSpot. Others available on request.",
               },
               {
                 icon: Phone,
