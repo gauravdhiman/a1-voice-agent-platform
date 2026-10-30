@@ -18,7 +18,7 @@ describe("Platform tour", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText(/no coding required/i)).toBeTruthy();
-    expect(screen.getByText(/monthly plans from \$49/i)).toBeTruthy();
+    expect(screen.getByText(/plans from \$79\/month/i)).toBeTruthy();
     expect(
       screen
         .getAllByRole("link", { name: /request a demo/i })
