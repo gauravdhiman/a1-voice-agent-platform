@@ -42,7 +42,12 @@ describe("Homepage experience", () => {
     expect(screen.getByText("56%")).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: /meet your ai front desk/i })
+        .getByRole("link", { name: /try a live demo call/i })
+        .getAttribute("href"),
+    ).toBe("#demos");
+    expect(
+      screen
+        .getByRole("link", { name: /request setup call/i })
         .getAttribute("href"),
     ).toBe("/request-demo");
     expect(
@@ -59,7 +64,7 @@ describe("Homepage experience", () => {
         .getAttribute("href"),
     ).toBe("/demo/verdi-table-restaurant");
     expect(screen.queryByText(/acme corp|techstart|sarah chen/i)).toBeNull();
-    expect(screen.getByText(/monthly plans from \$49/i)).toBeTruthy();
+    expect(screen.getByText(/monthly plans from \$79/i)).toBeTruthy();
     expect(screen.queryByText(/\$99|\$0/)).toBeNull();
   });
 
