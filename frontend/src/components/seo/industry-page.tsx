@@ -366,7 +366,7 @@ export function IndustryPage({ content }: IndustryPageProps) {
               <p className={pt.lede} style={{ marginTop: 16 }}>
                 Request a demo, we configure your number, calendar or scheduling
                 system, and test calls around your business. You test and
-                approve before it goes live. Plans start at $49/month and
+                approve before it goes live. Plans start at $79/month and
                 include up to 250 call minutes.
               </p>
               <div style={{ marginTop: 32 }}>

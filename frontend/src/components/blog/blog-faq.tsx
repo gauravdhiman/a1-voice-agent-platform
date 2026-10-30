@@ -23,7 +23,7 @@ interface BlogFaqProps {
  *   <BlogFaq
  *     items={[
  *       { q: "How fast does it answer?", a: "In about four seconds." },
- *       { q: "What does it cost?", a: "Plans start at $49/month." },
+ *       { q: "What does it cost?", a: "Plans start at $79/month." },
  *     ]}
  *   />
  */
