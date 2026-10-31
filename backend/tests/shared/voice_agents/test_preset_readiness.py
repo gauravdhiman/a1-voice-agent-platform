@@ -85,6 +85,24 @@ class TestIsPresetReady:
         clean_env.setenv("GEMINI_API_KEY", "platform-g")
         assert is_preset_ready(_realtime(), org, use_platform_credits=False) is True
 
+    def test_platform_preset_readiness_uses_platform_env_only(
+        self, patch_decrypt, clean_env
+    ):
+        org, creds = _org({"google": "org-g"})
+        patch_decrypt.return_value = creds
+        clean_env.setenv("GEMINI_API_KEY", "platform-g")
+        assert is_preset_ready(_realtime(), org, credential_source="platform") is True
+
+    def test_organization_preset_readiness_requires_org_keys(
+        self, patch_decrypt, clean_env
+    ):
+        org, creds = _org({})
+        patch_decrypt.return_value = creds
+        clean_env.setenv("GEMINI_API_KEY", "platform-g")
+        assert (
+            is_preset_ready(_realtime(), org, credential_source="organization") is False
+        )
+
     def test_openai_realtime_ready_from_openai_platform_env(
         self, patch_decrypt, clean_env
     ):

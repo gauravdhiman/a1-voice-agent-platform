@@ -42,10 +42,15 @@ class PresetType(str, Enum):
     PIPELINE = "pipeline"
 
 
-# Reserved name for the single system-default preset row (see ``Preset.is_default``).
-# The upsert path rejects this name so admins cannot clobber the default row by
-# authoring a preset with the same name; the default is managed via its own
-# config-editor endpoint.
+class PresetCredentialSource(str, Enum):
+    """Credential boundary used by this voice profile at runtime."""
+
+    PLATFORM = "platform"
+    ORGANIZATION = "organization"
+
+
+# Initial display name for the seeded platform default. It can be reused after
+# the default is renamed; an upsert cannot overwrite the current default row.
 RESERVED_DEFAULT_NAME = "System Default"
 
 
@@ -62,6 +67,9 @@ class PresetBase(BaseModel):
         is_published: Draft↔published lifecycle. ``False`` = draft
             (platform-admin-only); ``True`` = published to the global catalog,
             assignable by org admins to their agents.
+        credential_source: ``platform`` uses the platform's provider keys;
+            ``organization`` requires the organization's configured keys (unless
+            the agent explicitly opts into platform credits).
     """
 
     name: str = Field(..., min_length=1, max_length=100, description="Preset name")
@@ -79,6 +87,10 @@ class PresetBase(BaseModel):
             "Publish lifecycle: False = draft (platform-admin-only), True = "
             "published to the global catalog (assignable by org admins)."
         ),
+    )
+    credential_source: PresetCredentialSource = Field(
+        default=PresetCredentialSource.ORGANIZATION,
+        description="Use platform provider keys or organization-configured keys.",
     )
 
     # ``preset_type`` is NOT an input field — the service derives it from
@@ -112,6 +124,9 @@ class PresetUpdate(BaseModel):
         ),
     )
     is_published: Optional[bool] = Field(None, description="Publish lifecycle toggle.")
+    credential_source: Optional[PresetCredentialSource] = Field(
+        None, description="Credential boundary for this voice profile."
+    )
 
     # ``preset_type`` is NOT an input field — the service re-derives it from
     # ``config.engine_mode`` when config changes. extra="forbid" rejects any
@@ -126,16 +141,9 @@ class Preset(PresetBase):
         id: Preset ID.
         preset_type: Denormalized from ``config.engine_mode``; set by the
             service on every write, never accepted as input.
-        is_default: True only for the single **system-default** preset row —
-            the fallback config an agent uses when it has no preset selected
-            (``preset_id`` NULL, e.g. a legacy agent or one whose preset was
-            deleted). Seeded by the migration with today's realtime config; the
-            platform admin edits its ``config`` via a dedicated endpoint (it is
-            NOT publishable/deletable, and never appears in the org-admin picker
-            because it is not published). This is a **response-only** field: it
-            is not accepted on ``PresetCreate``/``PresetUpdate`` (``extra=
-            "forbid"`` rejects a hand-set value); the service sets it only on the
-            seeded default row.
+        is_default: True for the platform preset used when an agent has no
+            explicit ``preset_id``. There is exactly one, and it must be a
+            published platform-credential preset. This is response-only.
         created_at: Creation timestamp.
         updated_at: Last update timestamp.
     """
@@ -147,9 +155,8 @@ class Preset(PresetBase):
     is_default: bool = Field(
         default=False,
         description=(
-            "True only for the single system-default preset row (the fallback "
-            "config for an agent with no preset selected). Response-only; never "
-            "accepted as input."
+            "True for the platform preset used when an agent has no preset "
+            "selected. Response-only; never accepted as input."
         ),
     )
     created_at: datetime = Field(..., description="Creation timestamp")
@@ -187,15 +194,26 @@ class PresetCatalogItem(BaseModel):
     description: Optional[str] = Field(
         None, description="Human-readable description for org admins"
     )
+    credential_source: PresetCredentialSource = Field(
+        ..., description="Whether the profile uses platform or org credentials."
+    )
     is_ready: bool = Field(
         ...,
         description=(
             "True when all credentials required by this profile are configured "
-            "for the requesting organization (org provider_credentials or legacy "
-            "google_api_key). Platform env fallbacks are ignored unless "
-            "use_platform_credits is true on the catalog request."
+            "for the requesting organization, or platform provider keys are "
+            "available for a platform-managed profile."
         ),
     )
+
+
+class PresetCatalogDefault(BaseModel):
+    """Display metadata for the preset selected when ``preset_id`` is null."""
+
+    name: str
+    description: Optional[str] = None
+    credential_source: PresetCredentialSource = PresetCredentialSource.PLATFORM
+    is_ready: bool
 
 
 class PresetCatalogResponse(BaseModel):
@@ -205,13 +223,11 @@ class PresetCatalogResponse(BaseModel):
         default_factory=list,
         description="Published voice profiles available for agent assignment.",
     )
-    default_is_ready: bool = Field(
-        ...,
-        description=(
-            "Always true: the system-default fallback (preset_id=null) is "
-            "platform-managed and does not require org credential setup."
-        ),
+    default: Optional[PresetCatalogDefault] = Field(
+        None,
+        description="Current platform default shown for the null preset selection.",
     )
+    default_is_ready: bool = Field(..., description="Readiness of the current default.")
     credentials_self_service: bool = Field(
         default=True,
         description=(
@@ -224,6 +240,7 @@ class PresetCatalogResponse(BaseModel):
 
 __all__ = [
     "PresetType",
+    "PresetCredentialSource",
     "PresetBase",
     "PresetCreate",
     "PresetUpdate",
@@ -231,6 +248,7 @@ __all__ = [
     "PresetUsage",
     "PresetUsageAgent",
     "PresetCatalogItem",
+    "PresetCatalogDefault",
     "PresetCatalogResponse",
     "RESERVED_DEFAULT_NAME",
 ]

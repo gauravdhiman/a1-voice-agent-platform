@@ -150,7 +150,7 @@ class VoiceAgentBase(BaseModel):
             "FK to pipeline_presets.id. The worker loads this preset live each "
             "call to pick the voice engine (realtime or pipeline) + per-stage "
             "models. NULL = legacy agent (or one whose preset was deleted via the "
-            "FK ON DELETE SET NULL) -> the System Default preset row "
+            "FK ON DELETE SET NULL) -> the current platform default preset row "
             "(pipeline_presets.is_default=true); the hardcoded realtime default is "
             "only the ultimate safety net. Assignment "
             "is validated (preset must exist and be published) by the agent "
@@ -343,7 +343,7 @@ class VoiceAgentUpdate(BaseModel):
         description=(
             "FK to pipeline_presets.id. If set, the preset must exist and be "
             "published (validated by the route). NULL clears the preset (agent "
-            "falls back to the System Default preset row)."
+            "falls back to the current platform default preset row)."
         ),
     )
     is_published_on_public_page: Optional[bool] = Field(

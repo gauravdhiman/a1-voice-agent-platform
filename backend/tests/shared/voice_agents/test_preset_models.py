@@ -71,6 +71,20 @@ class TestPresetModels:
         )
         assert preset.config.engine_mode.value == "pipeline"
 
+    def test_credential_source_defaults_to_organization_and_can_be_platform(self):
+        custom = PresetCreate(name="Custom", config={"engine_mode": "realtime"})
+        platform = PresetCreate(
+            name="Platform",
+            config={"engine_mode": "realtime"},
+            credential_source="platform",
+        )
+        assert custom.credential_source.value == "organization"
+        assert platform.credential_source.value == "platform"
+
+    def test_update_accepts_credential_source(self):
+        update = PresetUpdate(credential_source="platform")
+        assert update.credential_source.value == "platform"
+
     def test_create_rejects_unknown_engine_mode(self):
         """An unknown engine_mode is rejected by the discriminated union."""
         with pytest.raises(ValidationError):

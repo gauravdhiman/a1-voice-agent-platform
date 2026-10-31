@@ -84,22 +84,33 @@ id (`get_preset_by_id`) — drafts and published both resolve; assignment
 validation (in the agent routes) enforces `is_published`. Deleting an in-use
 preset returns `"in_use"` (route → 409 with the agent list); `?force=true` proceeds
 and the `voice_agents.preset_id` FK `ON DELETE SET NULL` drops agents back to the
-**System Default** preset row (Phase 4). Presets carry **no secrets**.
+current platform default preset row (initially seeded as **System Default** in
+Phase 4). Presets carry **no secrets**.
 
-**System default (Phase 4, migration `20260729000002`).** The catalog always
-contains one `is_default=true` row (`name='System Default'`, `is_published=false`,
-seeded with `default_realtime_config()`). It is the fallback an agent uses when
-`preset_id` is NULL (legacy agent, or one whose preset was deleted). It replaces
-the previously-hardcoded `default_realtime_config()` voice-ws fallback — now a real,
-editable row. Platform-admin-managed via dedicated `GET`/`PUT /api/v1/presets/default`
-routes (config-only writes; the service re-validates the `SpeechConfig` and
-re-derives `preset_type`). The service guards make it **non-publishable and
-non-deletable** (immutable except its `config`); `upsert_preset` rejects the
-reserved name `"System Default"`. It never appears in the org-admin picker — the
-picker lists published presets plus a generic **"Default" → `null`** option (does
-not reveal the underlying model). A **partial unique index**
-`ux_pipeline_presets_is_default` (`WHERE is_default = true`) enforces at most one
-default row.
+**Platform and organization profiles (migration `20261030000001`).** Each
+preset has a `credential_source`: `platform` profiles use provider keys from the
+platform environment, while `organization` profiles require credentials stored
+for that organization. The agent's explicit `use_platform_credits` option still
+allows an organization profile to use platform keys. Existing custom profiles
+default to `organization`.
+
+There is one `is_default=true` row, and it must be published and platform
+managed. The migration promotes the existing seeded row. Platform admins can
+author additional platform profiles, publish them, and select one as default
+with `POST /api/v1/presets/{id}/default`. The service-role-only
+`set_default_pipeline_preset(uuid)` RPC serializes concurrent changes. The
+default appears in the org picker as its dynamic `preset_id=null` option; other
+published platform or organization profiles appear as explicit choices. The
+default cannot be unpublished or deleted, but it can be renamed and edited like
+other presets. The earlier `GET`/`PUT /api/v1/presets/default` endpoints remain
+for compatibility. The null-selection readiness flag checks the platform
+provider keys required by the selected default and can be false when those keys
+are unavailable; organization credentials do not make a platform profile ready.
+
+The partial unique index `ux_pipeline_presets_is_default` ensures at most one
+default row, and a database CHECK requires that row to be published and use
+platform credentials. The hardcoded `default_realtime_config()` remains the
+runtime safety net only when the database default is missing or invalid.
 
 ### Model capability validation and call failures
 
@@ -107,7 +118,7 @@ The OpenRouter pipeline builder sends `reasoning.effort=none` and
 `reasoning.exclude=true` so reasoning does not add voice latency. The preset
 service therefore checks OpenRouter LLM models against the provider catalog when
 a configuration is published, when a live configuration is edited, and when
-the system default is edited. A model whose metadata requires reasoning is
+the platform default is edited. A model whose metadata requires reasoning is
 rejected with an actionable admin error. The resolver is provider-specific and
 cached; providers without a resolver remain valid so their adapters can be
 added independently. Draft-only authoring does not make a provider network
@@ -123,17 +134,16 @@ are never persisted in or returned by the call-log API. Migration
 
 ### `shared/voice_agents/key_resolver.py` — per-org key resolver (Phase 3)
 
-`resolve_api_keys(speech_config, org, use_platform_credits)` → the `api_keys` map
-the factory expects. Realtime resolves the provider selected by the config
-(`google` or `openai`); pipeline resolves each stage. It reads all per-org provider keys from one Fernet-encrypted
-`organizations.provider_credentials` blob (via `decrypt_data`), with platform env
-fallback only when the organization has no configured blob, and the
-`use_platform_credits` toggle. **Only the providers the config needs appear**;
-missing providers are omitted (the factory fails fast with a clear error). A
-non-empty blob that cannot be decrypted fails closed and never silently falls
-back to a platform key. Legacy `livekit_inference` stages are normalized to
-direct providers via `normalize_stage_provider()`; voice-ws (Pipecat)
-credentials are no longer used.
+`resolve_api_keys(speech_config, org, use_platform_credits, credential_source)`
+→ the `api_keys` map the factory expects. Realtime resolves the configured
+provider; pipeline resolves each stage. A `platform` profile uses platform env
+keys and ignores org keys. An `organization` profile requires its org's
+Fernet-encrypted `organizations.provider_credentials` keys; the explicit
+`use_platform_credits` option overrides the profile source. Missing keys are
+omitted, and a non-empty unreadable org blob fails closed. Legacy callers that
+do not pass a preset source retain transition behavior. Legacy
+`livekit_inference` stages are normalized to direct providers via
+`normalize_stage_provider()`.
 
 ### `voice-ws/src/speech/factory.py` — Pipecat provider factory
 
@@ -249,12 +259,12 @@ warmup) are **future hardening**, not prerequisites for the core capability.
     both the create widget and the agent detail page. Lists **published** presets
     only from `usePresets()` plus a generic **"Default"** option →
     `preset_id = null` (the org user never sees the underlying model — it resolves
-    to the System Default). Shows preset name + description + a subtle
+    to the current platform default). Shows preset name + description + a subtle
     Realtime/Pipeline type badge (the "Default" option carries no badge) — the org
     user **never sees** `engine_mode` / STT / LLM / TTS stage fields. Empty state
     when no preset is published. The agent interfaces gained `preset_id`
     (`VoiceAgent` read; `VoiceAgentCreate`/`VoiceAgentUpdate` optional). `null`
-    clears (→ System Default); omitted on create preserves the default.
+    clears (→ current platform default); omitted on create preserves the default.
   - **(C) Per-provider org-credentials UI** — dedicated "Third-party API
     Credentials" Card on `/organization` with its own Save button (separate from
     the main org form, avoiding the empty-string-clears-everything footgun).
@@ -282,7 +292,8 @@ warmup) are **future hardening**, not prerequisites for the core capability.
     deleted; the two presets authored during validation are kept as starter catalog
     content (owner decision).
 - **Phase 4 follow-ups (done)** — two enhancements to the Phase 4 surface:
-  - **System default voice profile.** The Phase 4 fallback for an agent with
+  - **Original system default voice profile (superseded by migration
+    `20261030000001`).** The Phase 4 fallback for an agent with
     `preset_id=null` was a hardcoded `default_realtime_config()` in voice-ws —
     invisible/unmanageable, and shown in the picker as a hardcoded "Default (Gemini
     Realtime)" option. Promoted to a dedicated, always-present, admin-only,
@@ -290,8 +301,10 @@ warmup) are **future hardening**, not prerequisites for the core capability.
     partial unique index `ux_pipeline_presets_is_default`, migration
     `20260729000002`, seeded with today's Gemini-realtime config so out-of-box
     behavior is identical). The platform admin edits only its `config` via
-    `GET`/`PUT /api/v1/presets/default`; the service guards make it non-publishable
-    and non-deletable. The worker's null resolution now reads this row
+    `GET`/`PUT /api/v1/presets/default`; at that time it was non-publishable and
+    non-deletable. Migration `20261030000001` promoted it to a published
+    platform-managed preset and added selectable platform profiles. The worker's
+    null resolution reads the current default row
     (`preset_service.get_default_preset`) and keeps `default_realtime_config()`
     only as the ultimate safety net (missing/unparseable default). The org-admin
     picker's hardcoded option became a generic **"Default" → null** (no underlying
@@ -299,13 +312,10 @@ warmup) are **future hardening**, not prerequisites for the core capability.
     - **Follow-up: aligned default messaging.** The picker's default option now
       shows the **same** name + description as the platform-admin Voice Presets
       page — **"System Default"** / "Used when an agent has no voice profile
-      selected." — via a single shared `DEFAULT_PRESET_DISPLAY` constant
-      (`frontend/src/types/preset.ts`) used by both the picker
-      (`preset-picker.tsx`) and the platform page (`platform-presets-manager.tsx`),
-      so the two surfaces can't drift. The default option still carries no type
-      badge (the underlying engine is a platform-admin concern). `"System Default"`
-      is the backend reserved name (`upsert_preset` rejects it), so it can't
-      collide with a published preset in the picker.
+      selected." — via a single shared `DEFAULT_PRESET_DISPLAY` constant at the
+      time. The current picker reads the selected default's name, description,
+      credential source, and readiness from the catalog. The default can be
+      renamed, and the old name is no longer globally reserved.
   - **Organization page tabs.** `/organization` refactored from two stacked Cards
     into a tabbed layout ("Organization Info" / "API Credentials") using the
     existing `AnimatedTabs` primitive, with `?tab=info|credentials` deep-linking
@@ -386,11 +396,9 @@ warmup) are **future hardening**, not prerequisites for the core capability.
 - `backend/tests/shared/voice_agents/test_preset_models.py` — `Preset` carries
   `is_default`; `PresetCreate`/`PresetUpdate` reject a hand-set `is_default`
   (`extra="forbid"`).
-- `backend/tests/shared/voice_agents/test_preset_service.py::TestPresetServiceDefault` —
-  `get_default_preset` (flagged row / None); `update_default_preset` re-validates the
-  config, re-derives `preset_type`, keeps `is_default`/`is_published` fixed;
-  invalid config → error; guards (`upsert` rejects the reserved name;
-  `update`/`publish`/`delete` reject the default row).
+- `backend/tests/shared/voice_agents/test_preset_service.py` — default retrieval,
+  atomic selection, source/published guards, editable default fields, default
+  publish/delete protections, and config validation.
 - `backend/tests/voice_agents/test_preset_routes.py::TestPresetDefaultRoutes` —
   `GET`/`PUT /presets/default` 403 for non-admin, 200/404 for platform_admin;
   invalid config → 400; publish/delete/generic-update on the default row → 400.

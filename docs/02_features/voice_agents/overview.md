@@ -379,6 +379,14 @@ source description and validated voice configuration prefilled. The new preset
 starts as a draft and receives a collision-safe name such as `Copy of Support
 Voice` or `Copy of Support Voice (2)`; the source preset is never modified.
 
+Platform admins can choose whether a preset uses platform-managed provider keys
+or keys configured for each organization. Published platform-managed presets
+are available out of the box; exactly one can be marked as the default. Agents
+with no explicit voice profile use that current default, whose name and
+description are shown in the org agent picker. Organization-key presets remain
+available as additional profiles and report readiness for the active
+organization. A platform default must stay published and use platform keys.
+
 ## Function-Level Control
 
 ### Enable/Disable Functions Per Agent

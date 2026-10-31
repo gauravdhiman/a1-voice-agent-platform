@@ -115,6 +115,40 @@ class TestKeyResolver:
         api_keys = resolve_api_keys(_realtime(), org=org, use_platform_credits=True)
         assert api_keys == {"google": "plat-gemini"}
 
+    def test_platform_preset_uses_platform_key_even_when_org_has_key(
+        self, patch_decrypt, clean_env
+    ):
+        clean_env.setenv("GEMINI_API_KEY", "plat-gemini")
+        org, creds = _org({"google": "org-gemini"})
+        patch_decrypt.return_value = creds
+        assert resolve_api_keys(_realtime(), org=org, credential_source="platform") == {
+            "google": "plat-gemini"
+        }
+
+    def test_organization_preset_requires_org_key_without_implicit_fallback(
+        self, patch_decrypt, clean_env
+    ):
+        clean_env.setenv("GEMINI_API_KEY", "plat-gemini")
+        org, creds = _org({})
+        patch_decrypt.return_value = creds
+        assert (
+            resolve_api_keys(_realtime(), org=org, credential_source="organization")
+            == {}
+        )
+
+    def test_organization_preset_can_explicitly_use_platform_credits(
+        self, patch_decrypt, clean_env
+    ):
+        clean_env.setenv("GEMINI_API_KEY", "plat-gemini")
+        org, creds = _org({"google": "org-gemini"})
+        patch_decrypt.return_value = creds
+        assert resolve_api_keys(
+            _realtime(),
+            org=org,
+            use_platform_credits=True,
+            credential_source="organization",
+        ) == {"google": "plat-gemini"}
+
     def test_pipeline_direct_resolves_all_stages(self, patch_decrypt, clean_env):
         """An all-direct pipeline resolves each stage provider from env."""
         clean_env.setenv("DEEPGRAM_API_KEY", "dg")

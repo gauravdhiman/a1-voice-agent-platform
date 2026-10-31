@@ -26,7 +26,7 @@ from shared.voice_agents.speech_config import (
     PipelineSpeechConfig,
     default_realtime_config,
 )
-from shared.voice_agents.speech_config_resolver import resolve_speech_config_for_agent
+from shared.voice_agents.speech_config_resolver import resolve_speech_profile_for_agent
 from shared.voice_agents.tools.base.tool_context import ToolContext
 from shared.voice_agents.voice_session_service import VoiceSessionClaims
 
@@ -90,11 +90,14 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
         ),
         organization=org,
     )
-    speech_config = await resolve_speech_config_for_agent(agent, agent.id)
+    speech_config, credential_source = await resolve_speech_profile_for_agent(
+        agent, agent.id
+    )
     api_keys = resolve_api_keys(
         speech_config,
         org=org,
         use_platform_credits=bool(getattr(agent, "use_platform_credits", False)),
+        credential_source=credential_source,
     )
     current_datetime = build_current_datetime_section(session_timezone)
     instructions = (
@@ -149,6 +152,7 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
                 use_platform_credits=bool(
                     getattr(agent, "use_platform_credits", False)
                 ),
+                credential_source=credential_source,
             )
             speech = build_speech_components(
                 speech_config,

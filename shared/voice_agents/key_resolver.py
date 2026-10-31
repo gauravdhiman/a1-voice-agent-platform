@@ -9,18 +9,16 @@ agent's engine needs) and the credentials those providers run on. It produces th
 - ``pipeline`` engine -> one entry per direct stage provider, e.g.
   ``{"deepgram": ..., "openai": ..., "cartesia": ...}``.
 
-Resolution priority per provider (mirrors the existing Google-key logic in
-``worker.py``, generalized to every provider):
+Resolution follows the preset's credential source:
 
-1. If ``use_platform_credits`` is True -> always the platform env var (org creds
-   ignored).
-2. Else if the org's decrypted ``provider_credentials`` blob has the key -> the
-   org key (BYO — billing goes to the tenant's own provider account).
-3. Else -> the platform env var (fallback), but only when the organization has
-   no configured encrypted credential blob.
-4. Else -> **omit** the provider. The registry's existing per-provider guard then
-   raises a clear ``ValueError`` naming the provider, preserving the current
-   fail-fast behavior — the resolver introduces no new error path.
+- A ``platform`` preset uses platform environment keys and ignores org keys.
+- An ``organization`` preset requires the org's decrypted
+  ``provider_credentials`` value. ``use_platform_credits=True`` explicitly
+  overrides this source and uses platform env keys.
+- Callers without a preset source retain the legacy resolver behavior during
+  transition; preset-backed runtime and readiness paths always pass the source.
+- A missing key is omitted. The provider factory's existing guard then raises a
+  clear ``ValueError`` for the unavailable provider.
 
 If an organization has a non-empty encrypted blob that cannot be authenticated,
 resolution fails closed and never falls back to a platform key. This prevents a
@@ -195,7 +193,8 @@ def resolve_api_keys(
     org: Optional[Any] = None,
     use_platform_credits: bool = False,
     *,
-    allow_platform_fallback: bool = True,
+    credential_source: Optional[str] = None,
+    allow_platform_fallback: Optional[bool] = None,
 ) -> dict[str, Any]:
     """Build the per-provider ``api_keys`` map for a speech config + org.
 
@@ -204,23 +203,28 @@ def resolve_api_keys(
 
     Args:
         speech_config: The validated SpeechConfig (realtime or pipeline) loaded
-            from the agent's preset, or the System Default preset row for legacy
+            from the agent's preset, or the current platform default row for legacy
             agents (``preset_id`` NULL).
         org: The organization the agent belongs to (must expose
             ``provider_credentials``), or ``None``.
         use_platform_credits: When True, always use platform env vars and ignore
             the org's own credentials (mirrors the existing per-agent toggle).
-        allow_platform_fallback: When False, omit a provider unless the org (or
-            ``use_platform_credits`` platform env) supplies it. Used by the
-            org-facing preset catalog so admins are prompted to configure their
-            own keys even when the platform env has fallbacks for worker calls.
+        credential_source: ``platform`` uses platform environment keys;
+            ``organization`` requires org credentials unless platform credits
+            were explicitly selected. ``None`` preserves legacy resolution for
+            callers that have not yet loaded a preset row.
+        allow_platform_fallback: Optional compatibility override. When omitted,
+            source-aware calls use platform keys only for platform presets or
+            an explicit ``use_platform_credits`` choice.
 
     Returns:
         The ``api_keys`` map. String providers map to their key string.
         Providers with no resolvable key are omitted.
     """
     needed = _providers_needed(speech_config)
-    if use_platform_credits:
+    source_aware = credential_source in {"platform", "organization"}
+    platform_only = use_platform_credits or credential_source == "platform"
+    if platform_only:
         creds = {}
     else:
         try:
@@ -230,10 +234,17 @@ def resolve_api_keys(
             # unconfigured tenant. Do not silently charge the platform account.
             return {}
     api_keys: dict[str, Any] = {}
+    if allow_platform_fallback is None:
+        if source_aware:
+            allow_platform_fallback = platform_only
+        else:
+            # Preserve the historical behavior for callers that do not have a
+            # preset credential_source available.
+            allow_platform_fallback = True
 
     for provider in needed:
         value: Optional[str] = None
-        if not use_platform_credits:
+        if not platform_only:
             value = creds.get(provider)
         if not value and allow_platform_fallback:
             env_name = _PLATFORM_ENV.get(provider)
@@ -251,6 +262,7 @@ def is_preset_ready(
     use_platform_credits: bool = False,
     *,
     org_credentials_only: bool = False,
+    credential_source: Optional[str] = None,
 ) -> bool:
     """Return whether a preset's required providers are all resolvable for an org.
 
@@ -270,6 +282,9 @@ def is_preset_ready(
             realtime presets surface "setup required" when the org has not
             configured Google even if ``GEMINI_API_KEY`` exists in the worker
             environment.
+        credential_source: Explicit preset boundary. Platform presets are ready
+            when platform environment keys are available; organization presets
+            require organization keys unless platform credits are selected.
 
     Returns:
         ``True`` if calls using this preset would resolve all required keys;
@@ -282,7 +297,12 @@ def is_preset_ready(
         speech_config,
         org,
         use_platform_credits,
-        allow_platform_fallback=(not org_credentials_only or use_platform_credits),
+        credential_source=credential_source,
+        allow_platform_fallback=(
+            (not org_credentials_only or use_platform_credits)
+            if credential_source is None
+            else None
+        ),
     )
     for provider in needed:
         if provider not in api_keys:

@@ -40,7 +40,7 @@ class MasterDataDefinition:
 
 
 def _items(
-    rows: list[tuple[str, str, Optional[str]]]
+    rows: list[tuple[str, str, Optional[str]]],
 ) -> tuple[tuple[str, str, Optional[str]], ...]:
     """Convert a mutable item list into an immutable catalog representation."""
     return tuple(rows)
@@ -295,14 +295,17 @@ def build_master_data_catalog(
             key="pipeline_presets",
             display_name="Voice pipeline presets",
             category="product",
-            description="System-default realtime pipeline preset inserted by migration.",
-            source="backend/alembic/versions/20260729000002_add_pipeline_presets_is_default.py",
-            expected_count=1,
+            description=(
+                "The initial platform preset is migration-managed; platform admins "
+                "manage additional profiles and select the current default."
+            ),
+            source="backend/alembic/versions/20261030000001_platform_credential_source_voice_presets.py",
+            expected_count=None,
             seedable=False,
             requires_review=False,
             migration_managed=True,
-            items=_items([("system-default", "System Default", "realtime")]),
-            payload="migration-managed-pipeline-preset-v1",
+            items=_items([]),
+            payload="migration-managed-platform-preset-catalog-v2",
         ),
         MasterDataDefinition(
             key="rbac_catalog",

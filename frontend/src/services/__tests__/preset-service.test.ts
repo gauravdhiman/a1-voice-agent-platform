@@ -31,6 +31,7 @@ const PRESET: Preset = {
   description: "Default realtime profile",
   config: { engine_mode: "realtime", provider: "google" },
   is_published: true,
+  credential_source: "organization",
   preset_type: "realtime",
   is_default: false,
   created_at: "2026-07-29T00:00:00Z",
@@ -42,7 +43,8 @@ const DEFAULT_PRESET: Preset = {
   name: "System Default",
   description: "The fallback voice profile.",
   config: { engine_mode: "realtime", provider: "google" },
-  is_published: false,
+  is_published: true,
+  credential_source: "platform",
   preset_type: "realtime",
   is_default: true,
   created_at: "2026-07-29T00:00:00Z",
@@ -116,16 +118,27 @@ describe("presetService", () => {
 
   it("updateDefaultPreset: PUT /default with the raw config as the body", async () => {
     apiClient.put.mockResolvedValue(resp(DEFAULT_PRESET));
-    const config = { engine_mode: "pipeline", stt: { provider: "deepgram" }, llm: { provider: "openai" }, tts: { provider: "cartesia" } };
+    const config = {
+      engine_mode: "pipeline",
+      stt: { provider: "deepgram" },
+      llm: { provider: "openai" },
+      tts: { provider: "cartesia" },
+    };
     const out = await presetService.updateDefaultPreset(config);
     // The body is the raw SpeechConfig dict itself (not wrapped in {config}).
-    expect(apiClient.put).toHaveBeenCalledWith("/api/v1/presets/default", config);
+    expect(apiClient.put).toHaveBeenCalledWith(
+      "/api/v1/presets/default",
+      config,
+    );
     expect(out).toEqual(DEFAULT_PRESET);
   });
 
   it("createPreset: POST / with body", async () => {
     apiClient.post.mockResolvedValue(resp(PRESET));
-    const body = { name: "Realtime (Gemini)", config: { engine_mode: "realtime" } };
+    const body = {
+      name: "Realtime (Gemini)",
+      config: { engine_mode: "realtime" },
+    };
     const out = await presetService.createPreset(body);
     expect(apiClient.post).toHaveBeenCalledWith("/api/v1/presets/", body);
     expect(out).toEqual(PRESET);
@@ -147,7 +160,18 @@ describe("presetService", () => {
   it("publishPreset: POST /{id}/unpublish when published=false", async () => {
     apiClient.post.mockResolvedValue(resp({ ...PRESET, is_published: false }));
     await presetService.publishPreset("p-1", false);
-    expect(apiClient.post).toHaveBeenCalledWith("/api/v1/presets/p-1/unpublish");
+    expect(apiClient.post).toHaveBeenCalledWith(
+      "/api/v1/presets/p-1/unpublish",
+    );
+  });
+
+  it("setDefaultPreset: POST /{id}/default", async () => {
+    apiClient.post.mockResolvedValue(resp(PRESET));
+    const out = await presetService.setDefaultPreset("p-platform");
+    expect(apiClient.post).toHaveBeenCalledWith(
+      "/api/v1/presets/p-platform/default",
+    );
+    expect(out).toEqual(PRESET);
   });
 
   it("deletePreset: DELETE /{id} with no force", async () => {
@@ -159,7 +183,9 @@ describe("presetService", () => {
   it("deletePreset: DELETE /{id}?force=true when force=true", async () => {
     apiClient.delete.mockResolvedValue(undefined);
     await presetService.deletePreset("p-1", true);
-    expect(apiClient.delete).toHaveBeenCalledWith("/api/v1/presets/p-1?force=true");
+    expect(apiClient.delete).toHaveBeenCalledWith(
+      "/api/v1/presets/p-1?force=true",
+    );
   });
 
   it("getPresetUsage: GET /{id}/usage", async () => {

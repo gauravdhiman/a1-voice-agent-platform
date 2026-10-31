@@ -28,9 +28,9 @@
 > (532 tests) + org-credentials backend tests (20) green; no-network container
 > smoke confirms the full key-resolution → Inference-injection seam; browser smoke
 > validates the full create/publish/edit/unpublish/delete + picker + org-cred flow.
-> Live calls are unchanged for legacy agents (`preset_id=None` → the **System Default**
-> preset row — Phase 4 follow-up, migration `20260729000002`; `default_realtime_config()`
-> is now only the ultimate hardcoded safety net).
+> Live calls are unchanged for legacy agents (`preset_id=None` → the **current platform default**
+> preset row — initially added by Phase 4 and now selectable among platform profiles;
+> `default_realtime_config()` remains the ultimate hardcoded safety net).
 > **Phase 5 pending** (latency hardening). **The Phase 3 migration
 > (`20260729000001`) has been run** (`alembic upgrade head` in the backend
 > container) — the `pipeline_presets` table + `voice_agents.preset_id` FK +
@@ -472,7 +472,8 @@ flowchart TD
   two presets authored during validation are kept as starter catalog content
   (owner decision).
 - **P4 follow-ups (done)** — two enhancements to the Phase 4 surface:
-  - **System default voice profile.** The Phase 4 fallback for an agent with
+  - **Original system default voice profile (superseded by migration
+    `20261030000001`).** The Phase 4 fallback for an agent with
     `preset_id=null` was a hardcoded `default_realtime_config()` in voice-ws —
     invisible/unmanageable, shown in the picker as a hardcoded "Default (Gemini
     Realtime)" option. Promoted to a dedicated, always-present, admin-only,
@@ -482,9 +483,10 @@ flowchart TD
     `20260729000002`, seeded with today's Gemini-realtime config so out-of-box
     behavior is identical. The platform admin edits only its `config` via
     `GET`/`PUT /api/v1/presets/default` (config-only; the service re-validates
-    the `SpeechConfig` and re-derives `preset_type`); the service guards make it
-    non-publishable and non-deletable, and `upsert_preset` rejects the reserved
-    name `"System Default"`. The worker's null-resolution (`_resolve_speech_config`
+    the `SpeechConfig` and re-derives `preset_type`); at that time it was not
+    publishable and `upsert_preset` rejected the reserved name `"System Default"`.
+    Migration `20261030000001` made it published, platform-managed, renameable,
+    and selectable alongside additional platform profiles. The worker's null-resolution (`_resolve_speech_config`
     in `worker/src/worker.py`) now reads this row via
     `preset_service.get_default_preset` and keeps `default_realtime_config()`
     only as the ultimate safety net (missing/unparseable default → hardcoded
@@ -499,10 +501,21 @@ flowchart TD
       (`frontend/src/types/preset.ts`) used by both the picker
       (`preset-picker.tsx`) and the platform page (`platform-presets-manager.tsx`),
       so the two surfaces can't drift. The default option carries no type badge
-      (the underlying engine is a platform-admin concern). `"System Default"` is
-      the backend reserved name, so it can't collide with a published preset in
-      the picker. **✅ Done** — picker + type vitest green; browser-validated
+      (the underlying engine is a platform-admin concern). At that time,
+      `"System Default"` was a reserved name. **✅ Done** — picker + type vitest green; browser-validated
       (picker radio "System Default …" matches the platform page exactly).
+  - **Multiple platform profiles (migration `20261030000001`).** The original
+    single seeded row is now a published platform-managed profile. Presets
+    declare `credential_source=platform|organization`: platform profiles use
+    platform provider keys, while organization profiles require org keys unless
+    the agent explicitly selects platform credits. Platform admins can publish
+    additional platform profiles and select a default with
+    `POST /api/v1/presets/{id}/default`. A service-role-only transactional RPC
+    serializes changes; database constraints require the one default to remain
+    published and platform-managed. The org picker shows the selected default's
+    dynamic name, description, and readiness on its null selection; other
+    published profiles remain explicit choices. Admins can edit the selected
+    default through the normal preset editor, but cannot unpublish or delete it.
   - **Organization page tabs.** `/organization` refactored from two stacked Cards
     into a tabbed layout ("Organization Info" / "API Credentials") using the
     existing `AnimatedTabs` primitive, with `?tab=info|credentials` deep-linking

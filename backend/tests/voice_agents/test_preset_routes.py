@@ -31,6 +31,7 @@ def _preset(
     preset_type: PresetType = PresetType.REALTIME,
     name="Default Realtime",
     is_default: bool = False,
+    credential_source: str | None = None,
 ) -> Preset:
     return Preset(
         id=TEST_PRESET_ID,
@@ -47,6 +48,8 @@ def _preset(
             }
         ),
         is_published=is_published,
+        credential_source=credential_source
+        or ("platform" if is_default else "organization"),
         is_default=is_default,
         created_at=datetime(2026, 7, 29),
         updated_at=datetime(2026, 7, 29),
@@ -353,7 +356,7 @@ class TestPresetRoutesAuthz:
 
 
 class TestPresetDefaultRoutes:
-    """System-default preset routes (GET/PUT /default) + default-row guards."""
+    """Platform-default routes and default-row guards."""
 
     @pytest.mark.asyncio
     async def test_get_default_requires_platform_admin(self):
@@ -370,7 +373,7 @@ class TestPresetDefaultRoutes:
         with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
             mock_service.get_default_preset = AsyncMock(
                 return_value=(
-                    _preset(is_default=True, is_published=False, name="System Default"),
+                    _preset(is_default=True, is_published=True, name="System Default"),
                     None,
                 )
             )
@@ -410,7 +413,7 @@ class TestPresetDefaultRoutes:
         with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
             mock_service.update_default_preset = AsyncMock(
                 return_value=(
-                    _preset(is_default=True, is_published=False, name="System Default"),
+                    _preset(is_default=True, is_published=True, name="System Default"),
                     None,
                 )
             )
@@ -438,6 +441,48 @@ class TestPresetDefaultRoutes:
                 )
         assert exc_info.value.status_code == 400
 
+
+class TestSetDefaultPresetRoute:
+    @pytest.mark.asyncio
+    async def test_set_default_requires_platform_admin(self):
+        from src.voice_agents.preset_routes import set_default_preset
+
+        with pytest.raises(HTTPException) as exc_info:
+            await set_default_preset(
+                preset_id=TEST_PRESET_ID,
+                user_data=(TEST_USER_ID, _profile(is_admin=False)),
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_set_default_succeeds_for_platform_admin(self):
+        from src.voice_agents.preset_routes import set_default_preset
+
+        expected = _preset(name="Platform Voice", credential_source="platform")
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.set_default_preset = AsyncMock(return_value=(expected, None))
+            result = await set_default_preset(
+                preset_id=TEST_PRESET_ID,
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        assert result == expected
+        mock_service.set_default_preset.assert_awaited_once_with(TEST_PRESET_ID)
+
+    @pytest.mark.asyncio
+    async def test_set_default_rejects_org_key_preset(self):
+        from src.voice_agents.preset_routes import set_default_preset
+
+        with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
+            mock_service.set_default_preset = AsyncMock(
+                return_value=(None, "Only platform presets can be the default")
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await set_default_preset(
+                    preset_id=TEST_PRESET_ID,
+                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
+                )
+        assert exc_info.value.status_code == 400
+
     @pytest.mark.asyncio
     async def test_update_default_not_found_returns_404(self):
         from src.voice_agents.preset_routes import update_default_preset
@@ -454,16 +499,16 @@ class TestPresetDefaultRoutes:
         assert exc_info.value.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_publish_preset_default_row_returns_400(self):
-        """Publishing the system default is rejected (service guard) -> 400."""
-        from src.voice_agents.preset_routes import publish_preset
+    async def test_unpublishing_default_row_returns_400(self):
+        """Unpublishing the selected default is rejected (service guard) -> 400."""
+        from src.voice_agents.preset_routes import unpublish_preset
 
         with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
             mock_service.publish_preset = AsyncMock(
-                return_value=(None, "The system default preset is not publishable")
+                return_value=(None, "The default preset must remain published")
             )
             with pytest.raises(HTTPException) as exc_info:
-                await publish_preset(
+                await unpublish_preset(
                     preset_id=TEST_PRESET_ID,
                     user_data=(TEST_USER_ID, _profile(is_admin=True)),
                 )
@@ -471,12 +516,12 @@ class TestPresetDefaultRoutes:
 
     @pytest.mark.asyncio
     async def test_delete_preset_default_row_returns_400(self):
-        """Deleting the system default is rejected (service guard) -> 400."""
+        """Deleting the selected default is rejected (service guard) -> 400."""
         from src.voice_agents.preset_routes import delete_preset
 
         with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
             mock_service.delete_preset = AsyncMock(
-                return_value=(None, "The system default preset cannot be deleted")
+                return_value=(None, "The default preset cannot be deleted")
             )
             with pytest.raises(HTTPException) as exc_info:
                 await delete_preset(
@@ -487,25 +532,22 @@ class TestPresetDefaultRoutes:
         assert exc_info.value.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_update_preset_default_row_returns_400(self):
-        """The generic update path refuses the system default -> 400."""
+    async def test_update_preset_default_row_can_be_edited(self):
+        """The currently selected platform default remains a normal preset."""
         from shared.voice_agents.preset_models import PresetUpdate
         from src.voice_agents.preset_routes import update_preset
 
         with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
             mock_service.update_preset = AsyncMock(
-                return_value=(
-                    None,
-                    "The system default preset is managed via its own config editor",
-                )
+                return_value=(_preset(name="Updated", is_default=True), None)
             )
-            with pytest.raises(HTTPException) as exc_info:
-                await update_preset(
-                    preset_id=TEST_PRESET_ID,
-                    preset_data=PresetUpdate(name="X"),
-                    user_data=(TEST_USER_ID, _profile(is_admin=True)),
-                )
-        assert exc_info.value.status_code == 400
+            result = await update_preset(
+                preset_id=TEST_PRESET_ID,
+                preset_data=PresetUpdate(name="Updated"),
+                user_data=(TEST_USER_ID, _profile(is_admin=True)),
+            )
+        assert result.name == "Updated"
+        mock_service.update_preset.assert_awaited_once()
 
 
 class TestPresetCatalogRoute:
@@ -528,6 +570,7 @@ class TestPresetCatalogRoute:
                     "id": TEST_PRESET_ID,
                     "name": "Professional Voice",
                     "description": "Warm tone",
+                    "credential_source": "organization",
                     "is_ready": False,
                 }
             ],

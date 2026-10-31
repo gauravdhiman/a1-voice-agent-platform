@@ -55,7 +55,7 @@ export interface VoiceAgent {
   instructions_markdown: string | null;
   /**
    * Voice-engine preset referenced by this agent (Phase 4). `null` = use the
-   * system default voice profile (the admin-designated fallback on
+   * current platform default voice profile (the admin-designated fallback on
    * `/platform/presets`; the worker falls back to the hardcoded realtime config
    * only if the default row is missing/unparseable). The worker fetches the
    * preset row live on every call. Set via the agent picker ("voice profile");
@@ -92,7 +92,7 @@ export interface VoiceAgentCreate {
   /** Platform-admin only: maximum demo call duration in seconds; -1 means unlimited. */
   demo_max_call_duration_seconds?: number;
   instructions_markdown?: string | null;
-  /** Voice-engine preset id; `null` = system default. */
+  /** Voice-engine preset id; `null` = current platform default. */
   preset_id?: string | null;
 }
 
@@ -121,7 +121,7 @@ export interface VoiceAgentUpdate {
   /** Platform-admin only: maximum demo call duration in seconds; -1 means unlimited. */
   demo_max_call_duration_seconds?: number;
   instructions_markdown?: string | null;
-  /** Voice-engine preset id; `null` = system default. */
+  /** Voice-engine preset id; `null` = current platform default. */
   preset_id?: string | null;
 }
 
