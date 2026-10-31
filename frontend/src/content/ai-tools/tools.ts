@@ -608,7 +608,7 @@ export const TOOLS: Tool[] = [
       {
         tool: "Rosie",
         price: "$49/mo (250 min)",
-        difference: "Same entry price and minutes, but self-serve setup and no website voice widget",
+        difference: `Same ${PLANS.STARTER.approximateMinutes} included minutes at a lower entry price, but self-serve setup and no website voice widget`,
       },
       {
         tool: "Goodcall",

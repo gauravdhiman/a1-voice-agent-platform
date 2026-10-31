@@ -128,6 +128,14 @@ export function getCompactPricingCopy(): string {
 }
 
 /**
+ * Narrative marketing copy: "Plans start at $79 a month"
+ * Use in blog and long-form public content.
+ */
+export function getPlansStartAtCopy(): string {
+  return `Plans start at ${formatPriceUSD(PLANS.STARTER.monthlyUSD)} a month`;
+}
+
+/**
  * All plan IDs in order (Free → Starter → Pro → Scale).
  */
 export const PLAN_ORDER = ["free", "starter", "pro", "scale"] as const;
