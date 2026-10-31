@@ -474,8 +474,11 @@ confirmation before requesting a replacement draft. The draft is editable and
 is persisted only through the normal organization save or onboarding Continue
 action. The backend follows same-site sitemap and page links, fetches up to 50
 public pages per request through TinyFish Fetch, and asks Gemini to summarize
-facts with source URLs. The `TINYFISH_API_KEY` and `GEMINI_API_KEY` backend
-secrets enable the feature; generation is limited to three requests per hour.
+concise, factual Markdown covering the business, products or services, locations,
+hours, policies, caller questions, and contact guidance. The draft omits source
+URLs and is checked by the administrator before saving. The `TINYFISH_API_KEY` and
+`GEMINI_API_KEY` backend secrets enable the feature; generation is limited to three
+requests per hour.
 
 The plan stage groups published versions under **Monthly** and **Annually**.
 Free plans activate in the platform without Stripe; paid plans use Stripe
