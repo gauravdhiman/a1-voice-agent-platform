@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle2 } from "lucide-react";
 import { SITE_NAME } from "@/lib/site-config";
+import { getStandardPricingCopy } from "@/lib/pricing/plans";
 import { leadService } from "@/services/lead-service";
 import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
@@ -144,7 +145,7 @@ export default function RequestDemoPage() {
                 </li>
                 <li>
                   <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
-                  <span>Plans from $79/month, including up to 250 call minutes</span>
+                  <span>{getStandardPricingCopy()}</span>
                 </li>
               </ul>
             </div>

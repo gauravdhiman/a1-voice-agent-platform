@@ -3,6 +3,7 @@ import {
   type IndustryPageContent,
 } from "@/components/seo/industry-page";
 import { createMarketingMetadata } from "@/lib/marketing-seo";
+import { PLANS, formatMonthlyPrice } from "@/lib/pricing/plans";
 
 export const metadata = createMarketingMetadata({
   path: "/dental-appointment-booking",
@@ -101,7 +102,7 @@ const content: IndustryPageContent = {
     {
       question: "What does it cost?",
       answer:
-        "Plans start at $79/month and include up to 250 call minutes. Book a demo to see how an AI front desk fits your practice.",
+        `Plans start at ${formatMonthlyPrice(PLANS.STARTER.monthlyUSD)} and include up to ${PLANS.STARTER.approximateMinutes} call minutes. Book a demo to see how an AI front desk fits your practice.`,
     },
   ],
 };

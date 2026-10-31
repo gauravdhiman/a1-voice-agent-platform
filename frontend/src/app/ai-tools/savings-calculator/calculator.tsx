@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { formatMonthlyPriceCompact, PLANS } from "@/lib/pricing/plans";
 
 const WEEKS_PER_MONTH = 4.33;
 
@@ -140,7 +141,7 @@ export function SavingsCalculator() {
         id: "receptionist",
         name: "24x7 AI",
         href: "/ai-tools/ai-receptionists/24x7-ai",
-        price: "From $79/mo, free plan available",
+        price: `From ${formatMonthlyPriceCompact(PLANS.STARTER.monthlyUSD)}, free plan available`,
         why:
           missedCalls > 2
             ? `You miss about ${Math.round(math.monthlyMissedCalls)} calls a month. At your ${Math.round(sizeConfig.closeRate * 100)}% close rate that is roughly ${formatMoney(math.monthlyLeak)} in lost customers an AI receptionist could catch for you.`

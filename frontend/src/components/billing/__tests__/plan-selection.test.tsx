@@ -72,7 +72,7 @@ const starterPlan = {
   product_description: "For small teams.",
   display_label: "Starter plan",
   billing_mode: "paid" as const,
-  price_amount_cents: 4900,
+  price_amount_cents: 7900,
   billing_interval: "monthly",
   stripe_price_id: "price_starter",
   tier_rank: 10,

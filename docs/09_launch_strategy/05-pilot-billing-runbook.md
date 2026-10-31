@@ -2,7 +2,7 @@
 
 **Status:** active procedure for the first 2–3 founder-led customer pilots.
 **Pricing decision:** three fixed monthly plans; no fourth fixed tier. Public
-pages say “Plans from $49/month” and route visitors to a demo. Exact plan
+pages say “Plans from $79/month” and route visitors to a demo. Exact plan
 selection and checkout stay behind sign-in during the pilot. Higher-volume and
 multi-location requests use `/contact` for a sales conversation.
 Annual prices, when published, charge 10 monthly payments for 12 months of
@@ -12,9 +12,14 @@ service (two months free, a 16.7% discount).
 
 | Plan | Monthly price | Included credits | Up to call minutes¹ | Effective list price/minute |
 | ------- | ------------: | ---------------: | ------------------: | --------------------------: |
-| Starter | $49 | 2,500 | 250 | $0.196 |
+| Starter | $79 | 2,500 | 250 | $0.316 |
 | Pro | $149 | 10,000 | 1,000 | $0.149 |
 | Scale | $299 | 21,000 | 2,100 | $0.142 |
+
+> **Obsolete:** Starter at $49/month (4900 cents) is retired for new sign-ups.
+> Do not create or publish a Stripe Price at $49. Live catalog may still show
+> $49 until the founder publishes the $79 Starter version; keep existing
+> subscriptions on their historical version.
 
 ¹ The default call rate is 10 credits per connected minute, rounded up to a
 whole minute per call. These are “up to” estimates if all credits go to calls; phone-number
@@ -57,7 +62,7 @@ service; the platform does not add a provider usage charge.
 
 Annual versions cost 10 times the equivalent monthly price and include 12
 months of the monthly credit allowance. For the launch prices above, that is
-$490 for Starter, $1,490 for Pro, and $2,990 for Scale; do not publish an annual
+$790 for Starter, $1,490 for Pro, and $2,990 for Scale; do not publish an annual
 version if its price or credit allowance differs from this rule.
 
 At the entry-pack rate (40 credits per $1), current platform-rental rates are:
@@ -89,10 +94,10 @@ each billing cycle. You do **not** send a new payment link every month.
 
 ## One-time setup (test mode first, then live)
 
-1. In the platform admin **Plan Catalog**, mark the obsolete $79/$179/$399
-   launch versions as not current for new sign-ups (keep historical versions
+1. In the platform admin **Plan Catalog**, mark the obsolete $49 launch
+   versions as not current for new sign-ups (keep historical versions
    and existing customer subscriptions intact). Create and publish the three
-   paid monthly plan versions with the approved prices and included-credit
+   paid monthly plan versions with the approved prices ($79/$149/$299) and included-credit
    amounts above. Set `max_phone_numbers=unlimited` on all paid plans and
    `max_phone_numbers=0` on Free. Configure one on-demand included US local
    line in the customer experience; the included line is not a Stripe item.
@@ -102,8 +107,8 @@ each billing cycle. You do **not** send a new payment link every month.
    - the correct current-for-signup status.
 2. Stripe Dashboard → **Test mode** → Products → create or verify monthly
    prices:
-   - `24x7 AI Starter` — $49/month
-    - `24x7 AI Pro` — $149/month
+   - `24x7 AI Starter` — $79/month
+   - `24x7 AI Pro` — $149/month
    - `24x7 AI Scale` — $299/month
      Also create/verify one-time credit top-ups of $5/200, $12/500, $23/1,000,
      and $44/2,000 credits in the platform's credit-product catalog. At the

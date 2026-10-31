@@ -25,6 +25,7 @@ import {
   SITE_NAME,
   SITE_SALES_EMAIL,
 } from "@/lib/site-config";
+import { getStandardPricingCopy } from "@/lib/pricing/plans";
 import { usePublicTheme } from "@/components/public-theme/public-theme-context";
 import { PublicHeader } from "@/components/public-theme/public-header";
 import { SiteFooter } from "@/components/public-theme/site-footer";
@@ -155,7 +156,7 @@ export function HomePage() {
               </div>
               <p className={styles.heroNote}>
                 Concierge setup with you · You test and approve before it goes
-                live · No coding required. Plans from $79/month, including up to 250 call minutes.
+                live · No coding required. {getStandardPricingCopy()}.
               </p>
             </div>
             <div className={styles.heroVisual}>
@@ -799,7 +800,7 @@ export function HomePage() {
             <p>
               Start with a concierge pilot, built around you.
               <br />
-              Monthly plans from $79/month, including up to 250 call minutes.
+              Monthly {getStandardPricingCopy()}.
             </p>
             <div className={styles.ctaRow}>
               <Link className={styles.primary} href="/request-demo">

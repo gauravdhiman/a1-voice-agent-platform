@@ -16,6 +16,7 @@ import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
 import { PublicHeader } from "@/components/public-theme/public-header";
 import { SiteFooter } from "@/components/public-theme/site-footer";
 import { cn } from "@/lib/utils";
+import { PLANS } from "@/lib/pricing/plans";
 import styles from "./pricing.module.css";
 
 interface PlanFeature {
@@ -37,15 +38,15 @@ interface Plan {
 
 const plans: Plan[] = [
   {
-    name: "Free",
-    slug: "free",
-    monthlyPrice: 0,
-    annualPrice: 0,
+    name: PLANS.FREE.displayName,
+    slug: PLANS.FREE.id,
+    monthlyPrice: PLANS.FREE.monthlyUSD,
+    annualPrice: PLANS.FREE.annualUSD,
     description: "Try the platform with a single agent and limited minutes.",
     features: [
       { text: "1 voice agent", included: true },
       { text: "1 team member", included: true },
-      { text: "~10 call minutes/month (100 credits)", included: true },
+      { text: `~${PLANS.FREE.approximateMinutes} call minutes/month (${PLANS.FREE.creditsPerMonth} credits)`, included: true },
       { text: "Website embed widget", included: true },
       { text: "Call recordings & transcripts", included: true },
       { text: "Phone number purchase", included: false },
@@ -56,15 +57,15 @@ const plans: Plan[] = [
     ctaHref: "/auth/signup",
   },
   {
-    name: "Starter",
-    slug: "starter",
-    monthlyPrice: 79,
-    annualPrice: 790, // 10 months price for 12 months
+    name: PLANS.STARTER.displayName,
+    slug: PLANS.STARTER.id,
+    monthlyPrice: PLANS.STARTER.monthlyUSD,
+    annualPrice: PLANS.STARTER.annualUSD,
     description: "For solo owners and small shops handling a steady flow of calls.",
     features: [
       { text: "Unlimited voice agents", included: true },
       { text: "Unlimited team members", included: true },
-      { text: "~250 call minutes/month (2,500 credits)", included: true },
+      { text: `~${PLANS.STARTER.approximateMinutes} call minutes/month (${PLANS.STARTER.creditsPerMonth.toLocaleString()} credits)`, included: true },
       { text: "1 US local number included", included: true },
       { text: "Additional numbers: 80 credits/month each", included: true },
       { text: "Website embed widget", included: true },
@@ -76,15 +77,15 @@ const plans: Plan[] = [
     ctaHref: "/request-demo",
   },
   {
-    name: "Pro",
-    slug: "pro",
-    monthlyPrice: 149,
-    annualPrice: 1490, // 10 months price for 12 months
+    name: PLANS.PRO.displayName,
+    slug: PLANS.PRO.id,
+    monthlyPrice: PLANS.PRO.monthlyUSD,
+    annualPrice: PLANS.PRO.annualUSD,
     description: "For busy teams with higher call volumes and custom branding needs.",
     features: [
       { text: "Unlimited voice agents", included: true },
       { text: "Unlimited team members", included: true },
-      { text: "~1,000 call minutes/month (10,000 credits)", included: true },
+      { text: `~${PLANS.PRO.approximateMinutes.toLocaleString()} call minutes/month (${PLANS.PRO.creditsPerMonth.toLocaleString()} credits)`, included: true },
       { text: "1 US local number included", included: true },
       { text: "Additional numbers: 80 credits/month each", included: true },
       { text: "Website embed widget", included: true },
@@ -97,15 +98,15 @@ const plans: Plan[] = [
     ctaHref: "/request-demo",
   },
   {
-    name: "Scale",
-    slug: "scale",
-    monthlyPrice: 299,
-    annualPrice: 2990, // 10 months price for 12 months
+    name: PLANS.SCALE.displayName,
+    slug: PLANS.SCALE.id,
+    monthlyPrice: PLANS.SCALE.monthlyUSD,
+    annualPrice: PLANS.SCALE.annualUSD,
     description: "For larger, multi-location teams handling high call volumes.",
     features: [
       { text: "Unlimited voice agents", included: true },
       { text: "Unlimited team members", included: true },
-      { text: "~2,100 call minutes/month (21,000 credits)", included: true },
+      { text: `~${PLANS.SCALE.approximateMinutes.toLocaleString()} call minutes/month (${PLANS.SCALE.creditsPerMonth.toLocaleString()} credits)`, included: true },
       { text: "1 US local number included", included: true },
       { text: "Additional numbers: 80 credits/month each", included: true },
       { text: "Website embed widget", included: true },

@@ -4,6 +4,7 @@ import {
   IndustryPage,
   type IndustryPageContent,
 } from "@/components/seo/industry-page";
+import { formatMonthlyPrice, PLANS } from "@/lib/pricing/plans";
 
 const content: IndustryPageContent = {
   slug: "dental",
@@ -21,7 +22,12 @@ const content: IndustryPageContent = {
     sourceNote: "Directional benchmark.",
     sources: [{ label: "Research", href: "https://example.com/research" }],
   },
-  faqs: [{ question: "What does it cost?", answer: "Plans from $49/month." }],
+  faqs: [
+    {
+      question: "What does it cost?",
+      answer: `Plans from ${formatMonthlyPrice(PLANS.STARTER.monthlyUSD)}.`,
+    },
+  ],
 };
 
 describe("IndustryPage", () => {

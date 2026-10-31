@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowDown, ArrowUpRight, Check, Play } from "lucide-react";
 import { SITE_SALES_EMAIL } from "@/lib/site-config";
+import { getStandardPricingCopy } from "@/lib/pricing/plans";
 import { PublicThemeRoot } from "@/components/public-theme/public-theme-root";
 import { PublicHeader } from "@/components/public-theme/public-header";
 import { PublicFooter } from "@/components/public-theme/public-footer";
@@ -136,7 +137,7 @@ export function PlatformTourPage() {
               <p className={styles.closingCopy}>
                 Start with a concierge pilot, built around you.
                 <br />
-                Monthly plans from $79/month, including up to 250 call minutes.
+                Monthly {getStandardPricingCopy()}.
               </p>
               <div className={pt.industryHeroActions} style={{ justifyContent: "flex-start" }}>
                 <Link className={pt.primary} href="/request-demo">

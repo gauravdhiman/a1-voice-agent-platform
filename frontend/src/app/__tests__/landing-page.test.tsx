@@ -5,6 +5,7 @@ import { fireEvent, render, screen, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LandingPage from "../page";
 import { ThemeProvider } from "@/contexts/theme-context";
+import { getStandardPricingCopy } from "@/lib/pricing/plans";
 
 vi.mock("@/components/home/particle-field", () => ({
   ParticleField: () => <canvas aria-hidden="true" />,
@@ -64,7 +65,10 @@ describe("Homepage experience", () => {
         .getAttribute("href"),
     ).toBe("/demo/verdi-table-restaurant");
     expect(screen.queryByText(/acme corp|techstart|sarah chen/i)).toBeNull();
-    expect(screen.getAllByText(/plans from \$79\/month/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((text) => text.includes(getStandardPricingCopy()))
+        .length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText(/\$99|\$0/)).toBeNull();
   });
 

@@ -121,7 +121,7 @@ it is not a claim that live Stripe prices have already been created.
 | Plan | Monthly | Annual (12 months) | Included credits | Up to call minutes¹ | Highlights |
 | ----------- | ---------: | -----------------: | ---------------: | ------------------: | ------------------------------------------------------------------------------------------------------------ |
 | **Free** | $0 | — | 100/month | 10/month | 1 agent, 1 member, standard voice profile; no platform-number purchase allowance |
-| **Starter** | $49/month | $490/year | 2,500/month | 250/month | Embed widget, credit top-ups, 1 US local number on request; extra US local numbers use 80 credits/month each |
+| **Starter** | $79/month | $790/year | 2,500/month | 250/month | Embed widget, credit top-ups, 1 US local number on request; extra US local numbers use 80 credits/month each |
 | **Pro** | $149/month | $1,490/year | 10,000/month | 1,000/month | Starter features plus custom branding |
 | **Scale** | $299/month | $2,990/year | 21,000/month | 2,100/month | Pro features plus premium tools; publish the exact tool list during launch review |
 
@@ -412,7 +412,7 @@ sequenceDiagram
 
 ```mermaid
 graph TB
-    subgraph Starter[Starter Plan $49/mo]
+    subgraph Starter[Starter Plan $79/mo]
         S1[2,500 credits]
         S2[Up to 250 call minutes]
         S3[1 US local number on request]

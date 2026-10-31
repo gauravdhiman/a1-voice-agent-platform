@@ -54,7 +54,7 @@ Concrete plan (Epic A):
 - [ ] New env `PUBLIC_SIGNUP_ENABLED=false` (default closed) + `PLATFORM_ADMIN_ALLOWLIST` (your email). Sync across `.env.*.example` files.
 - [ ] Middleware on `/auth/signup` + `/auth/session` handoff: if no `invitation_token` param and email not allowlisted and flag off → redirect to `/request-demo` with context preserved (`?next=`).
 - [ ] `/auth/signin` stays reachable (admins + invited users need entry) but gets Turnstile + existing rate limits (Epic E hardens further).
-- [ ] Landing header: `Get Started Free` → `Request a Demo`; `Sign In` stays (small, ghost). Pricing section says plans start at $49/month with up to 250 call minutes; full cards stay private during pilot.
+- [ ] Landing header: `Get Started Free` → `Request a Demo`; `Sign In` stays (small, ghost). Pricing section says plans start at $79/month with up to 250 call minutes; full cards stay private during pilot.
 - [ ] Invitation flow becomes the *only* public path to an account: you approve interest → create org → send invitation → user signs up with token. This path already exists and is tested — we are just making it the default.
 
 **What we explicitly do NOT do:** delete `signup/page.tsx`, `oauth/callback`, `verify-email`, or backend routes. They are the reopen path.
@@ -100,7 +100,7 @@ Three Stripe primitives, and which we use when:
 
 | Primitive | What it is | When we use it |
 |---|---|---|
-| **Platform checkout** (authenticated plan selector) | Creates a Checkout Session with the organization and immutable plan-version metadata used by webhooks | **Default for pilots.** Use the approved $49 Starter, $149 Pro, and $299 Scale versions configured in Plan Catalog. |
+| **Platform checkout** (authenticated plan selector) | Creates a Checkout Session with the organization and immutable plan-version metadata used by webhooks | **Default for pilots.** Use the approved $79 Starter, $149 Pro, and $299 Scale versions configured in Plan Catalog. |
 | **Invoice** (custom amount, send by email) | A separate charge for a specific custom service, such as a setup fee | **Exceptions only** (custom scope, setup fee, multi-location deal). It does not replace the recurring platform subscription. |
 | **Stripe Payment Link** | A hosted URL for a fixed price | Avoid for pilots unless nested Subscription metadata is verified; public links stay unpublished. |
 
