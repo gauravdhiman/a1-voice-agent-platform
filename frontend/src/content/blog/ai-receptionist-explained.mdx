@@ -1,5 +1,6 @@
 import { BlogCTA } from "@/components/blog/blog-cta";
 import { BlogFaq } from "@/components/blog/blog-faq";
+import { PLANS, getPlansStartAtCopy } from "@/lib/pricing/plans";
 
 export const metadata = {
   title: "An AI receptionist, explained for busy business owners",
@@ -74,7 +75,7 @@ order is taken. Resolution beats relay.
 
 With us, 48 hours. We do a concierge setup: you tell us how you work, we build
 your front desk around it, you test it and approve it before it touches a real
-customer. Plans start at $49 a month, which includes up to 250 call minutes.
+customer. {getPlansStartAtCopy()}, which includes up to {PLANS.STARTER.approximateMinutes} call minutes.
 
 The setup speed matters more than people think. Most business software asks you
 to change how you work. This one adapts to how you already work, which is why

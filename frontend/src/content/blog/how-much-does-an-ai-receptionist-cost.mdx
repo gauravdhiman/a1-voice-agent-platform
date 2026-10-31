@@ -1,6 +1,7 @@
 import { BlogCTA } from "@/components/blog/blog-cta";
 import { BlogTable } from "@/components/blog/blog-table";
 import { BlogFaq } from "@/components/blog/blog-faq";
+import { PLANS, formatPriceUSD, getPlansStartAtCopy } from "@/lib/pricing/plans";
 
 export const metadata = {
   title: "AI Receptionist Cost in 2026: What You Actually Pay",
@@ -109,7 +110,7 @@ Not every business pays the same amount for the same product. The five things th
 
 ## What we charge, honestly
 
-Since I am writing this, here is our pricing, straight. [Plans start at $49 a month](/#pricing), flat, with setup included and no per-call billing. We get you live in about 48 hours. You can read [how the setup works](/how-it-works) before you talk to us, so you know exactly what happens.
+Since I am writing this, here is our pricing, straight. <a href="/#pricing">{getPlansStartAtCopy()}</a>, flat, with setup included and no per-call billing. We get you live in about 48 hours. You can read [how the setup works](/how-it-works) before you talk to us, so you know exactly what happens.
 
 I will also tell you when we are not the right buy. If your business gets a handful of calls a month and each one is a complex conversation that needs a human on the spot, an AI receptionist is overkill for you, ours included. Your own phone and a fast callback will do. If you are doing real volume and missing calls while you work, that is when the math works, and it works fast. One booked job a month usually covers the plan.
 
@@ -147,9 +148,9 @@ The vendors who answer these clearly are the ones worth your money. The ones who
 
 An AI receptionist costs $49 to $349 a month for most small businesses, on a flat plan. That is the number to anchor on. Everything else, the per-minute rates, the setup fees, the add-on modules, is detail to check before you sign.
 
-The real question is not whether you can afford one. At $49 a month, most businesses that miss calls cannot afford not to have one. One booked job, one captured emergency call, one after-hours appointment, any of those covers the month. The question is whether you pick a plan with honest, flat pricing and no traps in the fine print.
+The real question is not whether you can afford one. At {formatPriceUSD(PLANS.STARTER.monthlyUSD)} a month, most businesses that miss calls cannot afford not to have one. One booked job, one captured emergency call, one after-hours appointment, any of those covers the month. The question is whether you pick a plan with honest, flat pricing and no traps in the fine print.
 
-If you want to hear what a $49-a-month receptionist sounds like on your own business line, that is exactly what our demo does. Real calls, your services, your pricing, and you decide if it earns its keep.
+If you want to hear what a {formatPriceUSD(PLANS.STARTER.monthlyUSD)}-a-month receptionist sounds like on your own business line, that is exactly what our demo does. Real calls, your services, your pricing, and you decide if it earns its keep.
 
 <BlogCTA />
 

@@ -20,7 +20,7 @@ Category page: https://www.247ai.live/ai-tools/ai-receptionists
 - Review: https://www.247ai.live/ai-tools/ai-receptionists/24x7-ai
 - Official site: https://247ai.live
 - What it is: Your AI front desk: answers on your number, books on your calendar.
-- Pricing: From $49/mo (250 call minutes); free plan available
+- Pricing: From $79/mo (250 call minutes); free plan available
 - Best for: Small and medium businesses that want a done-for-you AI front desk that answers, books, and captures leads
 - Verdict: 24x7 AI is our own AI front desk, and we built it for the owner who wants coverage without becoming a phone-system administrator. Concierge setup, your number, your calendar, live in 48 hours. Compare it against the others on this page and judge it on the facts.
 - Strengths: Concierge setup done with you: the assistant is built around your services, prices, and hours, and you test and approve it before it goes live, so there is no DIY configuration gamble; Answers on your existing business number plus a voice button on your website, so website visitors can talk to your front desk without leaving the page; Books appointments into your real calendar (Google Calendar, Outlook, Cal.com) with confirmations and reminders that cut no-shows

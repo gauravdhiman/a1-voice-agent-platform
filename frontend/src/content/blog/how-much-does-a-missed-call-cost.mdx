@@ -1,5 +1,6 @@
 import { BlogCTA } from "@/components/blog/blog-cta";
 import { BlogFaq } from "@/components/blog/blog-faq";
+import { PLANS, formatPriceUSD } from "@/lib/pricing/plans";
 
 export const metadata = {
   title: "The weekly cost of missed calls, by industry",
@@ -72,7 +73,7 @@ flagged to you instantly. Nothing sits in a voicemail box.
 
 ## The uncomfortable comparison
 
-Our plans start at $49 a month. One answered call usually pays for several
+Our plans start at {formatPriceUSD(PLANS.STARTER.monthlyUSD)} a month. One answered call usually pays for several
 months of that. I am not saying this to be clever about pricing. I am saying
 it because once you do the math above, the question flips: it is not whether
 you can afford to answer every call, it is whether you can afford not to.

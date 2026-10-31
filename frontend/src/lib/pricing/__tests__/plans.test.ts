@@ -8,6 +8,7 @@ import {
   getCompactPricingCopy,
   getLowestPaidPlanPrice,
   getPlanById,
+  getPlansStartAtCopy,
   getStandardPricingCopy,
 } from "@/lib/pricing/plans";
 
@@ -53,6 +54,7 @@ describe("public plan catalog", () => {
       "Plans from $79/month, including up to 250 call minutes",
     );
     expect(getCompactPricingCopy()).toBe("Plans from $79/mo");
+    expect(getPlansStartAtCopy()).toBe("Plans start at $79 a month");
     expect(getPlanById("starter")).toEqual(PLANS.STARTER);
   });
 });
