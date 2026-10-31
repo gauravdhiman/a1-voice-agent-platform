@@ -13,6 +13,7 @@ import {
   Pencil,
   Copy,
   Trash2,
+  Star,
 } from "lucide-react";
 import {
   Sheet,
@@ -28,7 +29,7 @@ import {
   useCreatePreset,
   useUpdatePreset,
   usePublishPreset,
-  useUpdateDefaultPreset,
+  useSetDefaultPreset,
 } from "@/hooks/use-preset-queries";
 import { PresetConfigForm } from "@/components/presets/preset-config-form";
 import { PresetDeleteDialog } from "@/components/presets/preset-delete-dialog";
@@ -76,13 +77,15 @@ export function PlatformPresetsManager({
 
   // Author form state. `editingId` is null for a fresh create and set to the
   // preset id when editing an existing row (drives POST vs PUT). `editingDefault`
-  // is true when editing the system-default row — that path saves via
-  // `useUpdateDefaultPreset` (config only; name/is_published stay fixed) and
-  // never goes through the normal create/update mutations.
+  // is true when editing the selected platform default, which must stay
+  // published and platform-managed while allowing its name and config to change.
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editingDefault, setEditingDefault] = React.useState(false);
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
+  const [credentialSource, setCredentialSource] = React.useState<
+    "platform" | "organization"
+  >("organization");
   // Config captured from <PresetConfigForm/> onChange. `seedConfig` is the
   // config passed to the form as `initialConfig` on mount (set when entering
   // author mode so the form seeds from the right preset / a blank realtime
@@ -102,7 +105,7 @@ export function PlatformPresetsManager({
   const createMutation = useCreatePreset();
   const updateMutation = useUpdatePreset();
   const publishMutation = usePublishPreset();
-  const updateDefaultMutation = useUpdateDefaultPreset();
+  const setDefaultMutation = useSetDefaultPreset();
   // Platform-admin-only surface: list drafts + published for the manage view.
   const { data: presets = [] } = usePresets({ includeDrafts: true });
 
@@ -113,6 +116,7 @@ export function PlatformPresetsManager({
     setEditingDefault(false);
     setName("");
     setDescription("");
+    setCredentialSource("organization");
     setSeedConfig(null);
     setConfig(null);
     setConfigValid(true);
@@ -128,9 +132,10 @@ export function PlatformPresetsManager({
   /** Enter author mode seeded from an existing preset (edit → PUT). */
   const startEdit = React.useCallback((preset: Preset) => {
     setEditingId(preset.id);
-    setEditingDefault(false);
+    setEditingDefault(preset.is_default);
     setName(preset.name);
     setDescription(preset.description ?? "");
+    setCredentialSource(preset.credential_source);
     setSeedConfig(preset.config);
     setConfig(preset.config);
     setConfigValid(true);
@@ -159,6 +164,7 @@ export function PlatformPresetsManager({
         preset.description ??
           (preset.is_default ? DEFAULT_PRESET_DISPLAY.description : ""),
       );
+      setCredentialSource(preset.credential_source);
       setSeedConfig(preset.config);
       setConfig(preset.config);
       setConfigValid(true);
@@ -168,30 +174,7 @@ export function PlatformPresetsManager({
     [presets],
   );
 
-  /**
-   * Enter author mode seeded from the system default preset. The default is
-   * edited via `useUpdateDefaultPreset` (config only); its name is fixed
-   * ("System Default") and it is never publishable/deletable, so the author
-   * form is read-only on name/description and shows a single "Save config"
-   * button instead of Save draft / Publish.
-   */
-  const startEditDefault = React.useCallback((preset: Preset) => {
-    setEditingId(preset.id);
-    setEditingDefault(true);
-    setName(preset.name);
-    setDescription(preset.description ?? "");
-    setSeedConfig(preset.config);
-    setConfig(preset.config);
-    setConfigValid(true);
-    setInlineError(null);
-    setView("author");
-  }, []);
-
-  /**
-   * Save the system default's `config` (config-only write; name/is_published/
-   * is_default stay fixed on the backend). Distinct from `handleSave` so the
-   * default never goes through the create/update/publish paths.
-   */
+  /** Save the currently selected default through the regular preset update API. */
   const handleSaveDefault = async () => {
     setInlineError(null);
     if (!configValid || !config) {
@@ -199,13 +182,23 @@ export function PlatformPresetsManager({
       return;
     }
     try {
-      await updateDefaultMutation.mutateAsync(config);
+      if (!editingId) throw new Error("Default preset is unavailable.");
+      await updateMutation.mutateAsync({
+        presetId: editingId,
+        payload: {
+          name: name.trim(),
+          description: description.trim() || null,
+          config,
+          is_published: true,
+          credential_source: "platform",
+        },
+      });
       resetForm();
       setView("manage");
     } catch (e) {
       // Backend 400 (invalid SpeechConfig) or 404 (no default row) detail.
       setInlineError(
-        e instanceof Error ? e.message : "Failed to update system default.",
+        e instanceof Error ? e.message : "Failed to update default preset.",
       );
     }
   };
@@ -229,6 +222,7 @@ export function PlatformPresetsManager({
             description: description.trim() || null,
             config,
             is_published: isPublished,
+            credential_source: credentialSource,
           },
         });
       } else {
@@ -237,6 +231,7 @@ export function PlatformPresetsManager({
           description: description.trim() || null,
           config,
           is_published: isPublished,
+          credential_source: credentialSource,
         });
       }
       // Close the authoring drawer after save. The create/update hooks
@@ -267,11 +262,11 @@ export function PlatformPresetsManager({
     createMutation.isPending ||
     updateMutation.isPending ||
     publishMutation.isPending ||
-    updateDefaultMutation.isPending;
+    setDefaultMutation.isPending;
 
   const canSubmit = name.trim().length > 0 && configValid;
 
-  // Manage list: pin the system-default row to the top (it is the fallback
+  // Manage list: pin the current platform default to the top (it is the fallback
   // every agent with no preset uses); keep the API order for the rest. Stable
   // sort so the default is first without shuffling authored presets.
   const sortedPresets = React.useMemo(
@@ -298,14 +293,14 @@ export function PlatformPresetsManager({
             <SheetHeader className="shrink-0 border-b px-6 pb-5 pt-6">
               <SheetTitle>
                 {editingDefault
-                  ? "Edit system default"
+                  ? "Edit default voice preset"
                   : editingId
                     ? "Edit voice preset"
                     : "Create voice preset"}
               </SheetTitle>
               <SheetDescription>
                 {editingDefault
-                  ? "Update the fallback voice profile used when an agent has no profile selected."
+                  ? "Update the platform-managed profile used when an agent has no profile selected."
                   : editingId
                     ? "Update this voice profile without leaving the preset catalog."
                     : "Create a reusable voice profile for Org Admins to select on their agents."}
@@ -315,13 +310,9 @@ export function PlatformPresetsManager({
               <div className="form-surface space-y-5">
                 {editingDefault ? (
                   <p className="text-xs text-muted-foreground">
-                    Editing the{" "}
-                    <span className="font-medium">System Default</span> — the
-                    fallback voice profile used when an agent has no voice
-                    profile selected. Only the config is editable; the name
-                    stays fixed and the default is never publishable or
-                    deletable. Changes take effect on each agent&apos;s next
-                    call.
+                    This is the platform profile used when an agent has no voice
+                    profile selected. It must stay published and use platform
+                    credentials. Changes take effect on the next call.
                   </p>
                 ) : editingId ? (
                   <p className="text-xs text-muted-foreground">
@@ -342,30 +333,52 @@ export function PlatformPresetsManager({
                       id="preset-name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Realtime (Gemini) default"
+                      placeholder="e.g. Realtime voice"
                       className="form-control h-9 text-sm"
-                      disabled={editingDefault}
-                      readOnly={editingDefault}
                     />
                   </div>
-                  {!editingDefault && (
-                    <div className="form-field space-y-1">
-                      <Label
-                        htmlFor="preset-description"
-                        className="text-xs uppercase text-muted-foreground"
-                      >
-                        Description (optional — shown to org admins in the
-                        picker)
-                      </Label>
-                      <Input
-                        id="preset-description"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="What this voice profile is for"
-                        className="form-control h-9 text-sm"
-                      />
-                    </div>
-                  )}
+                  <div className="form-field space-y-1">
+                    <Label
+                      htmlFor="preset-description"
+                      className="text-xs uppercase text-muted-foreground"
+                    >
+                      Description (optional — shown to org admins in the picker)
+                    </Label>
+                    <Input
+                      id="preset-description"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="What this voice profile is for"
+                      className="form-control h-9 text-sm"
+                    />
+                  </div>
+                  <div className="form-field space-y-1">
+                    <Label
+                      htmlFor="preset-credential-source"
+                      className="text-xs uppercase text-muted-foreground"
+                    >
+                      Provider credentials
+                    </Label>
+                    <select
+                      id="preset-credential-source"
+                      value={credentialSource}
+                      onChange={(e) =>
+                        setCredentialSource(
+                          e.target.value as "platform" | "organization",
+                        )
+                      }
+                      disabled={editingDefault}
+                      className="form-control w-full rounded-md px-2 py-2 text-sm"
+                    >
+                      <option value="organization">Organization keys</option>
+                      <option value="platform">Platform managed</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      {credentialSource === "platform"
+                        ? "Uses provider keys configured by 24x7 AI."
+                        : "Requires the organization to configure the provider keys used by this profile."}
+                    </p>
+                  </div>
                 </div>
 
                 {/* The SpeechConfig authoring sub-form. `key` forces a fresh mount
@@ -387,20 +400,18 @@ export function PlatformPresetsManager({
                 )}
 
                 {editingDefault ? (
-                  // Default: config-only write via useUpdateDefaultPreset. No
-                  // Save-draft/Publish — the default is never publishable.
                   <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                     <Button
                       onClick={handleSaveDefault}
                       disabled={!configValid || !config || isBusy}
                       className="w-full sm:w-auto"
                     >
-                      {updateDefaultMutation.isPending ? (
+                      {updateMutation.isPending ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       ) : (
                         <SlidersHorizontal className="h-4 w-4 mr-2" />
                       )}
-                      Save config
+                      Save changes
                     </Button>
                   </div>
                 ) : (
@@ -470,10 +481,6 @@ export function PlatformPresetsManager({
             <div className="space-y-2">
               {sortedPresets.map((preset) =>
                 preset.is_default ? (
-                  // The system-default row — the fallback every agent with no
-                  // preset uses. Immutable except its config: not publishable,
-                  // not deletable, name fixed. Only "Edit config" is exposed,
-                  // which seeds the author form and saves via the default path.
                   <div
                     key={preset.id}
                     className="flex min-w-0 flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between"
@@ -481,19 +488,23 @@ export function PlatformPresetsManager({
                     <div className="min-w-0 flex-1">
                       <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="text-sm font-medium">
-                          {DEFAULT_PRESET_DISPLAY.name}
+                          {preset.name}
                         </span>
                         <Badge variant="default" className="h-5 text-[10px]">
                           Default
                         </Badge>
                         <Badge variant="secondary" className="h-5 text-[10px]">
+                          Platform managed
+                        </Badge>
+                        <Badge variant="outline" className="h-5 text-[10px]">
                           {preset.preset_type === "realtime"
                             ? "Realtime"
                             : "Pipeline"}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground line-clamp-2">
-                        {DEFAULT_PRESET_DISPLAY.description}
+                        {preset.description ||
+                          "Used when an agent has no voice profile selected."}
                       </p>
                     </div>
                     <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
@@ -502,7 +513,7 @@ export function PlatformPresetsManager({
                         variant="ghost"
                         onClick={() => startClone(preset)}
                         disabled={isBusy}
-                        aria-label={`Copy ${DEFAULT_PRESET_DISPLAY.name}`}
+                        aria-label={`Copy ${preset.name}`}
                         title="Create a copy"
                       >
                         <Copy className="h-3.5 w-3.5" />
@@ -511,11 +522,11 @@ export function PlatformPresetsManager({
                         size="sm"
                         variant="outline"
                         className="w-full sm:w-auto"
-                        onClick={() => startEditDefault(preset)}
+                        onClick={() => startEdit(preset)}
                         disabled={isBusy}
                       >
                         <Pencil className="h-3.5 w-3.5 mr-1" />
-                        Edit config
+                        Edit
                       </Button>
                     </div>
                   </div>
@@ -534,6 +545,11 @@ export function PlatformPresetsManager({
                             ? "Realtime"
                             : "Pipeline"}
                         </Badge>
+                        <Badge variant="secondary" className="h-5 text-[10px]">
+                          {preset.credential_source === "platform"
+                            ? "Platform managed"
+                            : "Organization keys"}
+                        </Badge>
                         <Badge
                           variant={preset.is_published ? "default" : "outline"}
                           className="h-5 text-[10px]"
@@ -548,6 +564,20 @@ export function PlatformPresetsManager({
                       )}
                     </div>
                     <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                      {preset.credential_source === "platform" &&
+                        preset.is_published &&
+                        !preset.is_default && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full sm:w-auto"
+                            onClick={() => setDefaultMutation.mutate(preset.id)}
+                            disabled={isBusy}
+                          >
+                            <Star className="mr-1 h-3.5 w-3.5" />
+                            Make default
+                          </Button>
+                        )}
                       <Button
                         size="sm"
                         variant="outline"

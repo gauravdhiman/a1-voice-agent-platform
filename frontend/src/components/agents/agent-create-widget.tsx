@@ -21,7 +21,20 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Bot, Phone, ChevronRight, ChevronLeft, Check, Info, Mic, Eye, Loader2, CheckCircle2, SkipForward, Plug } from "lucide-react";
+import {
+  Bot,
+  Phone,
+  ChevronRight,
+  ChevronLeft,
+  Check,
+  Info,
+  Mic,
+  Eye,
+  Loader2,
+  CheckCircle2,
+  SkipForward,
+  Plug,
+} from "lucide-react";
 import { useCreateAgent } from "@/hooks/use-agent-queries";
 import { usePresetCatalog } from "@/hooks/use-preset-queries";
 import { DEFAULT_PRESET_DISPLAY } from "@/types/preset";
@@ -60,7 +73,7 @@ const formSchema = z.object({
   tone: z.string().min(1, "Communication style is required"),
   instructions_markdown: z.string().optional(),
   is_active: z.boolean(),
-  // Voice-engine preset (Phase 4). null = system default. Optional
+  // Voice-engine preset (Phase 4). null = current platform default. Optional
   // UUID when a published preset is chosen. Never an empty string — the backend
   // UUID validator would 400, so the picker emits `null` for the default.
   preset_id: z.string().uuid().optional().nullable(),
@@ -176,7 +189,8 @@ export function TemplateSelectionStage({
       <div>
         <h3 className="text-lg font-semibold mb-1">Start from a template</h3>
         <p className="text-sm text-muted-foreground">
-          Pick a use case template to pre-fill your agent configuration, or skip to set it up manually.
+          Pick a use case template to pre-fill your agent configuration, or skip
+          to set it up manually.
         </p>
       </div>
 
@@ -202,15 +216,25 @@ export function TemplateSelectionStage({
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm text-foreground">{t.name}</span>
-                      <Badge variant="secondary" className="text-xs capitalize">{t.industry.replace("_", " ")}</Badge>
-                      {isSelected && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                      <span className="font-medium text-sm text-foreground">
+                        {t.name}
+                      </span>
+                      <Badge variant="secondary" className="text-xs capitalize">
+                        {t.industry.replace("_", " ")}
+                      </Badge>
+                      {isSelected && (
+                        <CheckCircle2 className="w-4 h-4 text-primary" />
+                      )}
                     </div>
                     {t.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{t.description}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                        {t.description}
+                      </p>
                     )}
                     {t.tone && (
-                      <p className="text-xs text-muted-foreground/70 mt-0.5">Tone: {t.tone}</p>
+                      <p className="text-xs text-muted-foreground/70 mt-0.5">
+                        Tone: {t.tone}
+                      </p>
                     )}
                   </div>
                   <Button
@@ -419,7 +443,8 @@ export function AgentCreateWidget() {
       <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex items-start gap-2">
         <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
         <p className="text-sm text-blue-800">
-          The information you provide here helps the AI agent represent your business accurately when speaking with callers.
+          The information you provide here helps the AI agent represent your
+          business accurately when speaking with callers.
         </p>
       </div>
 
@@ -496,7 +521,9 @@ export function AgentCreateWidget() {
                   placeholder="Warm, professional, and reassuring"
                 />
               </FormControl>
-              <FormDescription>How the agent should communicate</FormDescription>
+              <FormDescription>
+                How the agent should communicate
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -545,7 +572,7 @@ export function AgentCreateWidget() {
         )}
       />
 
-      {/* Voice profile (Phase 4). Optional — null = system default. The
+      {/* Voice profile (Phase 4). Optional — null = current platform default. The
           picker emits null for the default so the backend never sees "" (which
           would fail UUID validation). */}
       <FormField
@@ -576,18 +603,16 @@ export function AgentCreateWidget() {
   const renderReviewStage = () => {
     const values = form.watch();
 
-    const orgName = organizations?.find(
-      (o) => o.id === values.organization_id,
-    )?.name;
+    const orgName = organizations?.find((o) => o.id === values.organization_id)
+      ?.name;
 
-    // Resolve the chosen preset's name for the review summary. null/unknown ->
-    // DEFAULT_PRESET_DISPLAY (the same "System Default" label the platform admin
-    // sees on /platform/presets and the picker shows; the underlying engine is
-    // not surfaced here).
+    // Resolve the chosen preset's name for the review summary. Null uses the
+    // catalog's current platform default; the shared value is only a loading
+    // fallback. The underlying engine is not surfaced here.
     const presetName = values.preset_id
-      ? (presetCatalog?.presets.find((p) => p.id === values.preset_id)?.name ??
-        "Selected profile")
-      : DEFAULT_PRESET_DISPLAY.name;
+      ? presetCatalog?.presets.find((p) => p.id === values.preset_id)?.name ??
+        "Selected profile"
+      : presetCatalog?.default?.name ?? DEFAULT_PRESET_DISPLAY.name;
 
     return (
       <div className="space-y-6">
@@ -741,7 +766,11 @@ export function AgentCreateWidget() {
                         )}
                       </Button>
                     ) : (
-                      <Button type="button" onClick={handleNext} className="flex-1 sm:flex-none">
+                      <Button
+                        type="button"
+                        onClick={handleNext}
+                        className="flex-1 sm:flex-none"
+                      >
                         Next Step
                         <ChevronRight className="h-4 w-4 ml-2" />
                       </Button>

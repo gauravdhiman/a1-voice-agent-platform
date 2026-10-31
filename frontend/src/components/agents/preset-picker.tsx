@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, CheckCircle2, Info, SlidersHorizontal } from "lucide-react";
+import { Loader2, CheckCircle2, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { usePresetCatalog } from "@/hooks/use-preset-queries";
@@ -11,17 +11,12 @@ import { PresetSetupCallout } from "@/components/agents/preset-setup-callout";
 /**
  * PresetPicker — reusable single-select "Voice profile" picker (white-label).
  *
- * Org admins see published voice profiles by **name + description + readiness
- * status** only. Engine mode, pipeline stages, and provider names are never
- * shown. Readiness (`Ready` / `Setup required`) is computed server-side per org.
+ * Org admins see published voice profiles by name, description, credential
+ * ownership, and readiness. Engine mode, stages, and provider names stay hidden.
  *
- * The `preset_id = null` option uses `DEFAULT_PRESET_DISPLAY` (matches the
- * platform-admin "System Default" row label) with no engine badge.
+ * The `preset_id = null` option displays the platform admin's current default.
  *
- * When a not-ready **published** profile is selected, a generic setup callout
- * appears (no provider names). The system default (preset_id=null) is always
- * treated as Ready — it is platform-managed and never requires org credential
- * setup.
+ * An organization-key profile that is not ready shows generic setup guidance.
  *
  * @example
  * ```tsx
@@ -38,7 +33,7 @@ export interface PresetPickerProps {
   organizationId: string;
   /** Existing billing preference used when evaluating profile readiness. */
   usePlatformCredits?: boolean;
-  /** Currently selected preset id, or `null` for the system default. */
+  /** Currently selected preset id, or `null` for the current platform default. */
   value: string | null;
   /** Fired with the new preset id (or `null` when the default is chosen). */
   onChange: (presetId: string | null) => void;
@@ -60,12 +55,15 @@ export function PresetPicker({
   });
 
   const presets = catalog?.presets ?? [];
-  const defaultIsReady = true;
+  const defaultIsReady =
+    catalog?.default?.is_ready ?? catalog?.default_is_ready ?? true;
   const credentialsSelfService = catalog?.credentials_self_service ?? true;
+  const selectedPreset = presets.find((preset) => preset.id === value);
+  const selectedCredentialSource =
+    value === null ? "platform" : selectedPreset?.credential_source;
 
   const selectedIsReady =
-    value === null ||
-    presets.find((preset) => preset.id === value)?.is_ready === true;
+    value === null ? defaultIsReady : selectedPreset?.is_ready === true;
 
   const showSetupCallout = !selectedIsReady && !isLoading;
 
@@ -74,11 +72,9 @@ export function PresetPicker({
       <div className="space-y-1">
         <p className="text-sm font-medium">Voice profile</p>
         <p className="text-xs text-muted-foreground">
-          Optional provider voices use BYOK (bring your own keys). Connect your
-          provider key; that provider bills you directly for its voice service,
-          and 24x7 AI does not add a provider usage charge. Your platform call
-          minutes and applicable credits still follow your plan. Profiles marked
-          Ready are set up for your organization.
+          Platform-managed profiles use provider keys configured by 24x7 AI.
+          Organization-key profiles use credentials configured for your org.
+          Platform call minutes and applicable credits follow your plan.
         </p>
       </div>
 
@@ -91,31 +87,21 @@ export function PresetPicker({
           <PresetOption
             selected={value === null}
             onSelect={() => onChange(null)}
-            name={DEFAULT_PRESET_DISPLAY.name}
-            description={DEFAULT_PRESET_DISPLAY.description}
-            isReady={defaultIsReady}
-            disabled={disabled}
-            notice={
-              value === null ? (
-                <div className="mt-3 flex items-start gap-2 border-t border-amber-200/80 pt-3 text-amber-950 dark:border-amber-800/80 dark:text-amber-100">
-                  <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                  <p className="text-xs leading-relaxed">
-                    Optional provider voices use BYOK (bring your own keys).
-                    Connect your provider key; the provider bills you directly
-                    for that service, and 24x7 AI does not add a provider usage
-                    charge. Call minutes and applicable platform credits still
-                    follow your plan.
-                  </p>
-                </div>
-              ) : undefined
+            name={catalog?.default?.name ?? DEFAULT_PRESET_DISPLAY.name}
+            description={
+              catalog?.default?.description ??
+              DEFAULT_PRESET_DISPLAY.description
             }
+            isReady={defaultIsReady}
+            credentialSource="platform"
+            disabled={disabled}
           />
           {presets.length === 0 ? (
             <div className="text-center py-4 bg-muted/20 rounded-lg border border-dashed">
               <SlidersHorizontal className="h-6 w-6 text-muted-foreground mx-auto mb-1 opacity-50" />
               <p className="text-xs text-muted-foreground">
-                No voice profiles published yet — this agent will use the system
-                default.
+                No additional voice profiles are published. This agent will use
+                the platform default.
               </p>
             </div>
           ) : (
@@ -127,6 +113,7 @@ export function PresetPicker({
                 name={preset.name}
                 description={preset.description ?? undefined}
                 isReady={preset.is_ready}
+                credentialSource={preset.credential_source}
                 disabled={disabled}
               />
             ))
@@ -136,7 +123,10 @@ export function PresetPicker({
 
       {showSetupCallout && (
         <PresetSetupCallout
-          credentialsSelfService={credentialsSelfService}
+          credentialsSelfService={
+            selectedCredentialSource === "organization" &&
+            credentialsSelfService
+          }
           organizationId={organizationId}
         />
       )}
@@ -165,7 +155,7 @@ export function useSelectedPresetReadiness(
 
   if (presetId === null) {
     return {
-      isReady: true,
+      isReady: catalog.default?.is_ready ?? catalog.default_is_ready,
       isLoading: false,
       credentialsSelfService: catalog.credentials_self_service,
     };
@@ -188,6 +178,7 @@ function PresetOption({
   name,
   description,
   isReady,
+  credentialSource,
   notice,
   disabled = false,
 }: {
@@ -196,6 +187,7 @@ function PresetOption({
   name: string;
   description?: string;
   isReady: boolean;
+  credentialSource: "platform" | "organization";
   notice?: React.ReactNode;
   disabled?: boolean;
 }) {
@@ -226,6 +218,11 @@ function PresetOption({
     >
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-medium text-sm text-foreground">{name}</span>
+        <Badge variant="outline" className="h-5 text-[10px]">
+          {credentialSource === "platform"
+            ? "Platform managed"
+            : "Organization keys"}
+        </Badge>
         <Badge
           variant={isReady ? "secondary" : "outline"}
           className={cn(

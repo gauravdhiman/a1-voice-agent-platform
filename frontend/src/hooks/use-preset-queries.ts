@@ -1,12 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { presetService } from "@/services/preset-service";
-import type {
-  Preset,
-  PresetCatalogResponse,
-  PresetCreate,
-  PresetUpdate,
-  PresetType,
-} from "@/types/preset";
+import type { PresetCreate, PresetUpdate, PresetType } from "@/types/preset";
 import { toast } from "sonner";
 
 /**
@@ -94,11 +88,10 @@ export function usePreset(presetId: string, enabled = true) {
 }
 
 /**
- * Fetch the system default preset (platform-admin only). The default is the
- * fallback config an agent uses when it has no preset selected; it is not
- * published and never appears in the org-admin picker. The manage view already
- * receives the default row via `usePresets({ includeDrafts: true })` (it is a
- * draft), so this hook is the dedicated fetch for a focused default editor.
+ * Fetch the current platform default preset (platform-admin only). It is
+ * published and appears as the dynamic null-selection option in org pickers.
+ * The manage view already receives it via `usePresets({ includeDrafts: true })`;
+ * this hook remains for the legacy default editor/API.
  */
 export function useDefaultPreset() {
   return useQuery({
@@ -147,21 +140,20 @@ export function useUpdatePreset() {
   });
 }
 
-// Mutation: Replace the system default preset's `config` (platform-admin only).
-// Only `config` (and the derived `preset_type`) are written; the default row's
-// name/is_published/is_default stay fixed. Invalidates the preset list + the
-// dedicated default query so the manage view's default row refreshes.
+// Mutation: Replace the platform default's `config` through the legacy API.
+// The backend keeps it published and platform-managed; invalidate the preset
+// list and default row so both admin and org picker views refresh.
 export function useUpdateDefaultPreset() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (config: Record<string, unknown>) =>
       presetService.updateDefaultPreset(config),
     onSuccess: () => {
-      toast.success("System default updated");
+      toast.success("Platform default updated");
       queryClient.invalidateQueries({ queryKey: presetQueryKeys.all });
     },
     onError: () => {
-      toast.error("Failed to update system default");
+      toast.error("Failed to update platform default");
     },
   });
 }
@@ -184,7 +176,28 @@ export function usePublishPreset() {
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to update publish state",
+        error instanceof Error
+          ? error.message
+          : "Failed to update publish state",
+      );
+    },
+  });
+}
+
+/** Select a published platform-managed voice profile as the global default. */
+export function useSetDefaultPreset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (presetId: string) => presetService.setDefaultPreset(presetId),
+    onSuccess: () => {
+      toast.success("Platform default updated");
+      queryClient.invalidateQueries({ queryKey: presetQueryKeys.all });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update platform default",
       );
     },
   });

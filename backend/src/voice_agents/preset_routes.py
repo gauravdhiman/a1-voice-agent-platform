@@ -24,9 +24,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from opentelemetry import trace
 
-from shared.voice_agents.preset_models import (Preset, PresetCatalogResponse,
-                                               PresetCreate, PresetType,
-                                               PresetUpdate)
+from shared.voice_agents.preset_models import (
+    Preset,
+    PresetCatalogResponse,
+    PresetCreate,
+    PresetType,
+    PresetUpdate,
+)
 from shared.voice_agents.preset_service import preset_service
 from src.auth.dependencies import assert_platform_role
 from src.auth.middleware import get_authenticated_user
@@ -75,19 +79,18 @@ async def create_preset(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# System default preset (platform admin only)
+# Current platform default preset (platform admin only)
 #
-# A single ``is_default=True`` row is the fallback config an agent uses when it
-# has no preset selected (``preset_id`` NULL). It is seeded by the migration
-# (not publishable, not deletable) and editable only via these endpoints. These
-# routes are declared BEFORE any ``/{preset_id}`` route so the literal ``default``
-# segment does not match the UUID path param.
+# The selected published platform-managed row is the fallback config when an
+# agent has no preset selected (``preset_id`` NULL). It is editable by id and
+# cannot be unpublished or deleted. These compatibility routes are declared
+# before any ``/{preset_id}`` route so the literal ``default`` segment does not
+# match the UUID path param.
 #
 # The PUT body is the raw ``SpeechConfig`` dict itself (realtime or pipeline
 # discriminated union); the service re-validates it via ``parse_speech_config``
-# and re-derives ``preset_type``. Only ``config`` (and the derived
-# ``preset_type``) are written — the default row's name/``is_published``/
-# ``is_default`` stay fixed.
+# and re-derives ``preset_type``. Only ``config`` and the derived
+# ``preset_type`` are written; use the id-based endpoint to edit metadata.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -96,12 +99,12 @@ async def create_preset(
 async def get_default_preset(
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ) -> Preset:
-    """Fetch the system default preset (platform admin only).
+    """Fetch the current platform default preset (platform admin only).
 
     The default is the fallback config an agent uses when it has no preset
-    selected. It is not published and never appears in the org-admin picker.
-    Returns 404 if no default row is designated (the worker then falls back to
-    the hardcoded realtime default).
+    selected. It is published and appears in the org-admin picker as the
+    dynamic null-selection option. Returns 404 if no default row is designated
+    (the worker then falls back to the hardcoded realtime default).
     """
     current_user_id, user_profile = user_data
     _require_platform_admin(user_profile)
@@ -124,11 +127,12 @@ async def update_default_preset(
     config: dict,
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
 ) -> Preset:
-    """Replace the system default preset's ``config`` (platform admin only).
+    """Replace the current platform default's ``config`` (platform admin only).
 
-    Only ``config`` and the derived ``preset_type`` are written; the row's
-    ``name``/``is_published``/``is_default`` stay fixed. Returns 400 on an
-    invalid config, 404 if no default row exists.
+    Only ``config`` and the derived ``preset_type`` are written; the metadata
+    stays fixed by this legacy endpoint. The default remains published and
+    platform-managed. Returns 400 on an invalid config, 404 if no default row
+    exists.
     """
     current_user_id, user_profile = user_data
     _require_platform_admin(user_profile)
@@ -164,20 +168,17 @@ async def get_preset_catalog(
 
     Returns display metadata and org-scoped readiness flags only — no
     ``config``, ``preset_type``, or provider names. Includes
-    ``default_is_ready`` for the system-default fallback (``preset_id=null``).
-    Always ``true`` — the fallback is platform-managed; org credential setup
-    applies only to published presets.
+    ``default_is_ready`` and the selected platform default's display metadata
+    for the ``preset_id=null`` option. Readiness reflects whether the platform
+    has the provider keys required by that profile; organization credentials do
+    not affect a platform-managed default.
     """
     current_user_id, user_profile = user_data
 
-    org, org_error = await organization_service.get_organization_by_id(
-        organization_id
-    )
+    org, org_error = await organization_service.get_organization_by_id(organization_id)
     if org_error:
         if org_error == "Organization not found":
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=org_error
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=org_error)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=org_error
         )
@@ -240,6 +241,24 @@ async def publish_preset(
     _require_platform_admin(user_profile)
 
     preset, error = await preset_service.publish_preset(preset_id, True)
+    if error:
+        if error == "Preset not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return preset
+
+
+@preset_router.post("/{preset_id}/default", response_model=Preset)
+@tracer.start_as_current_span("preset.routes.set_default")
+async def set_default_preset(
+    preset_id: UUID,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+) -> Preset:
+    """Select a published platform-credential preset as the platform default."""
+    _, user_profile = user_data
+    _require_platform_admin(user_profile)
+
+    preset, error = await preset_service.set_default_preset(preset_id)
     if error:
         if error == "Preset not found":
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error)

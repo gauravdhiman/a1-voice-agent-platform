@@ -59,7 +59,8 @@ def _row(
     *,
     is_published: bool = True,
     name="P",
-    is_default: bool = False
+    is_default: bool = False,
+    credential_source: str | None = None,
 ):
     return {
         "id": str(uuid4()),
@@ -78,6 +79,8 @@ def _row(
         ),
         "is_published": is_published,
         "is_default": is_default,
+        "credential_source": credential_source
+        or ("platform" if is_default else "organization"),
         "created_at": "2024-01-01T00:00:00Z",
         "updated_at": "2024-01-01T00:00:00Z",
     }
@@ -550,8 +553,58 @@ class TestPresetServiceErrorBranches:
         assert result is not None
 
 
+class TestSetDefaultPreset:
+    async def test_set_default_uses_atomic_database_rpc(
+        self, preset_service, mock_supabase_client
+    ):
+        preset_id = uuid4()
+        row = _row(
+            PresetType.REALTIME,
+            name="Platform Voice",
+            credential_source="platform",
+        )
+        row["id"] = str(preset_id)
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            MagicMock(data=[row]),
+            MagicMock(data=[{**row, "is_default": True}]),
+        ]
+
+        result, error = await preset_service.set_default_preset(preset_id)
+
+        assert error is None
+        assert result is not None and result.is_default
+        mock_supabase_client.rpc.assert_called_once_with(
+            "set_default_pipeline_preset", {"p_preset_id": str(preset_id)}
+        )
+
+    async def test_set_default_rejects_org_key_and_draft_presets(
+        self, preset_service, mock_supabase_client
+    ):
+        org_preset = _row(PresetType.REALTIME, credential_source="organization")
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[org_preset]
+        )
+        result, error = await preset_service.set_default_preset(uuid4())
+        assert result is None
+        assert error == "Only platform presets can be the default"
+        mock_supabase_client.rpc.assert_not_called()
+
+        draft = _row(
+            PresetType.REALTIME,
+            is_published=False,
+            credential_source="platform",
+        )
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[draft]
+        )
+        result, error = await preset_service.set_default_preset(uuid4())
+        assert result is None
+        assert error == "Only published presets can be the default"
+        mock_supabase_client.rpc.assert_not_called()
+
+
 class TestPresetServiceDefault:
-    """System-default preset: get/update + guards on CRUD methods."""
+    """Platform default retrieval, editing, and lifecycle guards."""
 
     async def test_get_default_preset_found(self, preset_service, mock_supabase_client):
         """get_default_preset returns the single is_default=True row."""
@@ -645,46 +698,84 @@ class TestPresetServiceDefault:
         assert result is None
         assert "boom" in error
 
-    async def test_upsert_rejects_reserved_default_name(
+    async def test_upsert_by_name_cannot_replace_current_default(
         self, preset_service, mock_supabase_client
     ):
-        """Authoring a preset named 'System Default' is rejected (reserved)."""
+        """The selected default row must be edited by id, never by upsert."""
         from shared.voice_agents.preset_models import RESERVED_DEFAULT_NAME
 
         data = PresetCreate(
             name=RESERVED_DEFAULT_NAME, config={"engine_mode": "realtime"}
         )
+        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
+            data=[
+                _row(
+                    PresetType.REALTIME,
+                    is_default=True,
+                    name=RESERVED_DEFAULT_NAME,
+                )
+            ]
+        )
         result, error = await preset_service.upsert_preset(data)
         assert result is None
-        assert error is not None
-        assert "reserved" in error.lower()
-        mock_supabase_client.table.assert_not_called()
-
-    async def test_update_preset_rejects_default_row(
-        self, preset_service, mock_supabase_client
-    ):
-        """The generic update path refuses the system-default row."""
-        mock_supabase_client.table.return_value.execute.return_value = MagicMock(
-            data=[{"id": str(uuid4()), "is_default": True}]
-        )
-        result, error = await preset_service.update_preset(
-            uuid4(), PresetUpdate(name="X")
-        )
-        assert result is None
-        assert error is not None
-        # The generic update was NOT issued (only the guard fetch ran).
+        assert error == "The default preset must be edited by id"
         mock_supabase_client.table.return_value.update.assert_not_called()
+        mock_supabase_client.table.return_value.insert.assert_not_called()
 
-    async def test_publish_preset_rejects_default_row(
+    async def test_upsert_can_reuse_old_default_name_after_rename(
         self, preset_service, mock_supabase_client
     ):
-        """Publishing the system-default row is rejected (it is not publishable)."""
+        """The initial default name is not globally reserved."""
+        from shared.voice_agents.preset_models import RESERVED_DEFAULT_NAME
+
+        data = PresetCreate(
+            name=RESERVED_DEFAULT_NAME, config={"engine_mode": "realtime"}
+        )
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            MagicMock(data=[]),
+            MagicMock(data=[_row(PresetType.REALTIME, name=RESERVED_DEFAULT_NAME)]),
+        ]
+
+        result, error = await preset_service.upsert_preset(data)
+
+        assert error is None
+        assert result is not None
+        assert result.name == RESERVED_DEFAULT_NAME
+        mock_supabase_client.table.return_value.insert.assert_called_once()
+
+    async def test_update_preset_can_edit_default_row(
+        self, preset_service, mock_supabase_client
+    ):
+        """The default is an editable published platform preset."""
+        default_row = _row(
+            PresetType.REALTIME,
+            is_default=True,
+            name="System Default",
+            credential_source="platform",
+        )
+        mock_supabase_client.table.return_value.execute.side_effect = [
+            MagicMock(data=[default_row]),
+            MagicMock(data=[{**default_row, "name": "Updated default"}]),
+        ]
+        result, error = await preset_service.update_preset(
+            uuid4(), PresetUpdate(name="Updated default")
+        )
+        assert error is None
+        assert result is not None and result.is_default
+        mock_supabase_client.table.return_value.update.assert_called_once_with(
+            {"name": "Updated default"}
+        )
+
+    async def test_unpublish_preset_rejects_default_row(
+        self, preset_service, mock_supabase_client
+    ):
+        """The default must stay published so it remains usable by orgs."""
         mock_supabase_client.table.return_value.execute.return_value = MagicMock(
             data=[{"id": str(uuid4()), "is_default": True}]
         )
-        result, error = await preset_service.publish_preset(uuid4(), True)
+        result, error = await preset_service.publish_preset(uuid4(), False)
         assert result is None
-        assert error is not None
+        assert error == "The default preset must remain published"
         mock_supabase_client.table.return_value.update.assert_not_called()
 
     async def test_delete_preset_rejects_default_row(
@@ -737,8 +828,8 @@ class TestBuildPresetCatalog:
         assert "config" not in dumped
         assert "preset_type" not in dumped
 
-    def test_build_catalog_system_default_always_ready(self):
-        """System default (preset_id=null) is always ready for org UX."""
+    def test_build_catalog_default_uses_platform_key_readiness(self):
+        """Default profile readiness reflects platform provider-key setup."""
         from types import SimpleNamespace
 
         from shared.voice_agents.preset_service import PresetService
@@ -760,5 +851,7 @@ class TestBuildPresetCatalog:
                 credentials_self_service=True,
             )
 
-        assert catalog.default_is_ready is True
+        assert catalog.default_is_ready is False
+        assert catalog.default is not None
+        assert catalog.default.name == "System Default"
         assert catalog.presets[0].is_ready is False

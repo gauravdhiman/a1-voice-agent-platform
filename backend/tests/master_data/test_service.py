@@ -3,12 +3,25 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from src.master_data.definitions import build_master_data_catalog
 from src.master_data.service import MasterDataService
 
 
 class TestMasterDataService:
     """Verify explicit, reviewed seed orchestration."""
+
+    def test_pipeline_presets_are_an_admin_managed_dynamic_catalog(self):
+        definition = next(
+            item
+            for item in build_master_data_catalog([])
+            if item.key == "pipeline_presets"
+        )
+
+        assert definition.expected_count is None
+        assert definition.seedable is False
+        assert definition.migration_managed is True
+        assert definition.items == ()
 
     @pytest.mark.asyncio
     async def test_explicit_seed_can_reapply_a_domain(self):

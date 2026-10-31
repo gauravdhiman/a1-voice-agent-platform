@@ -5,8 +5,9 @@
  * A **preset** is a named, platform-admin-managed voice-engine configuration.
  * An agent references one preset by `preset_id`; voice-ws fetches the preset
  * row live on every call (no versioning — admin edits take effect on the next
- * call). Presets carry **no secrets**; per-provider API keys live on the
- * organization (`organizations.provider_credentials`, encrypted).
+ * call). Presets carry **no secrets**; `credential_source` chooses between
+ * platform-configured provider keys and per-organization keys stored in the
+ * encrypted `organizations.provider_credentials` column.
  *
  * Two preset types only — `realtime` / `pipeline` — matching the `SpeechConfig`
  * discriminated union (`shared/voice_agents/speech_config.py`). Legacy DB rows
@@ -29,22 +30,16 @@
  */
 export type PresetType = "realtime" | "pipeline";
 
+/** Credential boundary for a reusable voice profile. */
+export type PresetCredentialSource = "platform" | "organization";
+
 /**
- * Display name + description for the **system default** fallback, shared by the
- * platform-admin Voice Presets page and the agent `PresetPicker` so the two
- * surfaces can't drift (the owner requirement: the picker must show the same
- * name/description the platform admin sees on `/platform/presets`).
- *
- * `"System Default"` is the backend reserved name (`upsert_preset` rejects it),
- * so it can never collide with a published preset name in the picker. The
- * description matches the seeded default row's display on the platform page.
- * The underlying engine (realtime/pipeline) is deliberately NOT surfaced here —
- * the picker shows no type badge for the default so it doesn't leak the engine
- * the platform admin set.
+ * Fallback display before the catalog response arrives. The server returns the
+ * selected platform preset's actual name and description after loading.
  */
 export const DEFAULT_PRESET_DISPLAY = {
-  name: "System Default",
-  description: "Used when an agent has no voice profile selected. The voice profile will use your plan's call credits.",
+  name: "Platform default",
+  description: "Used when an agent has no voice profile selected.",
 } as const;
 
 /**
@@ -61,15 +56,13 @@ export interface Preset {
   /** The validated SpeechConfig (realtime or pipeline). Opaque on the frontend. */
   config: Record<string, unknown>;
   is_published: boolean;
+  /** Provider key boundary selected by the platform admin. */
+  credential_source: PresetCredentialSource;
   /** Derived from `config.engine_mode` by the backend; never an input field. */
   preset_type: PresetType;
   /**
-   * True only for the single **system default** preset row — the fallback
-   * config an agent uses when it has no preset selected (`preset_id` null).
-   * Response-only; the backend sets it only on the seeded default row and
-   * rejects a hand-set value (`extra="forbid"`). The default is not
-   * publishable/deletable; the platform admin edits its `config` via
-   * `presetService.getDefaultPreset` / `updateDefaultPreset`.
+   * True for the published platform preset used by agents with no explicit
+   * `preset_id`. Response-only; the backend sets it and does not accept input.
    */
   is_default: boolean;
   created_at: string;
@@ -83,6 +76,7 @@ export interface PresetCreate {
   /** The SpeechConfig dict (realtime or pipeline). Validated server-side. */
   config: Record<string, unknown>;
   is_published?: boolean;
+  credential_source?: PresetCredentialSource;
 }
 
 /** Request body for `PUT /api/v1/presets/{id}` (all fields optional). */
@@ -91,6 +85,7 @@ export interface PresetUpdate {
   description?: string | null;
   config?: Record<string, unknown>;
   is_published?: boolean;
+  credential_source?: PresetCredentialSource;
 }
 
 /**
@@ -121,6 +116,7 @@ export interface PresetCatalogItem {
   id: string;
   name: string;
   description: string | null;
+  credential_source: PresetCredentialSource;
   /** True when this profile is fully configured for the requesting org. */
   is_ready: boolean;
 }
@@ -128,13 +124,19 @@ export interface PresetCatalogItem {
 /**
  * Org-facing catalog response from `GET /api/v1/presets/catalog`.
  *
- * Includes readiness for published platform-defined profiles.
- * ``default_is_ready`` is always true (system default is platform-managed).
+ * Includes readiness for published profiles and the current platform default.
+ * `default_is_ready` reflects the platform keys required by that default.
  * `credentials_self_service` drives generic setup copy
  * (self-serve vs contact platform admin).
  */
 export interface PresetCatalogResponse {
   presets: PresetCatalogItem[];
+  default: {
+    name: string;
+    description: string | null;
+    credential_source: "platform";
+    is_ready: boolean;
+  } | null;
   default_is_ready: boolean;
   credentials_self_service: boolean;
 }

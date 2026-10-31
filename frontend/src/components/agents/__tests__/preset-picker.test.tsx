@@ -6,7 +6,7 @@
  * generic setup guidance without naming underlying providers.
  */
 import * as React from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { PresetPicker } from "@/components/agents/preset-picker";
@@ -26,6 +26,12 @@ function makeCatalog(
 ): PresetCatalogResponse {
   return {
     presets: [],
+    default: {
+      name: DEFAULT_PRESET_DISPLAY.name,
+      description: DEFAULT_PRESET_DISPLAY.description,
+      credential_source: "platform",
+      is_ready: true,
+    },
     default_is_ready: true,
     credentials_self_service: true,
     ...over,
@@ -56,7 +62,7 @@ describe("PresetPicker", () => {
     expect(screen.getAllByText("Ready").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("explains plan-credit usage when the system default is selected", () => {
+  it("explains platform-managed and organization-key profiles", () => {
     mockUsePresetCatalog.mockReturnValue({
       data: makeCatalog(),
       isLoading: false,
@@ -66,18 +72,14 @@ describe("PresetPicker", () => {
       <PresetPicker organizationId={ORG_ID} value={null} onChange={() => {}} />,
     );
 
-    const systemDefaultOption = screen.getAllByRole("radio")[0];
     expect(
-      within(systemDefaultOption).getByText(
-        /voice profile will use your plan's call credits/i,
+      screen.getByText(
+        /Platform-managed profiles use provider keys configured by 24x7 AI/i,
       ),
     ).toBeInTheDocument();
     expect(
-      within(systemDefaultOption).getByText(/provider bills you directly/i),
-    ).toBeInTheDocument();
-    expect(
-      within(systemDefaultOption).getByText(
-        /24x7 AI does not add a provider usage charge/i,
+      screen.getByText(
+        /Organization-key profiles use credentials configured for your org/i,
       ),
     ).toBeInTheDocument();
   });
@@ -90,12 +92,14 @@ describe("PresetPicker", () => {
             id: "p-ready",
             name: "Professional Voice",
             description: "Warm tone for support.",
+            credential_source: "organization",
             is_ready: true,
           },
           {
             id: "p-setup",
             name: "Enterprise Voice",
             description: "Low latency.",
+            credential_source: "platform",
             is_ready: false,
           },
         ],
@@ -122,6 +126,7 @@ describe("PresetPicker", () => {
             id: "p-setup",
             name: "Enterprise Voice",
             description: null,
+            credential_source: "organization",
             is_ready: false,
           },
         ],
@@ -139,7 +144,9 @@ describe("PresetPicker", () => {
     );
 
     expect(
-      screen.getByText(/needs a little more setup before your agent can use it/i),
+      screen.getByText(
+        /needs a little more setup before your agent can use it/i,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText(/Open voice setup/i)).toBeInTheDocument();
     expect(screen.queryByText(/API credentials/i)).not.toBeInTheDocument();
@@ -147,10 +154,16 @@ describe("PresetPicker", () => {
     expect(screen.queryByText(/OpenAI/i)).not.toBeInTheDocument();
   });
 
-  it("does not show setup callout for system default even when API reports not ready", () => {
+  it("shows contact-admin guidance when platform default is not ready", () => {
     mockUsePresetCatalog.mockReturnValue({
       data: makeCatalog({
         default_is_ready: false,
+        default: {
+          name: "Managed default",
+          description: null,
+          credential_source: "platform",
+          is_ready: false,
+        },
         credentials_self_service: true,
       }),
       isLoading: false,
@@ -161,9 +174,9 @@ describe("PresetPicker", () => {
     );
 
     expect(
-      screen.queryByText(/needs a little more setup before your agent can use it/i),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("Ready")).toBeInTheDocument();
+      screen.getByText(/contact your account administrator/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Setup required")).toBeInTheDocument();
   });
 
   it("shows contact-admin copy when credentials are not self-service", () => {
@@ -174,6 +187,7 @@ describe("PresetPicker", () => {
             id: "p-managed",
             name: "Managed Profile",
             description: null,
+            credential_source: "organization",
             is_ready: false,
           },
         ],

@@ -88,8 +88,8 @@ class TestPrepareVoiceSession:
                 ),
             ),
             patch(
-                "src.session_setup.resolve_speech_config_for_agent",
-                new=AsyncMock(return_value=pipeline_cfg),
+                "src.session_setup.resolve_speech_profile_for_agent",
+                new=AsyncMock(return_value=(pipeline_cfg, "organization")),
             ),
             patch(
                 "src.session_setup.resolve_api_keys",
@@ -142,8 +142,8 @@ class TestPrepareVoiceSession:
                 ),
             ),
             patch(
-                "src.session_setup.resolve_speech_config_for_agent",
-                new=AsyncMock(return_value=realtime_cfg),
+                "src.session_setup.resolve_speech_profile_for_agent",
+                new=AsyncMock(return_value=(realtime_cfg, "organization")),
             ),
             patch(
                 "src.session_setup.resolve_api_keys",
@@ -207,12 +207,15 @@ class TestPrepareVoiceSession:
                 ),
             ),
             patch(
-                "src.session_setup.resolve_speech_config_for_agent",
+                "src.session_setup.resolve_speech_profile_for_agent",
                 new=AsyncMock(
-                    return_value=__import__(
-                        "shared.voice_agents.speech_config",
-                        fromlist=["default_realtime_config"],
-                    ).default_realtime_config()
+                    return_value=(
+                        __import__(
+                            "shared.voice_agents.speech_config",
+                            fromlist=["default_realtime_config"],
+                        ).default_realtime_config(),
+                        "platform",
+                    )
                 ),
             ),
             patch(
@@ -272,8 +275,8 @@ class TestPrepareVoiceSession:
                 ),
             ),
             patch(
-                "src.session_setup.resolve_speech_config_for_agent",
-                new=AsyncMock(return_value=MagicMock()),
+                "src.session_setup.resolve_speech_profile_for_agent",
+                new=AsyncMock(return_value=(MagicMock(), "platform")),
             ),
             patch(
                 "src.session_setup.resolve_api_keys",

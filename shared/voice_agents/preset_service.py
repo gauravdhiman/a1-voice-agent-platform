@@ -34,20 +34,21 @@ from uuid import UUID
 
 from opentelemetry import trace
 from pydantic import ValidationError
+from supabase import Client
 
 from shared.config import supabase_config
 from shared.voice_agents.model_capabilities import model_capability_service
 from shared.voice_agents.preset_models import (
-    RESERVED_DEFAULT_NAME,
     Preset,
+    PresetCatalogDefault,
     PresetCatalogItem,
     PresetCatalogResponse,
     PresetCreate,
+    PresetCredentialSource,
     PresetType,
     PresetUpdate,
 )
 from shared.voice_agents.speech_config import parse_speech_config
-from supabase import Client
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -143,12 +144,6 @@ class PresetService:
         if err:
             return None, err
 
-        # Guard: the reserved name belongs to the single system-default row,
-        # managed via its own config editor — reject authoring a preset that
-        # would clobber it by name.
-        if data.name == RESERVED_DEFAULT_NAME:
-            return None, f"'{RESERVED_DEFAULT_NAME}' is a reserved preset name"
-
         try:
             existing = (
                 self.supabase.table("pipeline_presets")
@@ -157,6 +152,8 @@ class PresetService:
                 .execute()
             )
             existing_row = existing.data[0] if existing.data else {}
+            if existing_row.get("is_default"):
+                return None, "The default preset must be edited by id"
             if data.is_published or bool(existing_row.get("is_published")):
                 capability_error = await self._validate_model_capabilities(config_dict)
                 if capability_error:
@@ -213,24 +210,23 @@ class PresetService:
             data_dict["preset_type"] = preset_type.value
 
         try:
-            # Guard: the system-default row is edited only via
-            # :meth:`update_default_preset` (its config editor); the generic
-            # update path refuses it so name/is_published/is_default stay fixed.
+            # The selected default may be edited by id, but cannot be changed
+            # to organization credentials or unpublished.
             existing = (
                 self.supabase.table("pipeline_presets")
-                .select("id,is_default,is_published,config")
+                .select("id,is_default,is_published,credential_source,config")
                 .eq("id", str(preset_id))
                 .limit(1)
                 .execute()
             )
             if not existing.data:
                 return None, "Preset not found"
-            if existing.data[0].get("is_default"):
-                return None, (
-                    "The system default preset is managed via its own config editor"
-                )
-
             existing_row = existing.data[0]
+            if existing_row.get("is_default"):
+                if data_dict.get("credential_source", "platform") != "platform":
+                    return None, "The default preset must use platform credentials"
+                if data_dict.get("is_published", True) is False:
+                    return None, "The default preset must remain published"
             target_config = data_dict.get("config", existing_row.get("config"))
             target_is_published = data_dict.get(
                 "is_published", existing_row.get("is_published", False)
@@ -262,14 +258,10 @@ class PresetService:
 
     @tracer.start_as_current_span("preset.get_default_preset")
     async def get_default_preset(self) -> tuple[Optional[Preset], Optional[str]]:
-        """Fetch the single system-default preset row (``is_default=True``).
+        """Fetch the current platform default row (``is_default=True``).
 
-        The default is the fallback config an agent uses when it has no preset
-        selected (``preset_id`` NULL — a legacy agent, or one whose preset was
-        deleted via the FK ``ON DELETE SET NULL``). It is seeded by the
-        migration with today's realtime config and is editable via
-        :meth:`update_default_preset`. It is NOT published and never appears in
-        the org-admin picker.
+        The default is the published platform-credential preset used when an
+        agent has no explicit preset selected.
 
         Returns:
             ``(Preset, None)`` if the default row exists, ``(None, None)`` if
@@ -296,13 +288,12 @@ class PresetService:
     async def update_default_preset(
         self, config: dict
     ) -> tuple[Optional[Preset], Optional[str]]:
-        """Replace the system-default preset's ``config`` (platform admin only).
+        """Replace the current default preset's ``config`` (legacy endpoint).
 
         Only ``config`` and the derived ``preset_type`` are written; the row's
-        ``name``/``is_published``/``is_default`` stay fixed (it is always the
-        admin-only, non-published fallback). The config is re-validated via
-        :func:`parse_speech_config` and ``preset_type`` is re-derived from its
-        ``engine_mode`` before persisting.
+        metadata stays fixed by this legacy endpoint. The config is re-validated
+        via :func:`parse_speech_config` and ``preset_type`` is re-derived from
+        its ``engine_mode`` before persisting.
 
         Args:
             config: A raw ``SpeechConfig`` dict (realtime or pipeline
@@ -419,9 +410,7 @@ class PresetService:
             found"`` if the row is missing).
         """
         try:
-            # Guard: the system-default row is not publishable — it is the
-            # admin-only fallback (never shown in the org-admin picker, which
-            # lists published presets only).
+            # The current default can remain published but cannot be unpublished.
             existing = (
                 self.supabase.table("pipeline_presets")
                 .select("id,is_default,config")
@@ -431,8 +420,8 @@ class PresetService:
             )
             if not existing.data:
                 return None, "Preset not found"
-            if existing.data[0].get("is_default"):
-                return None, "The system default preset is not publishable"
+            if existing.data[0].get("is_default") and not published:
+                return None, "The default preset must remain published"
 
             if published:
                 config = existing.data[0].get("config")
@@ -453,6 +442,29 @@ class PresetService:
             return Preset(**response.data[0]), None
         except Exception as e:
             logger.error(f"Error publishing preset {preset_id}: {e}", exc_info=True)
+            return None, str(e)
+
+    @tracer.start_as_current_span("preset.set_default_preset")
+    async def set_default_preset(
+        self, preset_id: UUID
+    ) -> tuple[Optional[Preset], Optional[str]]:
+        """Atomically make a published platform-credential preset the default."""
+        try:
+            candidate, candidate_error = await self.get_preset_by_id(preset_id)
+            if candidate_error:
+                return None, candidate_error
+            if candidate is None:
+                return None, "Preset not found"
+            if candidate.credential_source != PresetCredentialSource.PLATFORM:
+                return None, "Only platform presets can be the default"
+            if not candidate.is_published:
+                return None, "Only published presets can be the default"
+            self.supabase.rpc(
+                "set_default_pipeline_preset", {"p_preset_id": str(preset_id)}
+            ).execute()
+            return await self.get_preset_by_id(preset_id)
+        except Exception as e:
+            logger.error("Error setting default preset %s: %s", preset_id, e)
             return None, str(e)
 
     @tracer.start_as_current_span("preset.get_preset_usage")
@@ -493,7 +505,7 @@ class PresetService:
         ``force`` — return ``"in_use"`` so the route can surface the affected
         agents in a 409 body. With ``force=True`` (or when unused), the
         ``voice_agents.preset_id`` FK ``ON DELETE SET NULL`` detaches
-        referencing agents (they fall back to the System Default preset row) and the
+        referencing agents (they fall back to the current platform default row) and the
         preset row is removed.
 
         Args:
@@ -514,7 +526,7 @@ class PresetService:
             if not exists.data:
                 return None, "Preset not found"
             if exists.data[0].get("is_default"):
-                return None, "The system default preset cannot be deleted"
+                return None, "The default preset cannot be deleted"
 
             usage, usage_error = await self.get_preset_usage(preset_id)
             if usage_error:
@@ -548,10 +560,9 @@ class PresetService:
 
         Args:
             presets: Published preset rows from :meth:`get_presets`.
-            default_preset: The system-default row (unused for readiness; kept
-                for API symmetry and future metadata). ``default_is_ready`` is
-                always ``True`` because org admins do not configure credentials
-                for the platform-managed fallback.
+            default_preset: The selected platform-default row. Its readiness is
+                computed from the preset config and platform provider keys; it is
+                included in ``default`` metadata rather than the explicit list.
             org: Organization object for credential resolution, or ``None``.
             use_platform_credits: Per-agent billing toggle (platform keys only).
             credentials_self_service: Whether org admins may self-configure keys.
@@ -571,23 +582,36 @@ class PresetService:
                     id=preset.id,
                     name=preset.name,
                     description=preset.description,
+                    credential_source=preset.credential_source,
                     is_ready=is_preset_ready(
                         cfg,
                         org,
                         use_platform_credits=use_platform_credits,
-                        org_credentials_only=True,
+                        credential_source=preset.credential_source,
                     ),
                 )
             )
 
-        default_ready = True
-        # The system-default fallback (preset_id=null) is platform-managed. Org
-        # admins never configure credentials for it — the worker resolves keys
-        # via platform env / platform credits. Readiness checks apply only to
-        # published presets in ``items`` above.
+        default_display = None
+        default_ready = False
+        if default_preset is not None:
+            default_config = parse_speech_config(default_preset.config)
+            default_ready = is_preset_ready(
+                default_config,
+                org,
+                use_platform_credits=use_platform_credits,
+                credential_source=default_preset.credential_source,
+            )
+            default_display = PresetCatalogDefault(
+                name=default_preset.name,
+                description=default_preset.description,
+                credential_source=default_preset.credential_source,
+                is_ready=default_ready,
+            )
 
         return PresetCatalogResponse(
             presets=items,
+            default=default_display,
             default_is_ready=default_ready,
             credentials_self_service=credentials_self_service,
         )

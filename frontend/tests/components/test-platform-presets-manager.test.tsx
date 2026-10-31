@@ -16,7 +16,7 @@ const mockState = vi.hoisted(() => ({
   createPreset: vi.fn(),
   updatePreset: vi.fn(),
   publishPreset: vi.fn(),
-  updateDefaultPreset: vi.fn(),
+  setDefaultPreset: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-preset-queries", () => ({
@@ -33,8 +33,8 @@ vi.mock("@/hooks/use-preset-queries", () => ({
     mutate: mockState.publishPreset,
     isPending: false,
   }),
-  useUpdateDefaultPreset: () => ({
-    mutateAsync: mockState.updateDefaultPreset,
+  useSetDefaultPreset: () => ({
+    mutate: mockState.setDefaultPreset,
     isPending: false,
   }),
 }));
@@ -84,6 +84,7 @@ const authoredPreset = {
   description: "A calm voice for support calls.",
   config: { engine_mode: "realtime" },
   is_published: false,
+  credential_source: "organization" as const,
   preset_type: "realtime" as const,
   is_default: false,
   created_at: "2026-01-01T00:00:00Z",
@@ -101,8 +102,7 @@ describe("PlatformPresetsManager drawer entry points", () => {
     mockState.updatePreset.mockReset();
     mockState.updatePreset.mockResolvedValue(authoredPreset);
     mockState.publishPreset.mockReset();
-    mockState.updateDefaultPreset.mockReset();
-    mockState.updateDefaultPreset.mockResolvedValue(authoredPreset);
+    mockState.setDefaultPreset.mockReset();
   });
 
   it("opens a right-side drawer from Create new preset", async () => {
@@ -154,7 +154,9 @@ describe("PlatformPresetsManager drawer entry points", () => {
     expect(
       await screen.findByRole("heading", { name: /Create voice preset/i }),
     ).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Copy of Support Voice")).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue("Copy of Support Voice"),
+    ).toBeInTheDocument();
     expect(
       screen.getByDisplayValue("A calm voice for support calls."),
     ).toBeInTheDocument();
@@ -167,6 +169,7 @@ describe("PlatformPresetsManager drawer entry points", () => {
       description: "A calm voice for support calls.",
       config: authoredPreset.config,
       is_published: false,
+      credential_source: "organization",
     });
   });
 
@@ -197,6 +200,7 @@ describe("PlatformPresetsManager drawer entry points", () => {
       name: "System Default",
       description: null,
       is_default: true,
+      credential_source: "platform" as const,
     };
     mockState.presets = [defaultPreset];
     render(<PlatformPresetsManager />);
@@ -210,9 +214,9 @@ describe("PlatformPresetsManager drawer entry points", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByDisplayValue(
-        "Used when an agent has no voice profile selected. The voice profile will use your plan's call credits.",
+        "Used when an agent has no voice profile selected.",
       ),
-      ).toBeInTheDocument();
+    ).toBeInTheDocument();
   });
 
   it("shows the empty catalog state when no presets exist", () => {
@@ -257,11 +261,64 @@ describe("PlatformPresetsManager drawer entry points", () => {
     await user.click(
       screen.getByRole("button", { name: "Close delete dialog" }),
     );
-    expect(screen.queryByTestId("preset-delete-dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("preset-delete-dialog"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getAllByRole("button", { name: "Delete" })[0]);
     await user.click(screen.getByRole("button", { name: "Confirm delete" }));
-    expect(screen.queryByTestId("preset-delete-dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("preset-delete-dialog"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers Make default only for published platform-managed presets", async () => {
+    const { userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    mockState.presets = [
+      { ...authoredPreset, is_published: true },
+      {
+        ...authoredPreset,
+        id: "platform-preset",
+        name: "Platform Voice",
+        is_published: true,
+        credential_source: "platform",
+      },
+    ];
+    render(<PlatformPresetsManager />);
+
+    const makeDefault = screen.getByRole("button", { name: /Make default/i });
+    expect(
+      screen.getAllByRole("button", { name: /Make default/i }),
+    ).toHaveLength(1);
+    await user.click(makeDefault);
+
+    expect(mockState.setDefaultPreset).toHaveBeenCalledWith("platform-preset");
+  });
+
+  it("creates a platform-managed preset when selected in the author drawer", async () => {
+    const { userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    render(<PlatformPresetsManager />);
+
+    await user.click(
+      screen.getByRole("button", { name: /Create new preset/i }),
+    );
+    await user.type(screen.getByLabelText(/Name/i), "Platform Voice");
+    await user.selectOptions(
+      screen.getByLabelText("Provider credentials"),
+      "platform",
+    );
+    act(() => mockState.configFormOnChange(authoredPreset.config));
+    await user.click(screen.getByRole("button", { name: "Publish" }));
+
+    expect(mockState.createPreset).toHaveBeenCalledWith({
+      name: "Platform Voice",
+      description: null,
+      config: authoredPreset.config,
+      is_published: true,
+      credential_source: "platform",
+    });
   });
 
   it("saves a new preset as either a draft or a published preset", async () => {
@@ -269,7 +326,9 @@ describe("PlatformPresetsManager drawer entry points", () => {
     const user = userEvent.setup();
     render(<PlatformPresetsManager />);
 
-    await user.click(screen.getByRole("button", { name: /Create new preset/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Create new preset/i }),
+    );
     await user.type(screen.getByLabelText(/Name/), "Draft Voice");
     await user.type(
       screen.getByLabelText(/Description/),
@@ -286,9 +345,12 @@ describe("PlatformPresetsManager drawer entry points", () => {
       description: "A draft voice profile.",
       config: authoredPreset.config,
       is_published: false,
+      credential_source: "organization",
     });
 
-    await user.click(screen.getByRole("button", { name: /Create new preset/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Create new preset/i }),
+    );
     await user.type(screen.getByLabelText(/Name/), "Published Voice");
     act(() => {
       mockState.configFormOnChange(authoredPreset.config);
@@ -301,6 +363,7 @@ describe("PlatformPresetsManager drawer entry points", () => {
       description: null,
       config: authoredPreset.config,
       is_published: true,
+      credential_source: "organization",
     });
   });
 
@@ -309,7 +372,9 @@ describe("PlatformPresetsManager drawer entry points", () => {
     const user = userEvent.setup();
     render(<PlatformPresetsManager />);
 
-    await user.click(screen.getByRole("button", { name: /Create new preset/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Create new preset/i }),
+    );
     await user.type(screen.getByLabelText(/Name/), "Missing Config Voice");
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
@@ -341,6 +406,7 @@ describe("PlatformPresetsManager drawer entry points", () => {
         description: authoredPreset.description,
         config: authoredPreset.config,
         is_published: false,
+        credential_source: "organization",
       },
     });
   });
@@ -349,7 +415,9 @@ describe("PlatformPresetsManager drawer entry points", () => {
     const { userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     mockState.presets = [authoredPreset];
-    mockState.createPreset.mockRejectedValue(new Error("Preset already exists."));
+    mockState.createPreset.mockRejectedValue(
+      new Error("Preset already exists."),
+    );
     render(<PlatformPresetsManager />);
 
     await user.click(
@@ -357,54 +425,69 @@ describe("PlatformPresetsManager drawer entry points", () => {
     );
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
-    expect(await screen.findByText("Preset already exists.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Preset already exists."),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /Create voice preset/i }),
     ).toBeInTheDocument();
   });
 
-  it("saves the system default through its config-only path", async () => {
+  it("edits and saves the selected platform default as a regular preset", async () => {
     const { userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     const defaultPreset = {
       ...authoredPreset,
       id: "preset-default",
       name: "System Default",
+      description: null,
       is_default: true,
+      credential_source: "platform" as const,
     };
     mockState.presets = [defaultPreset];
     render(<PlatformPresetsManager />);
 
-    await user.click(screen.getByRole("button", { name: "Edit config" }));
-    await user.click(screen.getByRole("button", { name: "Save config" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
-    expect(mockState.updateDefaultPreset).toHaveBeenCalledWith(
-      authoredPreset.config,
-    );
+    expect(mockState.updatePreset).toHaveBeenCalledWith({
+      presetId: "preset-default",
+      payload: {
+        name: "System Default",
+        description: null,
+        config: authoredPreset.config,
+        is_published: true,
+        credential_source: "platform",
+      },
+    });
     expect(screen.getByText("Voice preset catalog")).toBeInTheDocument();
   });
 
-  it("shows a system-default save error without closing the drawer", async () => {
+  it("shows a default preset save error without closing the drawer", async () => {
     const { userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     const defaultPreset = {
       ...authoredPreset,
       id: "preset-default",
       name: "System Default",
+      description: null,
       is_default: true,
+      credential_source: "platform" as const,
     };
     mockState.presets = [defaultPreset];
-    mockState.updateDefaultPreset.mockRejectedValue(
+    mockState.updatePreset.mockRejectedValue(
       new Error("Default update failed."),
     );
     render(<PlatformPresetsManager />);
 
-    await user.click(screen.getByRole("button", { name: "Edit config" }));
-    await user.click(screen.getByRole("button", { name: "Save config" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
-    expect(await screen.findByText("Default update failed.")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /Edit system default/i }),
+      await screen.findByText("Default update failed."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Edit default voice preset/i }),
     ).toBeInTheDocument();
   });
 
