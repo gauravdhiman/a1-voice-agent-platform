@@ -50,12 +50,12 @@ async def test_billing_summary_displays_version_only_paid_plan_and_price():
         current_period_usage=0,
     )
     plan_version = MagicMock()
-    plan_version.price_amount_cents = 4900
+    plan_version.price_amount_cents = 7900
     plan_version.model_dump.return_value = {
         "id": str(PLAN_VERSION_ID),
         "product_name": "Starter",
         "display_label": "Starter:Month v1",
-        "price_amount_cents": 4900,
+        "price_amount_cents": 7900,
         "billing_interval": "monthly",
         "billing_mode": "paid",
         "entitlements": {
@@ -78,5 +78,5 @@ async def test_billing_summary_displays_version_only_paid_plan_and_price():
         result = await get_billing_summary(ORG_ID, (UUID(int=1), SimpleNamespace()))
 
     get_plan_version.assert_awaited_once_with(PLAN_VERSION_ID)
-    assert result.amount_due == 4900
+    assert result.amount_due == 7900
     assert result.subscription.plan_version["product_name"] == "Starter"

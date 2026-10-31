@@ -55,7 +55,7 @@ customer results.
   primary CTA plus deep links into each `/how-it-works` chapter, so
   post-demo curiosity has somewhere to go (see
   [platform tour](platform-tour.md)).
-- Pricing shows the $49/month entry point and up to 250 call minutes, with
+- Pricing shows the $79/month entry point and up to 250 call minutes, with
   a demo CTA instead of public plan cards or public checkout links. The private
   plan selector remains backed by the Plan Catalog.
 

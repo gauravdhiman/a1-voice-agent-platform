@@ -97,7 +97,7 @@ def _plan_version_row(plan_version_id, product_slug="starter", version_number=1)
         "version_number": version_number,
         "status": "published",
         "display_label": "Starter v1",
-        "price_amount_cents": 4900,
+        "price_amount_cents": 7900,
         "currency": "USD",
         "billing_interval": "monthly",
         "trial_period_days": None,

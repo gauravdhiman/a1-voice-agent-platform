@@ -3,6 +3,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import HowItWorksPage from "../how-it-works/page";
+import { getStandardPricingCopy } from "@/lib/pricing/plans";
 
 afterEach(() => {
   cleanup();
@@ -18,7 +19,9 @@ describe("Platform tour", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText(/no coding required/i)).toBeTruthy();
-    expect(screen.getByText(/plans from \$79\/month/i)).toBeTruthy();
+    expect(
+      screen.getByText((text) => text.includes(getStandardPricingCopy())),
+    ).toBeTruthy();
     expect(
       screen
         .getAllByRole("link", { name: /request a demo/i })

@@ -89,7 +89,6 @@ export default function AiToolsIndexPage() {
         <div className="mt-16">
           <BlogCTA
             title="Your phones could be next"
-            description="24x7 AI answers every call on your business line, books appointments, and captures leads around the clock. Concierge setup, live in 48 hours, plans from $79/month."
             buttonText="See 24x7 AI in action"
             href="/request-demo"
           />

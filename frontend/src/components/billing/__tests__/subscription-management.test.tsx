@@ -127,7 +127,7 @@ describe("SubscriptionManagement", () => {
         display_label: "Starter:Month v1",
         billing_mode: "paid" as const,
         credit_grant_policy: "recurring" as const,
-        price_amount_cents: 4900,
+        price_amount_cents: 7900,
         currency: "USD",
         billing_interval: "monthly",
         trial_period_days: null,
@@ -148,7 +148,7 @@ describe("SubscriptionManagement", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Starter")).toBeTruthy();
-      expect(screen.getByText("$49.00/monthly")).toBeTruthy();
+      expect(screen.getByText("$79.00/monthly")).toBeTruthy();
       expect(screen.getByText("2,500")).toBeTruthy();
       expect(screen.getByText("Max Users")).toBeTruthy();
       expect(screen.getByText("5")).toBeTruthy();

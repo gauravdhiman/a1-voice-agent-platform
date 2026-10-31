@@ -28,9 +28,13 @@
 | Tier | Monthly price | Annual price¹ | Included credits | Up to call minutes² |
 | ------- | ------------: | ------------: | ---------------: | ------------------: |
 | Free | $0 | — | 100/month | 10/month |
-| Starter | $49/month | $490/year | 2,500/month | 250/month |
+| Starter | $79/month | $790/year | 2,500/month | 250/month |
 | Pro | $149/month | $1,490/year | 10,000/month | 1,000/month |
 | Scale | $299/month | $2,990/year | 21,000/month | 2,100/month |
+
+> **Obsolete:** Starter $49/month ($490/year) is retired for new publish.
+> Do not create Stripe prices at $49. Historical $49 versions may remain
+> mapped to existing subscriptions until those orgs migrate.
 
 ¹ Annual plans charge the price of 10 monthly payments for 12 months of service
 (two months free) and grant 12 times the monthly credits.
@@ -73,7 +77,7 @@ Annual versions, when offered, charge exactly 10 monthly payments for 12 months
 of service (two months free). Their included-credit entitlement must equal 12
 times the monthly allowance so the call-minute allowance remains consistent
 throughout the year. At the approved monthly prices, the annual prices are
-$490 Starter, $1,490 Pro, and $2,990 Scale.
+$790 Starter, $1,490 Pro, and $2,990 Scale.
 
 ## Pilot safeguards
 

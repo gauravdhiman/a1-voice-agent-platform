@@ -26,6 +26,7 @@ import {
   SITE_NAME,
   SITE_SALES_EMAIL,
 } from "@/lib/site-config";
+import { getStandardPricingCopy } from "@/lib/pricing/plans";
 import { usePublicTheme } from "@/components/public-theme/public-theme-context";
 import { PublicHeader } from "@/components/public-theme/public-header";
 import { ParticleField } from "./particle-field";
@@ -187,7 +188,7 @@ export function HomePageLegacy() {
               </div>
               <p className={styles.heroNote}>
                 Concierge setup with you · You approve every word · No coding
-                required. Plans from $79/month, including up to 250 call minutes.
+                required. {getStandardPricingCopy()}.
               </p>
             </div>
             <div className={styles.fieldLabel} aria-hidden="true">
@@ -700,7 +701,7 @@ export function HomePageLegacy() {
           <p>
             Start with a concierge pilot, built around you.
             <br />
-            Monthly plans from $79/month, including up to 250 call minutes.
+            Monthly {getStandardPricingCopy()}.
           </p>
           <div className={styles.ctaRow}>
             <Link className={styles.primary} href="/request-demo">

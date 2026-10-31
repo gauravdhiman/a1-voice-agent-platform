@@ -2,12 +2,17 @@ import type { Metadata } from "next";
 
 import { HomePage } from "@/components/home/home-page";
 import { createMarketingMetadata } from "@/lib/marketing-seo";
+import {
+  PLANS,
+  formatMonthlyPriceCompact,
+  getStandardPricingCopy,
+} from "@/lib/pricing/plans";
 
 export const metadata: Metadata = createMarketingMetadata({
   path: "",
   title: "AI Receptionist for Small Business | 24/7 AI Phone Answering - 24x7 AI",
   description:
-    "24x7 AI answers every call on your business line 24/7: books appointments, answers questions, captures leads. Concierge setup, live in 48 hours. Plans from $79/mo.",
+    `24x7 AI answers every call on your business line 24/7: books appointments, answers questions, captures leads. Concierge setup, live in 48 hours. Plans from ${formatMonthlyPriceCompact(PLANS.STARTER.monthlyUSD)}.`,
   keywords: [
     "AI voice agents for small business",
     "AI receptionist",
@@ -28,10 +33,9 @@ const softwareApplicationJsonLd = {
     "24x7 AI answers every call on your business line 24/7: books appointments, answers questions, captures leads.",
   offers: {
     "@type": "Offer",
-    price: "79",
+    price: String(PLANS.STARTER.monthlyUSD),
     priceCurrency: "USD",
-    description:
-      "Monthly plans from $79/month, including up to 250 call minutes.",
+    description: `Monthly ${getStandardPricingCopy()}.`,
   },
 };
 
