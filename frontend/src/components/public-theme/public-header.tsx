@@ -52,7 +52,7 @@ export function PublicHeader() {
         <Link href="/how-it-works">How it works</Link>
         <Link href="/#industries">For your business</Link>
         <Link href="/#integrations">Integrations</Link>
-        <Link href="/#pricing">Pricing</Link>
+        <Link href="/pricing">Pricing</Link>
         <Link href="/blog">Blog</Link>
         <Link href="/ai-tools">AI Tools</Link>
       </nav>
@@ -105,7 +105,7 @@ export function PublicHeader() {
             <Link href="/how-it-works" onClick={closeMenu}>
               How it works
             </Link>
-            <Link href="/#pricing" onClick={closeMenu}>
+            <Link href="/pricing" onClick={closeMenu}>
               Pricing
             </Link>
             <Link href="/blog" onClick={closeMenu}>

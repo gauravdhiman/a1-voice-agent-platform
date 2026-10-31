@@ -101,7 +101,7 @@ const content: IndustryPageContent = {
     {
       question: "What does it cost?",
       answer:
-        "Plans start at $49/month and include up to 250 call minutes. Book a demo to see how an AI front desk fits your business.",
+        "Plans start at $79/month and include up to 250 call minutes. Book a demo to see how an AI front desk fits your business.",
     },
   ],
 };

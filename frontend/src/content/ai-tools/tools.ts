@@ -13,7 +13,7 @@ export interface ToolFaq {
 }
 
 export interface QuickFacts {
-  /** e.g. "From $49/mo (250 min); most service businesses need $149/mo" */
+  /** e.g. "From $79/mo (250 min); most service businesses need $149/mo" */
   price: string;
   /** Free trial / free plan details, plain English. */
   freeTier: string;
@@ -50,7 +50,7 @@ export interface Tool {
   tagline: string;
   /** Category slug this tool belongs to. */
   category: string;
-  /** Short pricing summary, e.g. "From $49/mo". */
+  /** Short pricing summary, e.g. "From $79/mo". */
   pricing: string;
   pros: string[];
   cons: string[];
@@ -505,7 +505,7 @@ export const TOOLS: Tool[] = [
     slug: "24x7-ai",
     tagline: "Your AI front desk: answers on your number, books on your calendar.",
     category: "ai-receptionists",
-    pricing: "From $49/mo (250 call minutes); free plan available",
+    pricing: "From $79/mo (250 call minutes); free plan available",
     featured: true,
     pros: [
       "Concierge setup done with you: the assistant is built around your services, prices, and hours, and you test and approve it before it goes live, so there is no DIY configuration gamble",
@@ -527,9 +527,9 @@ export const TOOLS: Tool[] = [
     verdict:
       "24x7 AI is our own AI front desk, and we built it for the owner who wants coverage without becoming a phone-system administrator. Concierge setup, your number, your calendar, live in 48 hours. Compare it against the others on this page and judge it on the facts.",
     verdictBox:
-      "Full disclosure: we build 24x7 AI, so take this review as us making our case, then check it against the others. What you get: an AI front desk that answers on your existing business number and through a voice button on your website, answers questions from your business info, books appointments into your real calendar, and captures after-hours leads. Plans run from $49 a month (2,500 credits, about 250 minutes) to $299, with a free tier to try it and a 10-for-12 annual discount. Setup is done with you as a concierge pilot, you test and approve before it goes live, and it is typically answering in 48 hours. The honest limits: it is built for small and medium businesses, not enterprise contact centers, and it is a newer brand than Abby or Smith.ai.",
+      "Full disclosure: we build 24x7 AI, so take this review as us making our case, then check it against the others. What you get: an AI front desk that answers on your existing business number and through a voice button on your website, answers questions from your business info, books appointments into your real calendar, and captures after-hours leads. Plans run from $79 a month (2,500 credits, about 250 minutes) to $299, with a free tier to try it and a 10-for-12 annual discount. Setup is done with you as a concierge pilot, you test and approve before it goes live, and it is typically answering in 48 hours. The honest limits: it is built for small and medium businesses, not enterprise contact centers, and it is a newer brand than Abby or Smith.ai.",
     quickFacts: {
-      price: "Free (100 credits); Starter $49/mo (2,500 credits, ~250 min); Pro $149; Scale $299",
+      price: "Free (100 credits); Starter $79/mo (2,500 credits, ~250 min); Pro $149; Scale $299",
       freeTier: "Free plan: 100 credits (~10 minutes), no card to start",
       setup: "Concierge setup with you; you approve before it goes live; live in 48 hours",
     },
@@ -571,7 +571,7 @@ export const TOOLS: Tool[] = [
       "It goes live, typically within 48 hours. From then on, every call is answered at night, on weekends, and during busy hours, and every booking and lead lands where your team already works.",
     ],
     pricingExplained: [
-      "24x7 AI sells credits, where 10 credits buy about one minute of talk time. Four tiers: Free at $0 for 100 credits (about 10 minutes, enough to try it properly), Starter at $49 a month for 2,500 credits (about 250 minutes), Pro at $149, and Scale at $299. Pay yearly and you get 12 months for the price of 10. Need more than the plans cover? Credit packs run from $5 for 200 credits to $44 for 2,000.",
+      "24x7 AI sells credits, where 10 credits buy about one minute of talk time. Four tiers: Free at $0 for 100 credits (about 10 minutes, enough to try it properly), Starter at $79 a month for 2,500 credits (about 250 minutes), Pro at $149, and Scale at $299. Pay yearly and you get 12 months for the price of 10. Need more than the plans cover? Credit packs run from $5 for 200 credits to $44 for 2,000.",
       "The concierge setup and pilot are included: no setup fee, no onboarding surcharge, no contracts. You pay for the plan and the credits it carries.",
     ],
     pricingCatches: [
@@ -593,7 +593,7 @@ export const TOOLS: Tool[] = [
     comparison: [
       {
         tool: "24x7 AI (our product)",
-        price: "$49/mo (~250 min)",
+        price: "$79/mo (~250 min)",
         difference: "Concierge setup, live in 48 hours, website voice button included; SMB-focused, newer brand",
       },
       {
@@ -633,7 +633,7 @@ export const TOOLS: Tool[] = [
       },
       {
         q: "How does the free plan work?",
-        a: "100 credits, about 10 minutes of talk time, at no cost. It is enough to test the assistant on real calls and decide whether the voice and the answers fit your business. When you are ready for coverage, Starter is $49 a month.",
+        a: "100 credits, about 10 minutes of talk time, at no cost. It is enough to test the assistant on real calls and decide whether the voice and the answers fit your business. When you are ready for coverage, Starter is $79 a month.",
       },
       {
         q: "What does concierge setup actually mean?",
@@ -767,7 +767,7 @@ export const TOOLS: Tool[] = [
       },
       {
         tool: "24x7 AI (our product)",
-        price: "From $49/mo",
+        price: "From $79/mo",
         difference: "Our own AI front desk with concierge setup; compare it honestly in our full review",
       },
     ],
@@ -925,7 +925,7 @@ export const TOOLS: Tool[] = [
       },
       {
         tool: "24x7 AI (our product)",
-        price: "From $49/mo",
+        price: "From $79/mo",
         difference: "Our own AI front desk with concierge setup; compare it honestly in our full review",
       },
     ],
@@ -1086,7 +1086,7 @@ export const TOOLS: Tool[] = [
       },
       {
         tool: "24x7 AI (our product)",
-        price: "From $49/mo",
+        price: "From $79/mo",
         difference: "Our own AI front desk with concierge setup; compare it honestly in our full review",
       },
     ],
@@ -1241,7 +1241,7 @@ export const TOOLS: Tool[] = [
       },
       {
         tool: "24x7 AI (our product)",
-        price: "From $49/mo",
+        price: "From $79/mo",
         difference: "Our own AI front desk with concierge setup; compare it honestly in our full review",
       },
     ],
@@ -1398,7 +1398,7 @@ export const TOOLS: Tool[] = [
       },
       {
         tool: "24x7 AI (our product)",
-        price: "From $49/mo",
+        price: "From $79/mo",
         difference: "Our own AI front desk with concierge setup; compare it honestly in our full review",
       },
     ],

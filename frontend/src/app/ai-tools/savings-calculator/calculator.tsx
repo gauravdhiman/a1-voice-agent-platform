@@ -140,7 +140,7 @@ export function SavingsCalculator() {
         id: "receptionist",
         name: "24x7 AI",
         href: "/ai-tools/ai-receptionists/24x7-ai",
-        price: "From $49/mo, free plan available",
+        price: "From $79/mo, free plan available",
         why:
           missedCalls > 2
             ? `You miss about ${Math.round(math.monthlyMissedCalls)} calls a month. At your ${Math.round(sizeConfig.closeRate * 100)}% close rate that is roughly ${formatMoney(math.monthlyLeak)} in lost customers an AI receptionist could catch for you.`
