@@ -25,8 +25,10 @@ import {
   ORGANIZATION_TIMEZONE_OPTIONS,
   ORGANIZATION_TIMEZONE_UNSET,
 } from "@/lib/organization-timezones";
+import { WebsiteBusinessContextGenerator } from "@/components/organizations/website-business-context-generator";
 
 export interface StepOrgDetailsProps {
+  organizationId: string;
   state: OnboardingWizardState;
   onChange: (update: Partial<OnboardingWizardState>) => void;
   onNext: () => void;
@@ -40,6 +42,7 @@ export interface StepOrgDetailsProps {
  * description. Continue stays disabled until required fields are valid.
  */
 export function StepOrgDetails({
+  organizationId,
   state,
   onChange,
   onNext,
@@ -201,6 +204,15 @@ export function StepOrgDetails({
             value={state.businessDescription}
             onChange={(e) => onChange({ businessDescription: e.target.value })}
             rows={3}
+          />
+          <WebsiteBusinessContextGenerator
+            organizationId={organizationId}
+            website={state.website}
+            businessContext={state.businessDescription}
+            onBusinessContextChange={(businessDescription) =>
+              onChange({ businessDescription })
+            }
+            disabled={saving}
           />
         </div>
       </div>

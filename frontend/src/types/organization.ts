@@ -9,6 +9,7 @@ export interface Organization {
   description: string | null;
   slug: string;
   website: string | null;
+  business_details?: string | null;
   is_active: boolean;
   industry?: string | null;
   location?: string | null;
@@ -36,6 +37,13 @@ export interface Organization {
 // Enhanced Organization interface with business details field
 export interface OrganizationEnhanced extends Organization {
   business_details?: string | null;
+}
+
+/** Website-generated business context draft; it is not persisted by generation. */
+export interface WebsiteBusinessContextDraft {
+  business_details: string;
+  pages_analyzed: number;
+  page_limit_reached: boolean;
 }
 
 // Invitation type for organization membership invitations

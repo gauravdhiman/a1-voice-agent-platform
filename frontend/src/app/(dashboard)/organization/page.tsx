@@ -7,6 +7,7 @@ import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { useOrganizationById } from "@/hooks/use-organization-by-id";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { OrganizationEditDialog } from "@/components/organizations/organization-edit-dialog";
+import { WebsiteBusinessContextGenerator } from "@/components/organizations/website-business-context-generator";
 import { ProviderCredentialsCard } from "@/components/organizations/provider-credentials-card";
 import { PublicPageSettingsCard } from "@/components/organizations/public-page-settings-card";
 import { OrganizationNotificationSettingsForm } from "@/components/notifications/organization-notification-settings-form";
@@ -946,6 +947,21 @@ All our technicians are licensed and background-checked. We offer a 90-day warra
 During monsoon season (July-September), we have extended hours for flood-related emergencies..."`}
                               className="min-h-[200px]"
                             />
+                            {orgId && editedOrg && (
+                              <WebsiteBusinessContextGenerator
+                                organizationId={orgId}
+                                website={editedOrg.website}
+                                businessContext={editedOrg.business_details}
+                                onBusinessContextChange={(business_details) =>
+                                  setEditedOrg((current) =>
+                                    current
+                                      ? { ...current, business_details }
+                                      : current,
+                                  )
+                                }
+                                disabled={saving}
+                              />
+                            )}
                           </div>
                         </>
                       ) : (

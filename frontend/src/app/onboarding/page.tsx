@@ -78,7 +78,7 @@ export default function OnboardingPage() {
     industry: industryParsed.selection,
     customIndustry: industryParsed.custom,
     location: currentOrganization?.location ?? "",
-    businessDescription: "",
+    businessDescription: currentOrganization?.business_details ?? "",
     agentName: suggestAgentName(currentOrganization?.name ?? ""),
     selectedTemplate: null,
     purchasedPhoneNumber: null,
@@ -103,6 +103,8 @@ export default function OnboardingPage() {
       industry: state.industry || parsed.selection,
       customIndustry: state.customIndustry || parsed.custom,
       location: state.location || currentOrganization.location || "",
+      businessDescription:
+        state.businessDescription || currentOrganization.business_details || "",
       agentName: state.agentName || suggestAgentName(currentOrganization.name),
     }));
   }, [currentOrganization]);
@@ -268,6 +270,7 @@ export default function OnboardingPage() {
       <main className="w-full max-w-3xl">
         {step === 1 && (
           <StepOrgDetails
+            organizationId={currentOrganization.id}
             state={wizardState}
             onChange={updateState}
             onNext={handleStep1Next}

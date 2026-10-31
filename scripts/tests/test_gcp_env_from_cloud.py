@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import yaml
+
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "deploy" / "gcp-env-from-cloud.py"
 MODULE_SPEC = importlib.util.spec_from_file_location(
     "gcp_env_from_cloud",
@@ -84,6 +86,24 @@ class GcpEnvironmentGenerationTests(unittest.TestCase):
 
         self.assertTrue(BACKEND_SECRET_KEYS <= gcp_env.BACKEND_KEYS)
         self.assertTrue(WORKER_SECRET_KEYS <= gcp_env.WORKER_KEYS)
+
+    def test_tinyfish_secret_is_backend_only(self) -> None:
+        """Website scraping credentials are only available to backend code."""
+        from secret_config import BACKEND_SECRET_KEYS, WORKER_SECRET_KEYS
+
+        self.assertIn("TINYFISH_API_KEY", BACKEND_SECRET_KEYS)
+        self.assertNotIn("TINYFISH_API_KEY", WORKER_SECRET_KEYS)
+
+        repository_root = Path(__file__).resolve().parents[2]
+        compose_services = {
+            "docker-compose.yml": ("frontend", "voice-ws"),
+            "docker-compose.dev.yml": ("frontend-dev", "voice-ws-dev"),
+        }
+        for compose_name, services in compose_services.items():
+            composition = yaml.safe_load((repository_root / compose_name).read_text())
+            for service in services:
+                environment = composition["services"][service]["environment"]
+                self.assertIn("TINYFISH_API_KEY=", environment)
 
     def test_frontend_only_anon_key_is_not_in_server_secret_refs(self) -> None:
         """The browser-only Supabase anon key is not injected into Cloud Run backend."""

@@ -108,6 +108,7 @@ services:
       - ${ENV_FILE:-.env.local}
     environment:
       - NODE_ENV=development
+      - TINYFISH_API_KEY=
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
       # Explicitly set Supabase environment variables
@@ -152,6 +153,7 @@ services:
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - DEBUG=${DEBUG:-true}
+      - TINYFISH_API_KEY=
       - PYTHONPATH=/app:/app/shared
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - SUPABASE_URL=${SUPABASE_URL}

@@ -467,6 +467,16 @@ at plan selection after a refresh. The timezone is included in both the update
 response and membership-based organization reads so it remains available to the
 onboarding form.
 
+When a public HTTP(S) website is entered, organization admins can choose
+**Generate business context** to prepare a draft from the site. This action is
+never automatic. If business context already exists, the form asks for
+confirmation before requesting a replacement draft. The draft is editable and
+is persisted only through the normal organization save or onboarding Continue
+action. The backend follows same-site sitemap and page links, fetches up to 50
+public pages per request through TinyFish Fetch, and asks Gemini to summarize
+facts with source URLs. The `TINYFISH_API_KEY` and `GEMINI_API_KEY` backend
+secrets enable the feature; generation is limited to three requests per hour.
+
 The plan stage groups published versions under **Monthly** and **Annually**.
 Free plans activate in the platform without Stripe; paid plans use Stripe
 Checkout and return to onboarding for webhook-backed activation confirmation.

@@ -147,6 +147,17 @@ in [Public Organization and Demo Agent Pages](../docs/02_features/voice_agents/p
 The implementation lives in `src/organization/public_routes.py` and
 `src/voice_agents/demo_public_routes.py`.
 
+### Website business-context drafts
+
+Organization admins can request an unsaved business-context draft from a
+public website with
+`POST /api/v1/organizations/{org_id}/business-context-from-website`. The
+backend follows same-site sitemap and page links (up to 50 pages), fetches
+content through TinyFish Fetch, and drafts factual context with Gemini. The
+normal organization update endpoint remains the only persistence path. Set
+`TINYFISH_API_KEY` and `GEMINI_API_KEY` in the backend environment to enable
+generation; without them the endpoint returns a safe unavailable response.
+
 ### Controlled-SaaS entry (gated signup + interest funnel)
 
 While `PUBLIC_SIGNUP_ENABLED=false` (default), new email and OAuth accounts

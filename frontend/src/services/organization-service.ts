@@ -9,6 +9,7 @@ import type {
   OrganizationUpdate,
   Invitation,
   InvitationRole,
+  WebsiteBusinessContextDraft,
 } from "@/types/organization";
 import type { Member } from "@/types/user";
 
@@ -57,6 +58,24 @@ class OrganizationService {
     const response = await apiClient.patch<Organization>(
       `${this.baseUrl}/${orgId}`,
       orgData,
+    );
+    return response.data;
+  }
+
+  /**
+   * Generate an unsaved business-context draft from a public website.
+   *
+   * @param orgId - Organization whose administrators initiated the request
+   * @param website - Public HTTP(S) website URL to analyze
+   * @returns Editable draft and the number of pages analyzed
+   */
+  async generateWebsiteBusinessContext(
+    orgId: string,
+    website: string,
+  ): Promise<WebsiteBusinessContextDraft> {
+    const response = await apiClient.post<WebsiteBusinessContextDraft>(
+      `${this.baseUrl}/${orgId}/business-context-from-website`,
+      { website },
     );
     return response.data;
   }

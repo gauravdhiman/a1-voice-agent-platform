@@ -99,6 +99,13 @@ class Settings(BaseSettings):
     supabase_anon_key: Optional[str] = Field(
         default=None, description="Supabase anonymous key"
     )
+    tinyfish_api_key: Optional[str] = Field(
+        default=None, description="TinyFish Fetch API key for website context drafts"
+    )
+    gemini_api_key: Optional[str] = Field(
+        default=None,
+        description="Gemini API key used to prepare website context drafts",
+    )
 
     # LinkedIn direct OAuth settings (backend broker; no Supabase custom provider)
     linkedin_client_id: Optional[str] = Field(

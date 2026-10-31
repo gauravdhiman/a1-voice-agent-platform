@@ -27,11 +27,22 @@ from src.organization.models import (
     OrganizationCreate,
     OrganizationUpdate,
     PlatformOrganizationCreate,
+    WebsiteBusinessContextRequest,
+    WebsiteBusinessContextResponse,
 )
 from src.organization.service import organization_service
+from src.organization.website_context_service import (
+    WebsiteContextGenerationError,
+    WebsiteContextNoPages,
+    WebsiteContextNotConfigured,
+    WebsiteContextRateLimited,
+    normalize_website_url,
+    website_business_context_service,
+)
 from src.rbac.roles.service import role_service
 from src.rbac.user_roles.models import UserRoleCreate
 from src.rbac.user_roles.service import user_role_service
+from src.security.rate_limiter import limiter
 
 from shared.common.errors import ErrorCode
 
@@ -449,6 +460,78 @@ async def update_organization(
 
     current_span.set_status(trace.Status(trace.StatusCode.OK))
     return organization
+
+
+@organization_router.post(
+    "/{org_id}/business-context-from-website",
+    response_model=WebsiteBusinessContextResponse,
+)
+@limiter.limit("3/hour")
+@tracer.start_as_current_span("organization.routes.generate_website_business_context")
+async def generate_website_business_context(
+    org_id: UUID,
+    request: Request,
+    body: WebsiteBusinessContextRequest,
+    user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
+):
+    """Generate an unsaved business-context draft from a public website.
+
+    Only organization administrators may initiate the provider calls. The
+    endpoint returns a draft and never modifies the organization record.
+    """
+    current_user_id, user_profile = user_data
+    current_span = trace.get_current_span()
+    current_span.set_attribute("user.id", str(current_user_id))
+    current_span.set_attribute("organization.id", str(org_id))
+
+    assert_has_role(
+        user_profile,
+        "org_admin",
+        org_id=org_id,
+        error_message=(
+            "Only platform administrators or organization administrators can "
+            "generate business context"
+        ),
+    )
+
+    try:
+        website = normalize_website_url(body.website)
+        result = await website_business_context_service.generate(website)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    except WebsiteContextNotConfigured as exc:
+        logger.warning("Website context generation is not configured")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Website context generation is not available right now.",
+        ) from exc
+    except WebsiteContextRateLimited as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Website analysis is temporarily busy. Please try again shortly.",
+        ) from exc
+    except WebsiteContextNoPages as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="We could not find readable public pages on that website.",
+        ) from exc
+    except WebsiteContextGenerationError as exc:
+        logger.warning("Website context generation failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="We could not prepare a draft from that website. Please try again.",
+        ) from exc
+
+    current_span.set_attribute(
+        "website_context.pages_analyzed", result["pages_analyzed"]
+    )
+    current_span.set_attribute(
+        "website_context.page_limit_reached", result["page_limit_reached"]
+    )
+    current_span.set_status(trace.Status(trace.StatusCode.OK))
+    return result
 
 
 @organization_router.post("/{org_id}/complete-onboarding", response_model=Organization)
