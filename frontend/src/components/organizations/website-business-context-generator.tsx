@@ -27,9 +27,21 @@ export interface WebsiteBusinessContextGeneratorProps {
  * @returns True when a public-looking website URL is ready to analyze
  */
 export function isValidWebsiteUrl(value: string): boolean {
+  const trimmedValue = value.trim();
+  if (!/^https?:\/\//i.test(trimmedValue) || /\s/.test(trimmedValue)) {
+    return false;
+  }
+
+  const authority = trimmedValue
+    .slice(trimmedValue.indexOf("//") + 2)
+    .split(/[/?#]/, 1)[0];
+  if (!authority || authority.startsWith("/") || authority.endsWith(":")) {
+    return false;
+  }
+
   try {
-    const url = new URL(value.trim());
-    const hostname = url.hostname.toLowerCase();
+    const url = new URL(trimmedValue);
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
     const portAllowed =
       !url.port ||
       (url.protocol === "https:" && url.port === "443") ||
@@ -47,7 +59,7 @@ export function isValidWebsiteUrl(value: string): boolean {
       (url.protocol === "http:" || url.protocol === "https:") &&
       !url.username &&
       !url.password &&
-      hostname.includes(".") &&
+      isValidPublicHostname(hostname) &&
       hostname !== "localhost" &&
       !invalidSuffixes.some((suffix) => hostname.endsWith(suffix)) &&
       !privateIpv4 &&
@@ -56,6 +68,30 @@ export function isValidWebsiteUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isValidPublicHostname(hostname: string): boolean {
+  if (hostname.length > 253 || !hostname.includes(".")) return false;
+
+  const labels = hostname.split(".");
+  const validLabel = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
+  if (labels.some((label) => label.length > 63 || !validLabel.test(label))) {
+    return false;
+  }
+
+  const numericLabels = labels.every((label) => /^\d+$/.test(label));
+  if (numericLabels) {
+    return (
+      labels.length === 4 &&
+      labels.every((label) => Number(label) >= 0 && Number(label) <= 255)
+    );
+  }
+
+  const topLevelDomain = labels[labels.length - 1] ?? "";
+  return (
+    /^[a-z]{2,63}$/i.test(topLevelDomain) ||
+    (topLevelDomain.startsWith("xn--") && topLevelDomain.length > 4)
+  );
 }
 
 function isPrivateIpv4(hostname: string): boolean {

@@ -13,8 +13,17 @@ describe("WebsiteBusinessContextGenerator", () => {
 
   it("accepts public sites and rejects private or reserved IP addresses", () => {
     expect(isValidWebsiteUrl("https://example.com/about")).toBe(true);
+    expect(isValidWebsiteUrl("http://cognients.com")).toBe(true);
     expect(isValidWebsiteUrl("http://100.64.1.2")).toBe(false);
     expect(isValidWebsiteUrl("http://192.0.2.4")).toBe(false);
+  });
+
+  it("requires a complete HTTP(S) URL with a valid public hostname", () => {
+    expect(isValidWebsiteUrl("https:cognients.com")).toBe(false);
+    expect(isValidWebsiteUrl("http:/cognients.com")).toBe(false);
+    expect(isValidWebsiteUrl("https:///cognients.com")).toBe(false);
+    expect(isValidWebsiteUrl("https://bad..cognients.com")).toBe(false);
+    expect(isValidWebsiteUrl("https://-bad.cognients.com")).toBe(false);
   });
 
   it("does not show an action for an invalid website and never runs automatically", () => {
@@ -27,6 +36,18 @@ describe("WebsiteBusinessContextGenerator", () => {
       <WebsiteBusinessContextGenerator
         organizationId="org-1"
         website="not a website"
+        businessContext=""
+        onBusinessContextChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("generate-business-context")).toBeNull();
+    expect(generate).not.toHaveBeenCalled();
+
+    rerender(
+      <WebsiteBusinessContextGenerator
+        organizationId="org-1"
+        website="https:cognients.com"
         businessContext=""
         onBusinessContextChange={vi.fn()}
       />,
