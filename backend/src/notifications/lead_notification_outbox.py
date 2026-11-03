@@ -40,13 +40,9 @@ class InterestLeadNotificationOutbox:
         supabase_config_override: Any = None,
     ) -> None:
         """Initialize delivery dependencies for runtime or isolated tests."""
-        self.notifier = (
-            notifier if notifier is not None else interest_lead_notifier
-        )
+        self.notifier = notifier if notifier is not None else interest_lead_notifier
         self.lead_service = (
-            lead_service_override
-            if lead_service_override is not None
-            else lead_service
+            lead_service_override if lead_service_override is not None else lead_service
         )
         self.platform_settings_service = (
             platform_settings_service
@@ -65,7 +61,11 @@ class InterestLeadNotificationOutbox:
         return self._supabase_config.service_client or self._supabase_config.client
 
     async def process_pending(
-        self, *, lead_id: Optional[UUID] = None, limit: int = MAX_DELIVERY_BATCH
+        self,
+        *,
+        lead_id: Optional[UUID] = None,
+        limit: int = MAX_DELIVERY_BATCH,
+        strict: bool = False,
     ) -> int:
         """Claim and deliver due lead alerts, optionally for one new lead."""
         claim = str(uuid4())
@@ -84,13 +84,18 @@ class InterestLeadNotificationOutbox:
             logger.error(
                 "Could not claim interest-lead alerts (%s)", type(exc).__name__
             )
+            if strict:
+                raise RuntimeError("Interest-lead alert claim failed") from None
             return 0
 
+        failed = False
         for row in rows:
-            await self._deliver_claimed(row, claim)
+            failed = not await self._deliver_claimed(row, claim) or failed
+        if strict and failed:
+            raise RuntimeError("Interest-lead alert delivery failed")
         return len(rows)
 
-    async def _deliver_claimed(self, row: dict[str, Any], claim: str) -> None:
+    async def _deliver_claimed(self, row: dict[str, Any], claim: str) -> bool:
         """Attempt pending channels and save a safe retry state."""
         states = {
             channel: row.get(f"{channel}_state", "pending")
@@ -114,7 +119,7 @@ class InterestLeadNotificationOutbox:
             await self._complete_claim(
                 row, claim, states, attempted, errors, retry_seconds=300
             )
-            return
+            return False
 
         if states["email"] == "pending":
             if not self.notifier._email_is_configured(platform_settings):
@@ -174,9 +179,10 @@ class InterestLeadNotificationOutbox:
         retry_seconds = min(
             300 * 2 ** min(max(attempts, default=0), 6), MAX_RETRY_SECONDS
         )
-        await self._complete_claim(
+        saved = await self._complete_claim(
             row, claim, states, attempted, errors, retry_seconds=retry_seconds
         )
+        return saved and not errors
 
     async def _complete_claim(
         self,
@@ -187,7 +193,7 @@ class InterestLeadNotificationOutbox:
         errors: list[str],
         *,
         retry_seconds: int,
-    ) -> None:
+    ) -> bool:
         """Persist delivery results without storing provider or lead details."""
         try:
             self.supabase.rpc(
@@ -205,11 +211,13 @@ class InterestLeadNotificationOutbox:
                     "p_retry_seconds": retry_seconds,
                 },
             ).execute()
+            return True
         except Exception as exc:
             logger.error(
                 "Could not save interest-lead alert state (%s)",
                 type(exc).__name__,
             )
+            return False
 
 
 interest_lead_notification_outbox = InterestLeadNotificationOutbox()

@@ -272,11 +272,12 @@ current key (plus explicitly controlled rotation fallbacks).
 
 ### OAuth tool connection recovery
 
-The backend refresh loop is an in-process maintenance task. The supported
-Cloud Run deployment keeps one minimum backend instance and deploys it with
-`--no-cpu-throttling`, so the loop can run between HTTP requests. Keep this
-setting on backend revisions; request-based CPU allocation can suspend idle
-background work. See [Cloud Run billing settings](https://docs.cloud.google.com/run/docs/configuring/billing-settings).
+The currently supported production deployment runs maintenance in-process and
+keeps one backend instance with `--no-cpu-throttling`. The separate
+[maintenance service](maintenance-service.md) requires a reviewed migration,
+coordinated cutover, scheduler, and monitoring before `MAINTENANCE_MODE=external`
+is enabled. Request-based CPU allocation can suspend idle background work. See
+[Cloud Run billing settings](https://docs.cloud.google.com/run/docs/configuring/billing-settings).
 
 If an alert says the provider result is unknown, reconnect the affected tool in
 the agent's **Tools** page. The platform intentionally stops reusing the old

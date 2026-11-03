@@ -6,7 +6,7 @@ import asyncio
 import calendar
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from shared.config import settings, supabase_config
@@ -175,13 +175,17 @@ class FreePlanRenewalScheduler:
         """Run renewal processing until shutdown."""
         while self.running:
             try:
-                await self.service.process_due_renewals()
+                await self.run_once()
             except Exception:
                 logger.exception("Free-plan renewal scheduler iteration failed")
             try:
                 await asyncio.sleep(self.check_interval_hours * 3600)
             except asyncio.CancelledError:
                 break
+
+    async def run_once(self) -> FreeRenewalRunResult:
+        """Run one renewal pass and return its per-row outcome counters."""
+        return await self.service.process_due_renewals()
 
 
 _free_plan_scheduler: Optional[FreePlanRenewalScheduler] = None
@@ -202,6 +206,5 @@ async def start_free_plan_renewal_scheduler() -> None:
 
 async def stop_free_plan_renewal_scheduler() -> None:
     """Stop the process-wide free-plan renewal scheduler."""
-    global _free_plan_scheduler
     if _free_plan_scheduler:
         await _free_plan_scheduler.stop()

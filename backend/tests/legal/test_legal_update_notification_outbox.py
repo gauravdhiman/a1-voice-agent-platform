@@ -204,10 +204,10 @@ class TestProcessPendingSuccess:
         assert sum(1 for row in client.outbox.rows if row["processed_at"]) == 1
 
     @pytest.mark.asyncio
-    async def test_select_failure_returns_zero_counters(self, client, outbox):
+    async def test_select_failure_is_reported(self, client, outbox):
         client.outbox.raise_on_select = RuntimeError("db down")
         summary = await outbox.process_pending()
-        assert summary == {"claimed": 0, "succeeded": 0, "failed": 0, "skipped": 0}
+        assert summary == {"claimed": 0, "succeeded": 0, "failed": 1, "skipped": 0}
 
 
 class TestProcessPendingFailures:

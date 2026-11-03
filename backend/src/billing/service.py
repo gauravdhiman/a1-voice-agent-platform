@@ -1445,6 +1445,7 @@ class BillingService:
             )
         except Exception as error:
             logger.error("Failed to read low-credit notification outbox: %s", error)
+            summary["failed"] += 1
             return summary
 
         for row in result.data or []:

@@ -122,6 +122,14 @@ def _make_request() -> Request:
 
 
 @pytest.fixture(autouse=True)
+def _use_in_process_maintenance(monkeypatch):
+    """These route-contract tests run without a database-backed worker."""
+    from src.phone_numbers.maintenance_guard import settings
+
+    monkeypatch.setattr(settings, "maintenance_mode", "in_process")
+
+
+@pytest.fixture(autouse=True)
 def _disable_limiter(monkeypatch):
     """Disable the slowapi limiter for these route tests.
 
@@ -567,6 +575,35 @@ class TestPlatformPhoneNumberSettingsRoutes:
             assert "retry" in result["message"]
 
     @pytest.mark.asyncio
+    async def test_cancel_does_not_touch_provider_while_organization_is_guarded(self):
+        from contextlib import asynccontextmanager
+
+        from src.phone_numbers.routes import cancel_phone_number
+
+        @asynccontextmanager
+        async def busy_guard(organization_id):
+            assert organization_id == TEST_ORG_ID
+            raise HTTPException(status_code=409, detail="Please retry shortly")
+            yield
+
+        with (
+            patch("src.phone_numbers.routes.phone_mutation_guard", busy_guard),
+            patch("src.phone_numbers.routes.phone_number_service") as mock_service,
+        ):
+            mock_service.cancel_number = AsyncMock()
+            with pytest.raises(HTTPException) as error:
+                await cancel_phone_number(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+        assert error.value.status_code == 409
+        mock_service.cancel_number.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_platform_admin_can_update_settings(self):
         from src.phone_numbers.platform_settings_models import (
             PlatformPhoneNumberSettingsUpdate,
@@ -684,7 +721,10 @@ class TestPurchaseAndImportErrorMapping:
     async def test_purchase_terminal_idempotency_reuse_maps_to_conflict(self):
         from src.phone_numbers.routes import purchase_phone_number
 
-        message = "This purchase attempt has ended. Start a new purchase with a fresh idempotency key."
+        message = (
+            "This purchase attempt has ended. Start a new purchase with a fresh "
+            "idempotency key."
+        )
         with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
             mock_service.purchase_number = AsyncMock(return_value=(None, message))
             with pytest.raises(HTTPException) as exc_info:

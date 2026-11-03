@@ -77,6 +77,7 @@ class LegalUpdateNotificationOutbox:
             )
         except Exception as error:
             logger.error("Failed to read legal update outbox: %s", error)
+            summary["failed"] += 1
             return summary
 
         for row in result.data or []:

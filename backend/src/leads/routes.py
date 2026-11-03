@@ -25,12 +25,11 @@ from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.leads.models import InterestLead, InterestLeadAck, InterestLeadCreate
 from src.leads.service import lead_service
-from src.notifications.lead_notification_outbox import (
-    interest_lead_notification_outbox,
-)
+from src.notifications.lead_notification_outbox import interest_lead_notification_outbox
 from src.security.rate_limiter import limiter
 from src.security.turnstile import is_turnstile_configured, verify_turnstile_token
 
+from shared.config import settings
 from shared.voice_agents.demo_feedback_service import demo_feedback_service
 
 logger = logging.getLogger(__name__)
@@ -125,15 +124,16 @@ async def submit_interest_lead(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
         )
     if lead is not None:
-        if background_tasks is not None:
+        if background_tasks is not None and settings.maintenance_mode == "in_process":
             background_tasks.add_task(
                 interest_lead_notification_outbox.process_pending,
                 lead_id=lead.id,
                 limit=1,
             )
         else:
-            # The database trigger has already persisted the outbox row with
-            # the lead; direct callers may attempt immediate delivery as well.
+            # Request-based runtimes may suspend work after the response. The
+            # durable outbox already exists, so attempt delivery while the
+            # request has CPU; the maintenance worker retries any failures.
             try:
                 await interest_lead_notification_outbox.process_pending(
                     lead_id=lead.id,

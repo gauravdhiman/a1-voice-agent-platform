@@ -1,5 +1,8 @@
 # Deployment documentation
 
+For the separate scheduled worker and its cutover safeguards, see
+[maintenance service](maintenance-service.md).
+
 Production infrastructure for **247ai.live**:
 
 | Component                    | Platform                                                | URL                                                                                                |

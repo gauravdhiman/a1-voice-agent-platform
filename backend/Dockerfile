@@ -1,5 +1,5 @@
 # Backend Production Dockerfile
-FROM python:3.11-slim
+FROM python:3.11-slim AS backend-base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -47,6 +47,10 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
+FROM backend-base AS maintenance
+CMD ["uvicorn", "maintenance_main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+
+FROM backend-base AS backend
 # Run application (without auto-instrumentation).
 # --proxy-headers + --forwarded-allow-ips='*' are required on Cloud Run:
 # TLS terminates at Google's proxy, which forwards X-Forwarded-Proto=https.

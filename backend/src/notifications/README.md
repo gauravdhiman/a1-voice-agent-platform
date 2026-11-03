@@ -87,6 +87,10 @@ not resend channels already acknowledged as delivered. Provider delivery is
 at-least-once if the provider accepts a message but the database acknowledgment
 is lost. Lead submission remains successful after persistence even when a
 provider is unavailable.
+With external maintenance, the API attempts the first delivery before returning
+the acknowledgement because request-based hosting can suspend post-response
+tasks; pending deliveries remain eligible for the maintenance worker. This can
+increase form-response latency.
 
 ## Signup Verification Flow
 

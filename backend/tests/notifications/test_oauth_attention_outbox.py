@@ -358,3 +358,16 @@ async def test_outbox_enqueue_is_idempotent_and_processes_immediately(monkeypatc
         client.rpc_calls[0][1]["p_event_key"]
         == client.table_query.upsert_payload["event_key"]
     )
+
+
+@pytest.mark.asyncio
+async def test_strict_pass_reports_delivery_failure_after_attempting_all_rows():
+    outbox = OAuthAttentionOutbox()
+    outbox._supabase_config = SimpleNamespace(
+        service_client=_FakeSupabase([_row(), _row()]), client=None
+    )
+    outbox._deliver_claimed = AsyncMock(side_effect=[False, True])
+
+    with pytest.raises(RuntimeError, match="delivery failed"):
+        await outbox.process_pending(strict=True)
+    assert outbox._deliver_claimed.await_count == 2

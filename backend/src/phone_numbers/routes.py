@@ -37,6 +37,7 @@ from shared.organization.phone_number_models import (
     PhoneNumberWithAgent,
 )
 
+from .maintenance_guard import phone_mutation_guard
 from .platform_settings_models import (
     PlatformPhoneNumberSettings,
     PlatformPhoneNumberSettingsUpdate,
@@ -197,11 +198,12 @@ async def purchase_phone_number(
             organization_id,
             error_message="Insufficient permissions to purchase phone numbers",
         )
-        result, error = await phone_number_service.purchase_number(
-            organization_id=organization_id,
-            purchase_request=purchase_request,
-            idempotency_key=request.headers.get("Idempotency-Key"),
-        )
+        async with phone_mutation_guard(organization_id):
+            result, error = await phone_number_service.purchase_number(
+                organization_id=organization_id,
+                purchase_request=purchase_request,
+                idempotency_key=request.headers.get("Idempotency-Key"),
+            )
 
         if error:
             if error == PHONE_NUMBER_PURCHASE_UNAVAILABLE:
@@ -261,10 +263,11 @@ async def import_phone_number(
             organization_id,
             error_message="Insufficient permissions to connect phone numbers",
         )
-        result, error = await phone_number_service.import_number(
-            organization_id=organization_id,
-            import_request=import_request,
-        )
+        async with phone_mutation_guard(organization_id):
+            result, error = await phone_number_service.import_number(
+                organization_id=organization_id,
+                import_request=import_request,
+            )
         if error:
             if _is_plan_limit_error(error):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error)
@@ -427,11 +430,12 @@ async def assign_phone_number_to_agent(
             error_message="Insufficient permissions to assign phone numbers",
         )
 
-        result, error = await phone_number_service.assign_to_agent(
-            phone_number_id=phone_number_id,
-            assign_request=assign_request,
-            organization_id=organization_id,
-        )
+        async with phone_mutation_guard(organization_id):
+            result, error = await phone_number_service.assign_to_agent(
+                phone_number_id=phone_number_id,
+                assign_request=assign_request,
+                organization_id=organization_id,
+            )
 
         if error:
             if "not found" in error.lower():
@@ -478,10 +482,11 @@ async def unassign_phone_number(
             error_message="Insufficient permissions to unassign phone numbers",
         )
 
-        result, error = await phone_number_service.unassign_from_agent(
-            phone_number_id=phone_number_id,
-            organization_id=organization_id,
-        )
+        async with phone_mutation_guard(organization_id):
+            result, error = await phone_number_service.unassign_from_agent(
+                phone_number_id=phone_number_id,
+                organization_id=organization_id,
+            )
         if error:
             if "not found" in error.lower():
                 raise HTTPException(
@@ -524,10 +529,11 @@ async def cancel_phone_number(
             error_message="Insufficient permissions to cancel phone numbers",
         )
 
-        success, error = await phone_number_service.cancel_number(
-            phone_number_id=phone_number_id,
-            organization_id=organization_id,
-        )
+        async with phone_mutation_guard(organization_id):
+            success, error = await phone_number_service.cancel_number(
+                phone_number_id=phone_number_id,
+                organization_id=organization_id,
+            )
 
         if error and error != "release_pending":
             if "not found" in error.lower():

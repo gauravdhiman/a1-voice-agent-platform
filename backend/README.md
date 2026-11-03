@@ -19,6 +19,15 @@ admins by email plus configured platform-admin channels. See
 [`docs/03_implementation/token_refresh_lock.md`](../docs/03_implementation/token_refresh_lock.md)
 for failure classification, alert routing, and recovery steps.
 
+The separate `src/maintenance` service runs the notification recovery, OAuth
+refresh, free-plan renewal, plan migration, and phone-rental jobs when triggered
+by an external scheduler. Production defaults to external maintenance;
+development and staging default to in-process loops. Database claims prevent
+overlap, and ambiguous failures require reconciliation. Some recovery services
+still suppress internal errors, so monitor their backlogs as well as job state.
+See the [maintenance service runbook](../docs/05_operations/deployment/maintenance-service.md)
+for deployment, authentication, monitoring, and cutover requirements.
+
 ## 🚀 Getting Started
 
 ### Prerequisites

@@ -104,6 +104,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 1. **[Deployment index](05_operations/deployment/README.md)** — doc map, infrastructure overview, `./scripts/deploy.sh`
 2. **[Quick reference](05_operations/deployment/quick-reference.md)** — day-to-day deploy commands
 3. **[Runbook](05_operations/deployment/runbook.md)** — architecture, first-time setup, DNS, webhooks
+
 4. **[Environment variables](05_operations/deployment/environment-variables.md)** — `.env.prod` reference
 5. **[Local Docker](05_operations/deployment/local-docker.md)** — docker-compose for development
 6. **[CI / GitHub Actions](05_operations/deployment/ci-github-actions.md)** — local staging validation, manual production promotion, and workflow secrets
@@ -113,6 +114,7 @@ All deployment docs: **[05_operations/deployment/](05_operations/deployment/READ
 
 10. **[October 19 readiness audit](05_operations/production-readiness-2026-10-19.md)** — dated findings and read-only evidence
 11. **[Readiness remediation and launch gates](05_operations/production-readiness-remediation-2026-10-19.md)** — prepared fixes, verification and founder actions
+12. **[Maintenance service](05_operations/deployment/maintenance-service.md)** — scheduled worker, coordination, monitoring, and cutover safeguards
 
 #### Other operations
 

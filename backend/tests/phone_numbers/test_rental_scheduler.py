@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from src.phone_numbers import rental_scheduler
 
 
@@ -56,6 +55,19 @@ async def test_runtime_interval_reads_platform_admin_settings():
         new=AsyncMock(return_value=configured),
     ):
         assert await scheduler._get_runtime_interval_hours() == 4
+
+
+@pytest.mark.asyncio
+async def test_one_pass_returns_phone_lifecycle_result():
+    """A scheduler-independent invocation preserves the service outcome."""
+    result = object()
+    scheduler = rental_scheduler.PhoneNumberRentalScheduler()
+    with patch.object(
+        rental_scheduler.phone_number_service,
+        "process_due_rentals",
+        new=AsyncMock(return_value=result),
+    ):
+        assert await scheduler.run_once() is result
 
 
 @pytest.mark.asyncio

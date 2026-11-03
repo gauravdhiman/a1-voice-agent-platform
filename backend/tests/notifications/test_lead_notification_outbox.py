@@ -133,3 +133,14 @@ async def test_missing_email_configuration_stays_retryable():
     assert payload["p_whatsapp_state"] == "skipped"
     assert payload["p_error_code"] == "email_configuration_missing"
     notifier._send_email.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_strict_pass_reports_delivery_failure_after_attempting_all_rows():
+    outbox, supabase, _, row = _outbox()
+    supabase.rpc.return_value.execute.return_value = SimpleNamespace(data=[row, row])
+    outbox._deliver_claimed = AsyncMock(side_effect=[False, True])
+
+    with pytest.raises(RuntimeError, match="delivery failed"):
+        await outbox.process_pending(strict=True)
+    assert outbox._deliver_claimed.await_count == 2
