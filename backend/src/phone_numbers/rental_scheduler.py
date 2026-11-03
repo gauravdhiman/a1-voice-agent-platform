@@ -9,7 +9,7 @@ from typing import Optional
 from shared.config import settings
 
 from .platform_settings_service import platform_phone_number_settings_service
-from .service import phone_number_service
+from .service import PhoneNumberRentalRunResult, phone_number_service
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class PhoneNumberRentalScheduler:
         """Run due-rental processing until shutdown."""
         while self.running:
             try:
-                await phone_number_service.process_due_rentals()
+                await self.run_once()
             except Exception:
                 logger.exception("Phone-rental scheduler iteration failed")
             try:
@@ -55,6 +55,12 @@ class PhoneNumberRentalScheduler:
                 await asyncio.sleep(interval_hours * 3600)
             except asyncio.CancelledError:
                 break
+
+    async def run_once(self, *, guarded: bool = False) -> PhoneNumberRentalRunResult:
+        """Run one phone-number lifecycle pass and return its outcome counters."""
+        if guarded:
+            return await phone_number_service.process_due_rentals(guarded=True)
+        return await phone_number_service.process_due_rentals()
 
     async def _get_runtime_interval_hours(self) -> float:
         """Read the admin-configured cadence, with the startup value as fallback."""
@@ -91,6 +97,5 @@ async def start_phone_number_rental_scheduler() -> None:
 
 async def stop_phone_number_rental_scheduler() -> None:
     """Stop the process-wide phone-rental scheduler."""
-    global _phone_number_rental_scheduler
     if _phone_number_rental_scheduler:
         await _phone_number_rental_scheduler.stop()

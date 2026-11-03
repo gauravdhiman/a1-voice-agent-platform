@@ -567,6 +567,35 @@ class TestPlatformPhoneNumberSettingsRoutes:
             assert "retry" in result["message"]
 
     @pytest.mark.asyncio
+    async def test_cancel_does_not_touch_provider_while_organization_is_guarded(self):
+        from contextlib import asynccontextmanager
+
+        from src.phone_numbers.routes import cancel_phone_number
+
+        @asynccontextmanager
+        async def busy_guard(organization_id):
+            assert organization_id == TEST_ORG_ID
+            raise HTTPException(status_code=409, detail="Please retry shortly")
+            yield
+
+        with (
+            patch("src.phone_numbers.routes.phone_mutation_guard", busy_guard),
+            patch("src.phone_numbers.routes.phone_number_service") as mock_service,
+        ):
+            mock_service.cancel_number = AsyncMock()
+            with pytest.raises(HTTPException) as error:
+                await cancel_phone_number(
+                    phone_number_id=TEST_PHONE_ID,
+                    organization_id=TEST_ORG_ID,
+                    user_auth=(
+                        TEST_USER_ID,
+                        _make_profile(is_org_admin_on=str(TEST_ORG_ID)),
+                    ),
+                )
+        assert error.value.status_code == 409
+        mock_service.cancel_number.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_platform_admin_can_update_settings(self):
         from src.phone_numbers.platform_settings_models import (
             PlatformPhoneNumberSettingsUpdate,

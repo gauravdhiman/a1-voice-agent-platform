@@ -54,6 +54,11 @@ ENCRYPTION_ENVIRONMENT_KEYS = {
 class GcpEnvironmentGenerationTests(unittest.TestCase):
     """Ensure deployed services receive the complete recording configuration."""
 
+    def test_api_maintenance_mode_is_deployed_without_worker_secret(self) -> None:
+        self.assertIn("MAINTENANCE_MODE", gcp_env.BACKEND_KEYS)
+        self.assertNotIn("MAINTENANCE_AUTH_TOKEN", gcp_env.BACKEND_KEYS)
+        self.assertNotIn("MAINTENANCE_HEARTBEAT_URL", gcp_env.BACKEND_KEYS)
+
     def test_backend_and_worker_allow_recording_configuration(self) -> None:
         """Both recording-producing and playback services need R2 settings."""
         self.assertTrue(

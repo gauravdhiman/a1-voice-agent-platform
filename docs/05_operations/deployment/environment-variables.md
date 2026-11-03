@@ -98,6 +98,9 @@ flow, rotation, and the staged organization-credential migration.
 | `PHONE_NUMBER_BILLING_CHECK_INTERVAL_HOURS`          | Deployment fallback cadence for rental billing checks; default `24`                                          | No                                    |
 | `PHONE_NUMBER_BILLING_GRACE_PERIOD_DAYS`             | Deployment fallback grace period before unpaid release; default `7`                                          | No                                    |
 | `PHONE_NUMBER_RELEASE_RETRY_INTERVAL_HOURS`          | Deployment fallback cadence for release-pending retries; default `24`                                        | No                                    |
+| `MAINTENANCE_MODE`                                   | API maintenance mode: `in_process` (default) or `external`; external needs a coordinated worker cutover | No |
+| `MAINTENANCE_AUTH_TOKEN`                             | Random 32+ character ASCII secret for the separate maintenance service and its trusted scheduler | **Yes** |
+| `MAINTENANCE_HEARTBEAT_URL`                          | Private HTTPS dead-man monitoring URL, injected only into the maintenance service | **Yes** |
 | `VOICE_WS_PUBLIC_URL`                                | Browser WebSocket base — prod: `wss://voice.247ai.live`                                                      | No                                    |
 | `VOICE_WS_TWILIO_URL`                                | Twilio Media Streams base — prod: `wss://voice.247ai.live`                                                   | No                                    |
 | `VOICE_TRANSPORT`                                    | `pipecat` in production                                                                                      | No                                    |

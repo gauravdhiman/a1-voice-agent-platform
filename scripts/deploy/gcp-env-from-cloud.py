@@ -242,6 +242,7 @@ BACKEND_KEYS = (
         "APP_BASE_URL",
         "API_BASE_URL",
         "ENVIRONMENT",
+        "MAINTENANCE_MODE",
         "DEBUG",
         # Fernet credentials protect organization provider keys and OAuth tokens.
         # They must reach every server-side runtime; omitting them makes existing

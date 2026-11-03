@@ -5,6 +5,7 @@ This module provides the business logic for managing phone numbers,
 including purchasing, assigning, and canceling phone numbers.
 """
 
+import asyncio
 import calendar
 import logging
 import secrets
@@ -49,6 +50,7 @@ from shared.organization.phone_number_models import (
     PhoneNumberWithAgent,
 )
 
+from .maintenance_guard import phone_mutation_guard
 from .platform_settings_service import platform_phone_number_settings_service
 from .twilio_service import twilio_service
 from .utils import (
@@ -96,6 +98,7 @@ class PhoneNumberRentalRunResult:
     past_due: int = 0
     released: int = 0
     errors: int = 0
+    deferred: int = 0
 
 
 class PhoneNumberService:
@@ -1273,8 +1276,9 @@ class PhoneNumberService:
             else:
                 if phone_number.provider_sid and self.twilio_service.is_configured():
                     try:
-                        self.twilio_service.release_phone_number(
-                            phone_number.provider_sid
+                        await asyncio.to_thread(
+                            self.twilio_service.release_phone_number,
+                            phone_number.provider_sid,
                         )
                     except Exception as exc:
                         self._set_release_pending(
@@ -1402,7 +1406,7 @@ class PhoneNumberService:
         return True
 
     async def process_due_rentals(
-        self, now: Optional[datetime] = None
+        self, now: Optional[datetime] = None, *, guarded: bool = False
     ) -> PhoneNumberRentalRunResult:
         """Charge active phone rentals and release numbers after grace expiry.
 
@@ -1411,22 +1415,100 @@ class PhoneNumberService:
         the active billing state; an expired grace period releases the provider
         number and marks the local row cancelled.
         """
-        # TODO: [Billing] Add a Postgres-backed rental claim/lease before the
-        # backend is deployed with multiple scheduler instances. The current
-        # single-process scheduler is safe for the present deployment shape.
         now = now or datetime.now(timezone.utc)
-        result = (
-            self.supabase.table("phone_numbers")
-            .select("*")
-            .in_(
-                "status",
-                list(ACTIVE_PHONE_NUMBER_STATUSES),
+        if guarded:
+            rental_rows = await self._load_guarded_rental_rows()
+        else:
+            result = await asyncio.to_thread(
+                lambda: self.supabase.table("phone_numbers")
+                .select("*")
+                .in_("status", list(ACTIVE_PHONE_NUMBER_STATUSES))
+                .execute()
             )
-            .execute()
-        )
-        summary = PhoneNumberRentalRunResult()
+            rental_rows = result.data or []
         lifecycle_settings = await platform_phone_number_settings_service.get_settings()
-        rental_rows = result.data or []
+        if not guarded:
+            return await self._process_rental_rows(rental_rows, now, lifecycle_settings)
+
+        # Re-read each organization after acquiring its claim: the initial scan
+        # is only an inventory, not an authoritative mutation snapshot.
+        summary = PhoneNumberRentalRunResult()
+        organization_ids = sorted(
+            {str(row.get("organization_id")) for row in rental_rows}
+        )
+        for organization_id in organization_ids:
+            try:
+                async with phone_mutation_guard(UUID(organization_id), force=True):
+                    current = await self._load_guarded_rental_rows(organization_id)
+                    result = await self._process_rental_rows(
+                        current, now, lifecycle_settings
+                    )
+                    for field in (
+                        "processed",
+                        "charged",
+                        "past_due",
+                        "released",
+                        "errors",
+                    ):
+                        setattr(
+                            summary,
+                            field,
+                            getattr(summary, field) + getattr(result, field),
+                        )
+                    if result.errors:
+                        # A provider mutation may have completed even when its
+                        # outcome could not be recorded. Retain this org claim.
+                        raise RuntimeError(
+                            "Phone rental provider outcome requires review"
+                        )
+            except HTTPException as exc:
+                if exc.status_code == 409:
+                    summary.deferred += 1
+                else:
+                    summary.errors += 1
+            except Exception:
+                summary.errors += 1
+                logger.exception("Phone rental organization pass failed")
+        return summary
+
+    async def _load_guarded_rental_rows(
+        self, organization_id: Optional[str] = None
+    ) -> list[dict]:
+        """Read all active rental rows using stable keyset pagination."""
+        rows = []
+        last_id = None
+        page_size = 200
+        while True:
+
+            def load_page():
+                query = (
+                    self.supabase.table("phone_numbers")
+                    .select("*")
+                    .in_("status", list(ACTIVE_PHONE_NUMBER_STATUSES))
+                )
+                if organization_id:
+                    query = query.eq("organization_id", organization_id)
+                if last_id:
+                    query = query.gt("id", last_id)
+                return query.order("id").limit(page_size).execute()
+
+            response = await asyncio.to_thread(load_page)
+            page = response.data
+            if not isinstance(page, list):
+                raise RuntimeError("Invalid phone rental page")
+            rows.extend(page)
+            if len(page) < page_size:
+                return rows
+            next_id = str(page[-1].get("id") or "")
+            if not next_id or next_id == last_id:
+                raise RuntimeError("Phone rental pagination did not advance")
+            last_id = next_id
+
+    async def _process_rental_rows(
+        self, rental_rows: list[dict], now: datetime, lifecycle_settings
+    ) -> PhoneNumberRentalRunResult:
+        """Process a freshly read set of rental rows under the caller's guard."""
+        summary = PhoneNumberRentalRunResult()
         included_organizations = {
             str(row.get("organization_id"))
             for row in rental_rows
@@ -1627,7 +1709,9 @@ class PhoneNumberService:
                 )
             return True, None
         try:
-            self.twilio_service.release_phone_number(phone_number.provider_sid)
+            await asyncio.to_thread(
+                self.twilio_service.release_phone_number, phone_number.provider_sid
+            )
             self._mark_cancelled(str(phone_number.id))
             if phone_number.is_included_in_plan:
                 await self._promote_included_us_local_number(

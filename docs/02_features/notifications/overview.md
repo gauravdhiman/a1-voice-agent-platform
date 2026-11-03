@@ -8,6 +8,8 @@ The notification system delivers transactional emails to users for critical even
 
 - **Email verification**: Email/password signup sends a Resend verification link; sign-in is blocked until verified.
 - **Lead alerts**: Public demo and interest-form submissions are saved in `interest_leads` and then delivered to the configured platform-admin email and/or Telegram chat.
+  With external maintenance the API attempts delivery before responding, and the
+  scheduled worker retries pending alerts. Provider latency can delay the response.
 - **Telegram alerts**: Platform admins can receive Telegram messages on new signups, invitation joins, and lead submissions.
 - **Settings UI**: Platform admins configure the lead recipient, verification sender, and Telegram credentials at `/platform/settings?section=notifications`.
 

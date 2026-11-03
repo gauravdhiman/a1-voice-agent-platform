@@ -102,6 +102,8 @@ class TestTokenRefreshService:
         await token_refresh_service.start()
         assert token_refresh_service.running is True
 
+        await token_refresh_service.stop()
+
     async def test_stop_service_running(self, token_refresh_service):
         """Test stopping service when running."""
         await token_refresh_service.start()

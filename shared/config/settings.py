@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Annotated, Any, Literal, Optional
 
-from pydantic import AliasChoices, Field, validator
+from pydantic import AliasChoices, Field, SecretStr, validator
 from pydantic_settings import BaseSettings, NoDecode
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -60,6 +60,16 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, description="Debug mode")
     environment: str = Field(
         default="production", description="Environment (development/production/test)"
+    )
+    maintenance_mode: Literal["in_process", "external"] = Field(
+        default="in_process",
+        description="Run maintenance loops in the API or in an external worker",
+    )
+    maintenance_auth_token: Optional[SecretStr] = Field(
+        default=None, description="Secret for the separate maintenance service"
+    )
+    maintenance_heartbeat_url: Optional[SecretStr] = Field(
+        default=None, description="Private HTTPS dead-man monitoring URL"
     )
 
     # Server Settings

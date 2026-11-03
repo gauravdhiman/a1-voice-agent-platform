@@ -792,6 +792,34 @@ never hit by accident:
 
 ---
 
+### maintenance_runs
+
+Durable ownership records for externally triggered maintenance jobs. Each job
+has at most one record. `running` claims survive process interruption; `failed`
+claims remain until an operator reconciles the outcome. Claims have no automatic
+expiry because an external provider mutation may still be in flight.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| job | TEXT | PRIMARY KEY | Maintenance job name |
+| claim | TEXT | NOT NULL | Unique owner token |
+| state | TEXT | NOT NULL, `idle`, `running` or `failed` | Run state |
+| started_at | TIMESTAMPTZ | NOT NULL, default `now()` | Claim time |
+| finished_at | TIMESTAMPTZ | Nullable | Completion, release, or reconciliation time |
+| last_succeeded_at | TIMESTAMPTZ | Nullable | Most recent successful completion |
+| last_failed_at | TIMESTAMPTZ | Nullable | Most recent failed completion |
+| last_reconciled_at | TIMESTAMPTZ | Nullable | Most recent operator reconciliation |
+
+`ix_maintenance_runs_active` indexes state and start time for non-idle claims.
+RLS is enabled; table access and the atomic claim, complete, retry, guard-release,
+and reconcile functions are restricted to the service role. Completion requires
+the matching owner token. Success marks the record idle; failure retains it for
+reconciliation. The retry function releases ownership only for known-safe retries.
+Per-organization phone guards use the `phone-org:<uuid>` job key and share the
+same fenced functions. Guard release preserves scheduled-run timestamps.
+Reconciliation requires the exact claim and must occur only after the prior
+worker and provider outcome are known.
+
 ### token_refresh_leases
 
 Per-agent_tool refresh lease used by `TokenRefreshService` to guarantee only one
@@ -2802,6 +2830,12 @@ provider/database failures remain retryable. Objects are deleted before audited
 metadata tombstones. `ix_call_artifacts_pending_retention` indexes expiry for
 completed recording rows. Null legacy retention dates retain their old behavior;
 malformed/non-timezone-aware dates deny playback.
+
+### Maintenance migration
+
+111. `20261102000001` - Add service-role-only maintenance run ownership and fenced claim/completion functions.
+
+- `20261102000001`: add durable maintenance ownership records with atomic service-role-only claim and completion functions.
 
 ## Schema Change Policy
 

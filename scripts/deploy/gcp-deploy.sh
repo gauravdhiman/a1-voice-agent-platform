@@ -84,6 +84,24 @@ validate_backend_environment() {
     --secret-mode "$SECRET_MANAGER_MODE" >/dev/null
 }
 
+validate_external_maintenance_cutover() {
+  local mode scheduler_state
+  mode="$(read_env MAINTENANCE_MODE || true)"
+  [[ "${mode:-in_process}" == "external" ]] || return 0
+  if ! gcloud run services describe "${GCP_MAINTENANCE_SERVICE:-maintenance-247ai}" \
+    --project="$PROJECT_ID" --region="$REGION" --format='value(metadata.name)' >/dev/null; then
+    echo "Deploy the maintenance worker before the external-mode backend" >&2
+    return 1
+  fi
+  scheduler_state="$(gcloud scheduler jobs describe "${GCP_MAINTENANCE_SCHEDULER_JOB:-maintenance-tick}" \
+    --project="$PROJECT_ID" --location="${GCP_SCHEDULER_REGION:-$REGION}" \
+    --format='value(state)')" || return 1
+  if [[ "$scheduler_state" != "PAUSED" ]]; then
+    echo "Pause the maintenance scheduler before deploying the external-mode backend" >&2
+    return 1
+  fi
+}
+
 read_env() {
   python3 - "$1" "$ENV_FILE" <<'PY'
 import sys
@@ -136,6 +154,7 @@ fi
 # wrapper so direct component deployments cannot publish code ahead of the DB.
 if [[ "$COMPONENT" == "all" || "$COMPONENT" == "backend" ]]; then
   validate_backend_environment
+  validate_external_maintenance_cutover
   run_deployment_migrations
   run_release_fixture_sync
 fi
@@ -172,6 +191,14 @@ if ! gcloud artifacts repositories describe "$REPO" --location="$REGION" >/dev/n
 fi
 
 deploy_backend() {
+  local maintenance_mode
+  local -a backend_scaling_args
+  maintenance_mode="$(read_env MAINTENANCE_MODE || true)"
+  case "${maintenance_mode:-in_process}" in
+    in_process) backend_scaling_args=(--min-instances=1 --no-cpu-throttling) ;;
+    external) backend_scaling_args=(--min-instances=0 --cpu-throttling) ;;
+    *) echo "MAINTENANCE_MODE must be in_process or external" >&2; return 1 ;;
+  esac
   echo "==> Building backend image (local Docker, linux/amd64 for Cloud Run)..."
   docker build --platform linux/amd64 -t "$BACKEND_IMAGE" -f backend/Dockerfile .
   docker push "$BACKEND_IMAGE"
@@ -201,9 +228,8 @@ deploy_backend() {
     --port=8000 \
     --memory=1Gi \
     --cpu=1 \
-    --min-instances=1 \
     --max-instances=10 \
-    --no-cpu-throttling \
+    "${backend_scaling_args[@]}" \
     --env-vars-file="$BACKEND_ENV_FILE" \
     "${secret_deploy_args[@]}"; then
     cleanup_backend_env

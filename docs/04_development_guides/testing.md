@@ -255,6 +255,13 @@ branch cannot be tested, record the reason and follow-up.
 
 ## Commands
 
+Maintenance worker changes require `pytest backend/tests/maintenance -q` and
+the affected billing, notification, phone-number, and service suites. The
+Postgres ownership and concurrency tests in
+`backend/tests/integration/test_maintenance_coordination_sql.py` require
+`MAINTENANCE_TEST_DATABASE_URL` pointing to a disposable loopback database with
+the maintenance migration applied. They refuse non-local database hosts.
+
 From the repository root:
 
 ```bash

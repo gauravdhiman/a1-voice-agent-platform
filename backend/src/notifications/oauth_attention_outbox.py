@@ -90,7 +90,11 @@ class OAuthAttentionOutbox:
         await self.process_pending(event_key=event_key, limit=1)
 
     async def process_pending(
-        self, *, event_key: Optional[str] = None, limit: int = MAX_DELIVERY_BATCH
+        self,
+        *,
+        event_key: Optional[str] = None,
+        limit: int = MAX_DELIVERY_BATCH,
+        strict: bool = False,
     ) -> int:
         """Claim and attempt due channel deliveries; failures remain retryable."""
         claim = str(uuid4())
@@ -109,13 +113,18 @@ class OAuthAttentionOutbox:
             logger.error(
                 "Could not claim OAuth alert deliveries (%s)", type(exc).__name__
             )
+            if strict:
+                raise RuntimeError("OAuth alert claim failed") from None
             return 0
 
+        failed = False
         for row in rows:
-            await self._deliver_claimed(row, claim)
+            failed = not await self._deliver_claimed(row, claim) or failed
+        if strict and failed:
+            raise RuntimeError("OAuth alert delivery failed")
         return len(rows)
 
-    async def _deliver_claimed(self, row: dict[str, Any], claim: str) -> None:
+    async def _deliver_claimed(self, row: dict[str, Any], claim: str) -> bool:
         payload = row.get("payload") or {}
         states = {
             "telegram": row.get("telegram_state", "pending"),
@@ -274,7 +283,7 @@ class OAuthAttentionOutbox:
             int(row.get("organization_telegram_attempts") or 0),
             int(row.get("organization_sms_attempts") or 0),
         )
-        await self._complete(
+        saved = await self._complete(
             row,
             claim,
             states,
@@ -282,6 +291,7 @@ class OAuthAttentionOutbox:
             "provider_delivery_failed" if failed else None,
             self._retry_delay(row, attempts + 1) if failed else 300,
         )
+        return saved and not failed
 
     async def _complete(
         self,
@@ -291,7 +301,7 @@ class OAuthAttentionOutbox:
         attempted: dict[str, bool],
         error_code: Optional[str],
         retry_seconds: int,
-    ) -> None:
+    ) -> bool:
         try:
             result = self.supabase.rpc(
                 "complete_oauth_attention_outbox",
@@ -317,10 +327,13 @@ class OAuthAttentionOutbox:
                 logger.warning(
                     "OAuth alert delivery lease was lost before acknowledgment"
                 )
+                return False
+            return True
         except Exception as exc:
             logger.error(
                 "Could not acknowledge OAuth alert delivery (%s)", type(exc).__name__
             )
+            return False
 
     @staticmethod
     def _message(payload: dict[str, Any]) -> str:

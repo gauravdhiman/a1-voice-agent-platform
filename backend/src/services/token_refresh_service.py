@@ -219,7 +219,7 @@ class TokenRefreshService:
 
         while self.running:
             try:
-                await self._refresh_expired_tokens()
+                await self.run_once()
                 # Check at configured interval
                 await asyncio.sleep(check_interval * 60)
             except asyncio.CancelledError:
@@ -230,7 +230,18 @@ class TokenRefreshService:
                 # Wait 1 minute before retrying on error
                 await asyncio.sleep(60)
 
-    async def _refresh_expired_tokens(self) -> None:
+    async def run_once(self, *, strict: bool = False) -> None:
+        """Run one OAuth refresh and attention-notification pass.
+
+        Per-connection failures are handled by the refresh flow and are not
+        represented by this method's return value.
+        """
+        if strict:
+            await self._refresh_expired_tokens(strict=True)
+        else:
+            await self._refresh_expired_tokens()
+
+    async def _refresh_expired_tokens(self, *, strict: bool = False) -> None:
         """Find and refresh tokens that are about to expire.
 
         Queries all enabled agent_tools that require OAuth and refreshes tokens
@@ -240,7 +251,10 @@ class TokenRefreshService:
         attention window and hands manual/failed-renewal notices to the durable
         notification service.
         """
-        agent_tools = await self._get_tools_requiring_auth()
+        if strict:
+            agent_tools = await self._get_tools_requiring_auth(strict=True)
+        else:
+            agent_tools = await self._get_tools_requiring_auth()
 
         if not agent_tools:
             logger.debug("No agent tools requiring authentication found")
@@ -293,7 +307,7 @@ class TokenRefreshService:
                     at, self._refresh_outcomes[at.id]
                 )
 
-        await asyncio.gather(
+        attention_results = await asyncio.gather(
             *(
                 _limited_attention(at, result)
                 for at, result in zip(agent_tools, results)
@@ -301,7 +315,12 @@ class TokenRefreshService:
             return_exceptions=True,
         )
 
-    async def _get_tools_requiring_auth(self) -> List[AgentTool]:
+        if strict and any(
+            isinstance(result, Exception) for result in [*results, *attention_results]
+        ):
+            raise RuntimeError("OAuth refresh or attention pass failed")
+
+    async def _get_tools_requiring_auth(self, *, strict: bool = False) -> List[AgentTool]:
         """Get all agent tools that require OAuth authentication.
 
         Returns:
@@ -310,6 +329,8 @@ class TokenRefreshService:
         tools, error = await self.tool_service.get_all_agent_tools_with_auth()
         if error:
             logger.error("Error getting tools requiring auth")
+            if strict:
+                raise RuntimeError("Could not load OAuth connections")
             return []
         return tools
 
@@ -1507,6 +1528,5 @@ async def start_token_refresh_service(tool_service: ToolService) -> None:
 
 async def stop_token_refresh_service() -> None:
     """Stop the global token refresh service."""
-    global token_refresh_service
     if token_refresh_service:
         await token_refresh_service.stop()

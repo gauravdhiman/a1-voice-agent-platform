@@ -14,6 +14,7 @@ from typing import Optional
 
 from shared.config import settings
 
+from .entitlement_models import PlanMigrationRunResult
 from .plan_migration_service import plan_migration_service
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,9 @@ DEFAULT_CHECK_INTERVAL_HOURS = 24
 class PlanMigrationSchedulerService:
     """Daily loop that processes expired grace-period plan migrations."""
 
-    def __init__(self, check_interval_hours: float = DEFAULT_CHECK_INTERVAL_HOURS) -> None:
+    def __init__(
+        self, check_interval_hours: float = DEFAULT_CHECK_INTERVAL_HOURS
+    ) -> None:
         self.check_interval_hours = check_interval_hours
         self.running = False
         self.task: Optional[asyncio.Task] = None
@@ -59,7 +62,7 @@ class PlanMigrationSchedulerService:
         interval_seconds = self.check_interval_hours * 3600
         while self.running:
             try:
-                await plan_migration_service.process_due_migrations()
+                await self.run_once()
             except Exception as exc:
                 logger.error(
                     "Plan migration scheduler iteration failed: %s",
@@ -70,6 +73,10 @@ class PlanMigrationSchedulerService:
                 await asyncio.sleep(interval_seconds)
             except asyncio.CancelledError:
                 break
+
+    async def run_once(self) -> PlanMigrationRunResult:
+        """Run one migration pass and return its per-row outcome counters."""
+        return await plan_migration_service.process_due_migrations()
 
 
 _plan_migration_scheduler: Optional[PlanMigrationSchedulerService] = None
@@ -94,6 +101,5 @@ async def start_plan_migration_scheduler() -> None:
 
 async def stop_plan_migration_scheduler() -> None:
     """Stop the global plan migration scheduler."""
-    global _plan_migration_scheduler
     if _plan_migration_scheduler:
         await _plan_migration_scheduler.stop()

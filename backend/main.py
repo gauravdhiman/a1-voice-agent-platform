@@ -303,48 +303,25 @@ async def lifespan(app: FastAPI):
                 migrated_client_secrets,
             )
 
-    # Start token refresh service
-    logging.info("Starting token refresh service...")
-    await start_token_refresh_service(tool_service)
-    logging.info("Token refresh service started")
-
-    logging.info("Starting plan migration scheduler...")
-    await start_plan_migration_scheduler()
-    logging.info("Plan migration scheduler started")
-
-    logging.info("Starting free-plan renewal scheduler...")
-    await start_free_plan_renewal_scheduler()
-    logging.info("Free-plan renewal scheduler started")
-
-    logging.info("Starting phone-number rental scheduler...")
-    await start_phone_number_rental_scheduler()
-    logging.info("Phone-number rental scheduler started")
-
-    logging.info("Starting notification retry scheduler...")
-    await start_notification_retry_scheduler()
-    logging.info("Notification retry scheduler started")
+    if settings.maintenance_mode == "in_process":
+        await start_token_refresh_service(tool_service)
+        await start_plan_migration_scheduler()
+        await start_free_plan_renewal_scheduler()
+        await start_phone_number_rental_scheduler()
+        await start_notification_retry_scheduler()
+        logging.info("In-process maintenance schedulers started")
+    else:
+        logging.info("Maintenance schedulers are managed externally")
 
     yield
 
     # Shutdown
-    logging.info("Shutting down plan migration scheduler...")
-    await stop_plan_migration_scheduler()
-    logging.info("Plan migration scheduler stopped")
-
-    logging.info("Shutting down free-plan renewal scheduler...")
-    await stop_free_plan_renewal_scheduler()
-    logging.info("Free-plan renewal scheduler stopped")
-
-    logging.info("Shutting down phone-number rental scheduler...")
-    await stop_phone_number_rental_scheduler()
-    logging.info("Phone-number rental scheduler stopped")
-
-    logging.info("Shutting down notification retry scheduler...")
-    await stop_notification_retry_scheduler()
-    logging.info("Notification retry scheduler stopped")
-
-    logging.info("Shutting down token refresh service...")
-    await stop_token_refresh_service()
+    if settings.maintenance_mode == "in_process":
+        await stop_plan_migration_scheduler()
+        await stop_free_plan_renewal_scheduler()
+        await stop_phone_number_rental_scheduler()
+        await stop_notification_retry_scheduler()
+        await stop_token_refresh_service()
     logging.info("Token refresh service stopped")
     await asyncio.to_thread(shutdown_opentelemetry)
 

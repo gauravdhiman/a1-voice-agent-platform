@@ -114,12 +114,15 @@ class TestSubmitInterestLeadRoute:
     async def test_submit_returns_ack_envelope(self):
         from src.leads.routes import submit_interest_lead
 
-        with patch(
-            "src.leads.routes.lead_service.submit_lead",
-            new=AsyncMock(return_value=(Mock(), None)),
-        ), patch(
-            "src.leads.routes.interest_lead_notification_outbox.process_pending",
-            new=AsyncMock(),
+        with (
+            patch(
+                "src.leads.routes.lead_service.submit_lead",
+                new=AsyncMock(return_value=(Mock(), None)),
+            ),
+            patch(
+                "src.leads.routes.interest_lead_notification_outbox.process_pending",
+                new=AsyncMock(),
+            ),
         ):
             ack = await submit_interest_lead(request=_request(), body=_submit_payload())
             assert ack.received is True
@@ -130,13 +133,16 @@ class TestSubmitInterestLeadRoute:
 
         lead = Mock(id=LEAD_ID)
         background_tasks = BackgroundTasks()
-        with patch(
-            "src.leads.routes.lead_service.submit_lead",
-            new=AsyncMock(return_value=(lead, None)),
-        ), patch(
-            "src.leads.routes.interest_lead_notification_outbox.process_pending",
-            new=AsyncMock(),
-        ) as process_mock:
+        with (
+            patch(
+                "src.leads.routes.lead_service.submit_lead",
+                new=AsyncMock(return_value=(lead, None)),
+            ),
+            patch(
+                "src.leads.routes.interest_lead_notification_outbox.process_pending",
+                new=AsyncMock(),
+            ) as process_mock,
+        ):
             ack = await submit_interest_lead(
                 request=_request(),
                 body=_submit_payload(source="outcome-form", demo_slug="dental-demo"),
@@ -152,29 +158,62 @@ class TestSubmitInterestLeadRoute:
         from src.leads.routes import submit_interest_lead
 
         lead = Mock(id=LEAD_ID)
-        with patch(
-            "src.leads.routes.lead_service.submit_lead",
-            new=AsyncMock(return_value=(lead, None)),
-        ), patch(
-            "src.leads.routes.interest_lead_notification_outbox.process_pending",
-            new=AsyncMock(side_effect=RuntimeError("provider unavailable")),
+        with (
+            patch(
+                "src.leads.routes.lead_service.submit_lead",
+                new=AsyncMock(return_value=(lead, None)),
+            ),
+            patch(
+                "src.leads.routes.interest_lead_notification_outbox.process_pending",
+                new=AsyncMock(side_effect=RuntimeError("provider unavailable")),
+            ),
         ):
             ack = await submit_interest_lead(request=_request(), body=_submit_payload())
 
         assert ack.received is True
 
     @pytest.mark.asyncio
+    async def test_external_maintenance_attempts_delivery_before_response(self):
+        from src.leads.routes import submit_interest_lead
+
+        lead = Mock(id=LEAD_ID)
+        background_tasks = BackgroundTasks()
+        request = _request()
+        request.scope["client"] = ("127.0.0.2", 50000)
+        with (
+            patch("src.leads.routes.settings.maintenance_mode", "external"),
+            patch(
+                "src.leads.routes.lead_service.submit_lead",
+                new=AsyncMock(return_value=(lead, None)),
+            ),
+            patch(
+                "src.leads.routes.interest_lead_notification_outbox.process_pending",
+                new=AsyncMock(),
+            ) as process,
+        ):
+            ack = await submit_interest_lead(
+                request=request,
+                body=_submit_payload(),
+                background_tasks=background_tasks,
+            )
+        assert ack.received is True
+        process.assert_awaited_once_with(lead_id=LEAD_ID, limit=1)
+        assert not background_tasks.tasks
+
+    @pytest.mark.asyncio
     async def test_submit_rejects_invalid_turnstile(self):
         from src.leads.routes import submit_interest_lead
 
-        with patch(
-            "src.leads.routes.is_turnstile_configured", return_value=True
-        ), patch(
-            "src.leads.routes.verify_turnstile_token",
-            new=AsyncMock(return_value=False),
-        ), patch(
-            "src.leads.routes.lead_service.submit_lead", new=AsyncMock()
-        ) as submit_mock:
+        with (
+            patch("src.leads.routes.is_turnstile_configured", return_value=True),
+            patch(
+                "src.leads.routes.verify_turnstile_token",
+                new=AsyncMock(return_value=False),
+            ),
+            patch(
+                "src.leads.routes.lead_service.submit_lead", new=AsyncMock()
+            ) as submit_mock,
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await submit_interest_lead(request=_request(), body=_submit_payload())
 

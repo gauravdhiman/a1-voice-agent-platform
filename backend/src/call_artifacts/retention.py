@@ -29,7 +29,9 @@ def recording_expired(artifact: dict[str, Any]) -> bool:
         return True
 
 
-async def remove_expired_recordings(batch_size: int = 100) -> int:
+async def remove_expired_recordings(
+    batch_size: int = 100, *, strict: bool = False
+) -> int:
     """Delete at most 100 expired audio objects and retain audited tombstones.
 
     Object deletion is idempotent. A provider or metadata failure leaves the row
@@ -57,6 +59,7 @@ async def remove_expired_recordings(batch_size: int = 100) -> int:
         return 0
     storage = get_recording_storage()
     removed = 0
+    failed = False
     for artifact in rows:
         if not recording_expired(artifact) or not artifact.get("storage_path"):
             continue
@@ -83,8 +86,11 @@ async def remove_expired_recordings(batch_size: int = 100) -> int:
             if (await asyncio.to_thread(tombstone)).data:
                 removed += 1
         except Exception:
+            failed = True
             logger.exception(
                 "Recording retention cleanup failed",
                 extra={"event.name": "recording.retention_failed"},
             )
+    if strict and failed:
+        raise RuntimeError("Recording retention pass had failures")
     return removed
