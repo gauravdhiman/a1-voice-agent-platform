@@ -196,23 +196,25 @@ export function StepOrgDetails({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Brief business description
-          </label>
+          <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <label className="block text-sm font-medium text-gray-700">
+              Brief business description
+            </label>
+            <WebsiteBusinessContextGenerator
+              organizationId={organizationId}
+              website={state.website}
+              businessContext={state.businessDescription}
+              onBusinessContextChange={(businessDescription) =>
+                onChange({ businessDescription })
+              }
+              disabled={saving}
+            />
+          </div>
           <Textarea
             placeholder="Describe your services, hours, and anything the AI should know about your business..."
             value={state.businessDescription}
             onChange={(e) => onChange({ businessDescription: e.target.value })}
             rows={3}
-          />
-          <WebsiteBusinessContextGenerator
-            organizationId={organizationId}
-            website={state.website}
-            businessContext={state.businessDescription}
-            onBusinessContextChange={(businessDescription) =>
-              onChange({ businessDescription })
-            }
-            disabled={saving}
           />
         </div>
       </div>

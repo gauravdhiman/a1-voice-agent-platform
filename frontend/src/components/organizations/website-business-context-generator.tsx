@@ -199,7 +199,7 @@ export function WebsiteBusinessContextGenerator({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="flex max-w-full flex-col items-start gap-2 sm:items-end">
       <Button
         type="button"
         variant="outline"
@@ -216,7 +216,7 @@ export function WebsiteBusinessContextGenerator({
         )}
         {loading ? "Reading website…" : "Generate business context"}
       </Button>
-      <p className="text-xs text-muted-foreground">
+      <p className="max-w-md text-left text-xs text-muted-foreground sm:text-right">
         We’ll review up to 50 public pages and prepare an editable draft. It won’t be saved until you save these organization changes.
       </p>
       {summary && (

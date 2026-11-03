@@ -916,9 +916,26 @@ export default function OrganizationPage() {
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="business_details">
-                              Business Context
-                            </Label>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <Label htmlFor="business_details">
+                                Business Context
+                              </Label>
+                              {orgId && editedOrg && (
+                                <WebsiteBusinessContextGenerator
+                                  organizationId={orgId}
+                                  website={editedOrg.website}
+                                  businessContext={editedOrg.business_details}
+                                  onBusinessContextChange={(business_details) =>
+                                    setEditedOrg((current) =>
+                                      current
+                                        ? { ...current, business_details }
+                                        : current,
+                                    )
+                                  }
+                                  disabled={saving}
+                                />
+                              )}
+                            </div>
                             <Textarea
                               id="business_details"
                               value={editedOrg?.business_details || ""}
@@ -947,21 +964,6 @@ All our technicians are licensed and background-checked. We offer a 90-day warra
 During monsoon season (July-September), we have extended hours for flood-related emergencies..."`}
                               className="min-h-[200px]"
                             />
-                            {orgId && editedOrg && (
-                              <WebsiteBusinessContextGenerator
-                                organizationId={orgId}
-                                website={editedOrg.website}
-                                businessContext={editedOrg.business_details}
-                                onBusinessContextChange={(business_details) =>
-                                  setEditedOrg((current) =>
-                                    current
-                                      ? { ...current, business_details }
-                                      : current,
-                                  )
-                                }
-                                disabled={saving}
-                              />
-                            )}
                           </div>
                         </>
                       ) : (
