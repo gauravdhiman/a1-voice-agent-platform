@@ -19,17 +19,14 @@ admins by email plus configured platform-admin channels. See
 [`docs/03_implementation/token_refresh_lock.md`](../docs/03_implementation/token_refresh_lock.md)
 for failure classification, alert routing, and recovery steps.
 
-The notification retry, OAuth refresh, free-plan renewal, plan migration, and
-phone-number rental schedulers expose `run_once()` to execute one pass. Notification retry
-returns operation names that raised exceptions or reported row failures while
-continuing the remaining operations. Some services suppress errors internally,
-so the result is not yet a complete external success signal.
-The `src/maintenance` package contains an experimental, provider-neutral runner,
-HTTP adapter, and Postgres coordinator; they are not yet wired to production jobs
-or deployment. Failed or interrupted claims require reconciliation, rather than
-automatic retry of a possibly completed external mutation.
-The existing in-process schedulers remain the supported runtime until a durable
-coordination and cutover mechanism is implemented and validated.
+The separate `src/maintenance` service runs the notification recovery, OAuth
+refresh, free-plan renewal, plan migration, and phone-rental jobs when triggered
+by an external scheduler. Production defaults to external maintenance;
+development and staging default to in-process loops. Database claims prevent
+overlap, and ambiguous failures require reconciliation. Some recovery services
+still suppress internal errors, so monitor their backlogs as well as job state.
+See the [maintenance service runbook](../docs/05_operations/deployment/maintenance-service.md)
+for deployment, authentication, monitoring, and cutover requirements.
 
 ## 🚀 Getting Started
 

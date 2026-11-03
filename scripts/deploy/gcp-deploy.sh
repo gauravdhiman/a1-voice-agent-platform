@@ -85,9 +85,14 @@ validate_backend_environment() {
 }
 
 validate_external_maintenance_cutover() {
-  local mode scheduler_state
+  local mode scheduler_state environment
   mode="$(read_env MAINTENANCE_MODE || true)"
-  [[ "${mode:-in_process}" == "external" ]] || return 0
+  environment="$(read_env ENVIRONMENT || true)"
+  environment="$(printf '%s' "$environment" | tr '[:upper:]' '[:lower:]')"
+  if [[ -z "$mode" ]]; then
+    if [[ -z "$environment" || "$environment" == "production" ]]; then mode=external; else mode=in_process; fi
+  fi
+  [[ "$mode" == "external" ]] || return 0
   if ! gcloud run services describe "${GCP_MAINTENANCE_SERVICE:-maintenance-247ai}" \
     --project="$PROJECT_ID" --region="$REGION" --format='value(metadata.name)' >/dev/null; then
     echo "Deploy the maintenance worker before the external-mode backend" >&2
@@ -191,10 +196,19 @@ if ! gcloud artifacts repositories describe "$REPO" --location="$REGION" >/dev/n
 fi
 
 deploy_backend() {
-  local maintenance_mode
+  local maintenance_mode deployment_environment
   local -a backend_scaling_args
   maintenance_mode="$(read_env MAINTENANCE_MODE || true)"
-  case "${maintenance_mode:-in_process}" in
+  deployment_environment="$(read_env ENVIRONMENT || true)"
+  deployment_environment="$(printf '%s' "$deployment_environment" | tr '[:upper:]' '[:lower:]')"
+  if [[ -z "$maintenance_mode" ]]; then
+    if [[ -z "$deployment_environment" || "$deployment_environment" == "production" ]]; then
+      maintenance_mode=external
+    else
+      maintenance_mode=in_process
+    fi
+  fi
+  case "$maintenance_mode" in
     in_process) backend_scaling_args=(--min-instances=1 --no-cpu-throttling) ;;
     external) backend_scaling_args=(--min-instances=0 --cpu-throttling) ;;
     *) echo "MAINTENANCE_MODE must be in_process or external" >&2; return 1 ;;

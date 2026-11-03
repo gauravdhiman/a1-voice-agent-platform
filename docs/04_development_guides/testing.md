@@ -261,6 +261,11 @@ Postgres ownership and concurrency tests in
 `backend/tests/integration/test_maintenance_coordination_sql.py` require
 `MAINTENANCE_TEST_DATABASE_URL` pointing to a disposable loopback database with
 the maintenance migration applied. They refuse non-local database hosts.
+Environment defaults and explicit overrides are covered by
+`backend/tests/shared/test_settings.py`; scheduler payloads and the
+worker/paused-scheduler deployment gate are covered by
+`scripts/tests/test_gcp_maintenance_scheduler.py` and
+`scripts/tests/test_gcp_maintenance_cutover.py`.
 
 From the repository root:
 

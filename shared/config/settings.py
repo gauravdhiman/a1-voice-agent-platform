@@ -62,7 +62,9 @@ class Settings(BaseSettings):
         default="production", description="Environment (development/production/test)"
     )
     maintenance_mode: Literal["in_process", "external"] = Field(
-        default="in_process",
+        default_factory=lambda data: (
+            "external" if data["environment"].lower() == "production" else "in_process"
+        ),
         description="Run maintenance loops in the API or in an external worker",
     )
     maintenance_auth_token: Optional[SecretStr] = Field(

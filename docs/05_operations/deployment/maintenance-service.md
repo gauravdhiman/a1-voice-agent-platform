@@ -5,9 +5,10 @@ recovery queues, free-plan renewals, plan migrations, and phone-rental lifecycle
 checks. It starts no in-process timers. A scheduler sends authenticated POST
 requests; no scheduler provider is required by the domain code.
 
-The API defaults to `MAINTENANCE_MODE=in_process`. Do not switch an environment
-to `external` until the migration, separate worker, scheduler, monitoring, and
-cutover checks below are complete. Never run external and in-process schedulers
+The API defaults to `MAINTENANCE_MODE=external` in production and `in_process`
+in development and staging. Provision the migration, separate worker,
+scheduler, monitoring, and cutover checks before enabling a production API
+deployment. Either default can be explicitly overridden. Never run both modes
 concurrently: existing API loops do not share the worker's global job claims.
 
 ## Packaging and configuration
@@ -20,15 +21,14 @@ high-entropy `MAINTENANCE_AUTH_TOKEN` of at least 32 ASCII characters. Inject
 secrets from the deployment's secret store. Do not expose this token in logs,
 source control, screenshots, or public scheduler definitions.
 
-Set `MAINTENANCE_MODE=external` on the API only after the worker and scheduler
-are ready. The maintenance service itself does not start API scheduler loops.
+The maintenance service itself does not start API scheduler loops.
 The worker also verifies the existing legacy OAuth-secret migration before
 accepting work. Deploy the worker on a private network or equivalent ingress
 control where available.
 
 The backend GCP deploy script selects zero minimum instances and request-based
-CPU allocation only when `MAINTENANCE_MODE=external`. The default in-process
-mode keeps one instance with CPU allocated between requests. Changing the mode
+CPU allocation in production's default external mode. In-process mode keeps
+one instance with CPU allocated between requests. Deploying external mode
 without completing the cutover below stops recurring work.
 
 ## Triggers and cadence
@@ -57,6 +57,16 @@ the current application adapter also requires the maintenance token. If using
 Cloud Scheduler, protect its configuration because HTTP headers are part of the
 job configuration. QStash is an alternative HTTP scheduler; its reachable ingress,
 authentication, retry limits, and pricing must be reviewed for the chosen plan.
+
+Cloud Scheduler is the initial production choice: one scheduler job drives all
+five independent cadences, and its service identity can invoke a private Cloud
+Run service. QStash remains an alternative for another hosting provider, but
+its current free allowance of 1,000 delivery attempts per day cannot sustain
+the selected one-minute tick (1,440 attempts per day before retries). Review
+[Cloud Scheduler pricing](https://cloud.google.com/scheduler/pricing) and
+[QStash pricing](https://upstash.com/pricing/qstash) when provisioning.
+The database is the coordination boundary; a separate message queue is not
+needed for these periodic passes and would add another provider and failure mode.
 
 ## Coordination and recovery
 
@@ -155,8 +165,8 @@ an external mutation even if its HTTP request timed out.
 
 ## Required cutover validation
 
-Before production, apply the migration only in an isolated environment and
-prove authenticated triggers, missed schedules, stale or failed claims,
+Before production, verify the migration in an isolated environment and staging,
+and prove authenticated triggers, missed schedules, stale or failed claims,
 provider failures, overlapping requests, job cadence changes, and monitoring
 alerts. Exercise both browser and PSTN voice flows plus billing and notification
 recovery. Ensure the old API schedulers are fully stopped before starting the
@@ -165,7 +175,7 @@ staging migrations and production deployment require the documented release
 approval and ownership.
 
 Before production, provision and verify the prepared scheduler, independent
-alert integration, and cutover in staging. In external mode, phone mutation routes and the rental
-worker additionally serialize per organization; busy organizations are retried
+alert integration, and cutover in staging. In external mode, phone mutation
+routes and the rental worker additionally serialize per organization; busy organizations are retried
 on a later tick without blocking other organizations. Worker rows are re-read
 under that guard. In-process mode retains the legacy scheduling behavior.

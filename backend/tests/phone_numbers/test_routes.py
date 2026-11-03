@@ -122,6 +122,14 @@ def _make_request() -> Request:
 
 
 @pytest.fixture(autouse=True)
+def _use_in_process_maintenance(monkeypatch):
+    """These route-contract tests run without a database-backed worker."""
+    from src.phone_numbers.maintenance_guard import settings
+
+    monkeypatch.setattr(settings, "maintenance_mode", "in_process")
+
+
+@pytest.fixture(autouse=True)
 def _disable_limiter(monkeypatch):
     """Disable the slowapi limiter for these route tests.
 
@@ -713,7 +721,10 @@ class TestPurchaseAndImportErrorMapping:
     async def test_purchase_terminal_idempotency_reuse_maps_to_conflict(self):
         from src.phone_numbers.routes import purchase_phone_number
 
-        message = "This purchase attempt has ended. Start a new purchase with a fresh idempotency key."
+        message = (
+            "This purchase attempt has ended. Start a new purchase with a fresh "
+            "idempotency key."
+        )
         with patch("src.phone_numbers.routes.phone_number_service") as mock_service:
             mock_service.purchase_number = AsyncMock(return_value=(None, message))
             with pytest.raises(HTTPException) as exc_info:
