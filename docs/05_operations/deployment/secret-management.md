@@ -117,8 +117,9 @@ sequenceDiagram
 | --- | --- | --- |
 | `ENCRYPTION_KEY` and `ENCRYPTION_KEY_FALLBACKS` | GCP Secret Manager for Cloud Run; OCI Vault for voice-ws | Backend and voice-ws to encrypt/decrypt application data |
 | `JWT_SECRET_KEY` | GCP Secret Manager and OCI Vault | Backend and voice-ws to sign/verify voice-session JWTs |
-| Database, Supabase, Stripe, Resend, and platform provider keys | GCP Secret Manager and/or OCI Vault | The runtime that needs the integration |
+| Database, Supabase, Stripe, Resend, and provider environment fallbacks | GCP Secret Manager and/or OCI Vault | The runtime that needs the integration |
 | Organization Google/OpenAI/Deepgram/etc. keys | Fernet ciphertext in `organizations.provider_credentials` | The organization-scoped runtime path |
+| Platform Google/OpenAI/Deepgram/etc. voice keys                        | Fernet ciphertext in `platform_voice_provider_credentials` | Platform-managed presets and agents explicitly using platform credits; matching environment values remain fallbacks |
 | Per-agent OAuth tokens and API keys | Fernet ciphertext in `agent_tools.sensitive_config` | voice-ws and token-refresh services |
 | Platform OAuth client secrets and MCP server headers | Fernet ciphertext in `platform_tools` encrypted fields | Platform catalog and runtime services |
 
@@ -126,6 +127,13 @@ The managed secret managers protect the deployment-wide values and the
 application key that can decrypt database ciphertext. They do not remove the
 need for application-level encryption, and they cannot prevent a compromised
 running process from using secrets that its identity is authorized to read.
+
+Platform admins manage shared API credentials under **Platform settings → API
+Credentials**. The current credential set serves platform-managed voice presets
+and is stored as Fernet ciphertext in
+`platform_voice_provider_credentials`; provider environment values are used
+only when no key is saved for that provider. Backend and voice-ws must share
+the `ENCRYPTION_KEY` keyring to read the stored values.
 
 ## Before and after for the legacy Google key
 
@@ -391,6 +399,7 @@ either key in GitHub source, a repository environment file, or the database.
    The command covers the explicit application ciphertext inventory, verifies
    each rewritten payload with `K2`, aborts on unreadable populated values, and
    never prints plaintext or ciphertext.
+
 6. Run the read-only credential verifier and repeat the rotation preview. The
    expected fallback count is zero.
 7. After the rollback window expires, remove `K1` from both runtime fallback

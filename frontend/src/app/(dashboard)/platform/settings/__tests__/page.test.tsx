@@ -21,18 +21,38 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/contexts/auth-context", () => ({
   useAuth: () => ({
     user: {
-      hasRole: (role: string) => role === "platform_admin" && mocks.platformAdmin,
+      hasRole: (role: string) =>
+        role === "platform_admin" && mocks.platformAdmin,
     },
   }),
 }));
 
-vi.mock("@/components/notifications/platform-notification-settings-form", () => ({
-  PlatformNotificationSettingsForm: () => <div>Notification settings form</div>,
-}));
+vi.mock(
+  "@/components/notifications/platform-notification-settings-form",
+  () => ({
+    PlatformNotificationSettingsForm: () => (
+      <div>Notification settings form</div>
+    ),
+  }),
+);
 
-vi.mock("@/components/phone-numbers/platform-phone-number-settings-form", () => ({
-  PlatformPhoneNumberSettingsForm: () => <div>Phone number settings form</div>,
-}));
+vi.mock(
+  "@/components/phone-numbers/platform-phone-number-settings-form",
+  () => ({
+    PlatformPhoneNumberSettingsForm: () => (
+      <div>Phone number settings form</div>
+    ),
+  }),
+);
+
+vi.mock(
+  "@/components/platform-settings/platform-voice-provider-credentials-form",
+  () => ({
+    PlatformVoiceProviderCredentialsForm: () => (
+      <div>Voice provider keys form</div>
+    ),
+  }),
+);
 
 import PlatformSettingsPage from "../page";
 
@@ -51,12 +71,17 @@ describe("platform settings hub", () => {
   it("shows horizontal settings tabs and notifications by default", () => {
     render(<PlatformSettingsPage />);
 
-    expect(screen.getByRole("heading", { name: "Platform settings" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Platform settings" }),
+    ).toBeTruthy();
     expect(screen.getByText("Notification settings form")).toBeTruthy();
     expect(
-      screen.getByRole("tab", { name: "Notifications" }).getAttribute("aria-selected"),
+      screen
+        .getByRole("tab", { name: "Notifications" })
+        .getAttribute("aria-selected"),
     ).toBe("true");
     expect(screen.getByRole("tab", { name: "Phone numbers" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "API Credentials" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: /Notifications/ })).toBeNull();
   });
 
@@ -67,7 +92,9 @@ describe("platform settings hub", () => {
 
     expect(screen.getByText("Phone number settings form")).toBeTruthy();
     expect(
-      screen.getByRole("tab", { name: "Phone numbers" }).getAttribute("aria-selected"),
+      screen
+        .getByRole("tab", { name: "Phone numbers" })
+        .getAttribute("aria-selected"),
     ).toBe("true");
 
     await user.click(screen.getByRole("tab", { name: "Notifications" }));
@@ -76,6 +103,18 @@ describe("platform settings hub", () => {
       "/platform/settings?section=notifications",
       { scroll: false },
     );
+  });
+
+  it("opens the API credentials section from its deep link", () => {
+    globalThis.__platformSettingsSearchParams = "section=api-credentials";
+    render(<PlatformSettingsPage />);
+
+    expect(screen.getByText("Voice provider keys form")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("tab", { name: "API Credentials" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
   });
 
   it("denies access to users without the platform-admin role", () => {

@@ -72,7 +72,8 @@ shared/
 │   ├── preset_models.py   # Platform-admin preset Pydantic models (Phase 3)
 │   ├── preset_service.py  # Platform-admin preset catalog CRUD (Phase 3; mirrors tool_service)
 │   ├── model_capabilities.py # Provider-backed model capability validation for live presets
-│   ├── key_resolver.py    # Per-org provider key resolver: SpeechConfig + encrypted provider_credentials -> api_keys
+│   ├── key_resolver.py    # SpeechConfig + org/platform credentials -> runtime api_keys
+│   ├── platform_credentials.py # Encrypted platform API credentials and safe status flags
 │   ├── tools/             # Tool implementation framework
 │   │   ├── base/
 │   │   │   ├── base_tool.py            # Base class for tools

@@ -274,15 +274,6 @@ sync_voice_provider_settings() {
   done
 }
 
-require_gemini_api_key() {
-  local source_env="$1"
-  local app_key
-  app_key="$(read_env_value "$APP_ENV" GEMINI_API_KEY)"
-  if is_placeholder_env_value "$app_key"; then
-    die "GEMINI_API_KEY is missing or still an example value in $APP_ENV; set a valid key in $source_env or pass --source-env"
-  fi
-}
-
 derive_identity() {
   local requested_name
   requested_name="${NAME_OVERRIDE:-$(basename "$ROOT")}"
@@ -456,10 +447,6 @@ prepare_app_env() {
   # previously valid key with a template placeholder.
   sync_voice_provider_settings "$source_env"
 
-  if [[ "$COMMAND" == "up" ]]; then
-    require_gemini_api_key "$source_env"
-  fi
-
   ensure_local_encryption_key "$APP_ENV" "$copied_source"
   set_env_value "$APP_ENV" "ENV_FILE" "$APP_ENV"
   set_env_value "$APP_ENV" "ENVIRONMENT" "development"
@@ -527,7 +514,7 @@ validate_voice_provider_settings() {
   local gemini_key
   gemini_key="$(read_env_value "$APP_ENV" "GEMINI_API_KEY")"
   if is_placeholder_env_value "$gemini_key"; then
-    die "GEMINI_API_KEY is not configured for this worktree; set it in the main checkout's .env.local or pass --source-env PATH"
+    echo "No Gemini environment fallback is configured. Add a platform key under Platform settings → Voice providers before using Google voice presets."
   fi
 }
 

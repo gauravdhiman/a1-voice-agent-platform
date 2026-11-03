@@ -22,10 +22,11 @@ column **derived from ``config.engine_mode`` on every write** (never set by
 hand): the service re-validates ``config`` via :func:`parse_speech_config` and
 sets ``preset_type`` from the parsed config's ``engine_mode``.
 
-Presets carry **no secrets** — the per-provider API keys live on the
-organization (``organizations.provider_credentials``, encrypted), not in the
-preset. The worker's :mod:`shared.voice_agents.key_resolver` pairs a preset's
-``config`` with the org's credentials.
+Presets carry **no secrets**. Organization keys live in encrypted
+``organizations.provider_credentials``; shared platform voice keys live in
+encrypted ``platform_voice_provider_credentials``. The worker's
+:mod:`shared.voice_agents.key_resolver` pairs a preset's ``config`` with the
+credential source selected for that preset or agent.
 """
 
 import logging
@@ -34,7 +35,6 @@ from uuid import UUID
 
 from opentelemetry import trace
 from pydantic import ValidationError
-from supabase import Client
 
 from shared.config import supabase_config
 from shared.voice_agents.model_capabilities import model_capability_service
@@ -49,6 +49,7 @@ from shared.voice_agents.preset_models import (
     PresetUpdate,
 )
 from shared.voice_agents.speech_config import parse_speech_config
+from supabase import Client
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -551,6 +552,7 @@ class PresetService:
         *,
         use_platform_credits: bool = False,
         credentials_self_service: bool = True,
+        platform_credentials: Optional[dict[str, str]] = None,
     ) -> PresetCatalogResponse:
         """Build the org-facing white-label preset catalog with readiness flags.
 
@@ -566,6 +568,8 @@ class PresetService:
             org: Organization object for credential resolution, or ``None``.
             use_platform_credits: Per-agent billing toggle (platform keys only).
             credentials_self_service: Whether org admins may self-configure keys.
+            platform_credentials: Decrypted platform keys used only for readiness
+                checks; they are never included in the returned catalog.
 
         Returns:
             A :class:`PresetCatalogResponse` for the org-admin picker.
@@ -588,6 +592,7 @@ class PresetService:
                         org,
                         use_platform_credits=use_platform_credits,
                         credential_source=preset.credential_source,
+                        platform_credentials=platform_credentials,
                     ),
                 )
             )
@@ -601,6 +606,7 @@ class PresetService:
                 org,
                 use_platform_credits=use_platform_credits,
                 credential_source=default_preset.credential_source,
+                platform_credentials=platform_credentials,
             )
             default_display = PresetCatalogDefault(
                 name=default_preset.name,

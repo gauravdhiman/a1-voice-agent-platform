@@ -98,6 +98,8 @@ for section in ("studio", "inbucket", "edge_runtime", "analytics"):
     assert config[section]["enabled"] is False, section
 for section in ("api", "auth", "realtime", "storage"):
     assert config[section]["enabled"] is True, section
+assert config["auth"]["enable_signup"] is False
+assert config["auth"]["email"]["enable_signup"] is True
 PY
 
 assert_file_contains "$app_env" 'SUPABASE_URL=http://host.docker.internal:54341'

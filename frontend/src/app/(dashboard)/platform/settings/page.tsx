@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Platform-wide settings hub for notification delivery and phone-number policy.
+ * Platform-wide settings hub for API credentials, notifications, and phone policy.
  */
 
 import { useEffect, useState } from "react";
@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { PlatformNotificationSettingsForm } from "@/components/notifications/platform-notification-settings-form";
 import { PlatformPhoneNumberSettingsForm } from "@/components/phone-numbers/platform-phone-number-settings-form";
+import { PlatformVoiceProviderCredentialsForm } from "@/components/platform-settings/platform-voice-provider-credentials-form";
 import {
   AnimatedTabs,
   TabsContent,
@@ -18,7 +19,11 @@ import {
 import { AccessDenied } from "@/components/ui/access-denied";
 import { useAuth } from "@/contexts/auth-context";
 
-const PLATFORM_SETTINGS_TABS = ["notifications", "phone-numbers"] as const;
+const PLATFORM_SETTINGS_TABS = [
+  "notifications",
+  "phone-numbers",
+  "api-credentials",
+] as const;
 
 type PlatformSettingsTab = (typeof PLATFORM_SETTINGS_TABS)[number];
 
@@ -28,9 +33,8 @@ export default function PlatformSettingsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const requestedSection = searchParams.get("section");
-  const activeSectionFromUrl: PlatformSettingsTab = PLATFORM_SETTINGS_TABS.includes(
-    requestedSection as PlatformSettingsTab,
-  )
+  const activeSectionFromUrl: PlatformSettingsTab =
+    PLATFORM_SETTINGS_TABS.includes(requestedSection as PlatformSettingsTab)
     ? (requestedSection as PlatformSettingsTab)
     : "notifications";
   const [activeSection, setActiveSection] =
@@ -67,7 +71,7 @@ export default function PlatformSettingsPage() {
       <header>
         <h1 className="text-2xl font-bold tracking-tight">Platform settings</h1>
         <p className="mt-1 text-muted-foreground">
-          Manage platform-wide alerts and phone-number lifecycle policies.
+          Manage API credentials, platform alerts, and phone-number policies.
         </p>
       </header>
 
@@ -80,17 +84,17 @@ export default function PlatformSettingsPage() {
           aria-label="Platform settings"
           className="w-full justify-start overflow-x-auto"
         >
-          <TabsTrigger
-            className="shrink-0 px-3 sm:px-6"
-            value="notifications"
-          >
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="notifications">
             Notifications
+          </TabsTrigger>
+          <TabsTrigger className="shrink-0 px-3 sm:px-6" value="phone-numbers">
+            Phone numbers
           </TabsTrigger>
           <TabsTrigger
             className="shrink-0 px-3 sm:px-6"
-            value="phone-numbers"
+            value="api-credentials"
           >
-            Phone numbers
+            API Credentials
           </TabsTrigger>
         </TabsList>
 
@@ -107,6 +111,13 @@ export default function PlatformSettingsPage() {
           data-testid="platform-settings-phone-numbers"
         >
           <PlatformPhoneNumberSettingsForm />
+        </TabsContent>
+        <TabsContent
+          value="api-credentials"
+          className="min-w-0"
+          data-testid="platform-settings-api-credentials"
+        >
+          <PlatformVoiceProviderCredentialsForm />
         </TabsContent>
       </AnimatedTabs>
     </div>

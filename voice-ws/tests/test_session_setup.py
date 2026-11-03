@@ -20,6 +20,16 @@ from shared.voice_agents.speech_config import (
 from shared.voice_agents.voice_session_service import VoiceSessionClaims
 
 
+@pytest.fixture(autouse=True)
+def mock_platform_voice_credentials(monkeypatch):
+    """Keep session setup tests independent from Supabase credential storage."""
+    monkeypatch.setattr(
+        "src.session_setup.platform_voice_provider_credential_service."
+        "get_provider_credentials",
+        AsyncMock(return_value={}),
+    )
+
+
 def _claims(agent_id: str) -> VoiceSessionClaims:
     return VoiceSessionClaims(
         agent_id=agent_id,
@@ -143,12 +153,17 @@ class TestPrepareVoiceSession:
             ),
             patch(
                 "src.session_setup.resolve_speech_profile_for_agent",
-                new=AsyncMock(return_value=(realtime_cfg, "organization")),
+                new=AsyncMock(return_value=(realtime_cfg, "platform")),
             ),
+            patch(
+                "src.session_setup.platform_voice_provider_credential_service."
+                "get_provider_credentials",
+                new=AsyncMock(return_value={"openai": "platform-openai-key"}),
+            ) as platform_credentials_mock,
             patch(
                 "src.session_setup.resolve_api_keys",
                 return_value={"openai": "openai-key"},
-            ),
+            ) as resolve_keys_mock,
             patch(
                 "src.session_setup.build_speech_components",
                 side_effect=ValueError("OpenAI Live unavailable"),
@@ -158,6 +173,14 @@ class TestPrepareVoiceSession:
                 await prepare_voice_session(_claims(str(agent_id)))
 
         build_mock.assert_called_once()
+        platform_credentials_mock.assert_awaited_once_with({"openai"})
+        resolve_keys_mock.assert_called_once_with(
+            realtime_cfg,
+            org=None,
+            use_platform_credits=False,
+            credential_source="platform",
+            platform_credentials={"openai": "platform-openai-key"},
+        )
 
     @pytest.mark.asyncio
     async def test_uses_organization_timezone_in_prompt(self, monkeypatch) -> None:
@@ -255,6 +278,7 @@ class TestPrepareVoiceSession:
             mission=None,
             custom_instructions=None,
         )
+        speech_config = RealtimeSpeechConfig(provider="google")
 
         with (
             patch(
@@ -276,7 +300,7 @@ class TestPrepareVoiceSession:
             ),
             patch(
                 "src.session_setup.resolve_speech_profile_for_agent",
-                new=AsyncMock(return_value=(MagicMock(), "platform")),
+                new=AsyncMock(return_value=(speech_config, "platform")),
             ),
             patch(
                 "src.session_setup.resolve_api_keys",

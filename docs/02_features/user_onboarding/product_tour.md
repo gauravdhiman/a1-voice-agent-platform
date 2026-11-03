@@ -22,7 +22,7 @@ configuring an organization.
 | --- | --- |
 | Regular user (`member`) | Workspace, organization switcher, agents, phone numbers, skills, calls, and account menu |
 | Organization admin (`org_admin`) | Regular-user coverage plus members, billing, and organization management |
-| Platform user (`platform_admin`) | Organization-admin coverage plus organizations, all users, platform skills, platform tools, voice presets, notifications, phone-number settings, and plan catalog |
+| Platform user (`platform_admin`) | Organization-admin coverage plus organizations, all users, platform skills, platform tools, voice presets, platform settings and API credentials, notifications, phone-number settings, and plan catalog |
 
 The effective role is resolved from the existing permission facade. Platform
 admins inherit organization-admin steps because the dashboard already treats

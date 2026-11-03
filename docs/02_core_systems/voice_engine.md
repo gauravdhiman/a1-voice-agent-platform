@@ -87,12 +87,13 @@ and the `voice_agents.preset_id` FK `ON DELETE SET NULL` drops agents back to th
 current platform default preset row (initially seeded as **System Default** in
 Phase 4). Presets carry **no secrets**.
 
-**Platform and organization profiles (migration `20261030000001`).** Each
-preset has a `credential_source`: `platform` profiles use provider keys from the
-platform environment, while `organization` profiles require credentials stored
-for that organization. The agent's explicit `use_platform_credits` option still
-allows an organization profile to use platform keys. Existing custom profiles
-default to `organization`.
+**Platform and organization profiles (migrations `20261030000001` and
+`20261031000001`).** Each preset has a `credential_source`: `platform` profiles
+use encrypted platform API credentials first and matching environment
+variables as fallback. Organization profiles require keys stored for that
+organization. The agent's explicit `use_platform_credits` option uses platform
+keys for an organization profile. Existing custom profiles default to
+`organization`.
 
 There is one `is_default=true` row, and it must be published and platform
 managed. The migration promotes the existing seeded row. Platform admins can
@@ -106,6 +107,16 @@ other presets. The earlier `GET`/`PUT /api/v1/presets/default` endpoints remain
 for compatibility. The null-selection readiness flag checks the platform
 provider keys required by the selected default and can be false when those keys
 are unavailable; organization credentials do not make a platform profile ready.
+
+Platform admins manage shared **API Credentials** under **Platform settings →
+API Credentials**. The current credential set serves platform-managed voice
+presets: the write-only API stores one Fernet-encrypted key per supported
+provider in `platform_voice_provider_credentials` and returns only configured
+and environment-fallback flags. A saved platform key takes priority for that
+provider. Removing it restores the matching environment variable as fallback.
+An unreadable stored key fails closed instead of silently changing the billing
+credential. Organization-managed profiles continue to use their organization's
+encrypted keys unless the agent explicitly selects platform credits.
 
 The partial unique index `ux_pipeline_presets_is_default` ensures at most one
 default row, and a database CHECK requires that row to be published and use
@@ -132,18 +143,19 @@ classification. Raw provider exceptions remain in runtime logs/telemetry and
 are never persisted in or returned by the call-log API. Migration
 `20260902000001_add_call_failure_details` adds the nullable fields and index.
 
-### `shared/voice_agents/key_resolver.py` — per-org key resolver (Phase 3)
+### `shared/voice_agents/key_resolver.py` — platform and organization key resolver
 
 `resolve_api_keys(speech_config, org, use_platform_credits, credential_source)`
 → the `api_keys` map the factory expects. Realtime resolves the configured
-provider; pipeline resolves each stage. A `platform` profile uses platform env
-keys and ignores org keys. An `organization` profile requires its org's
+provider; pipeline resolves each stage. A `platform` profile checks the
+provider's key in `platform_voice_provider_credentials`, then its environment
+fallback, and ignores org keys. An `organization` profile requires its org's
 Fernet-encrypted `organizations.provider_credentials` keys; the explicit
-`use_platform_credits` option overrides the profile source. Missing keys are
-omitted, and a non-empty unreadable org blob fails closed. Legacy callers that
-do not pass a preset source retain transition behavior. Legacy
-`livekit_inference` stages are normalized to direct providers via
-`normalize_stage_provider()`.
+`use_platform_credits` option overrides the profile source and applies the
+platform-key priority. Missing keys are omitted. Unreadable stored platform or
+organization credentials fail closed. Legacy callers that do not pass a preset
+source retain transition behavior. Legacy `livekit_inference` stages are
+normalized to direct providers via `normalize_stage_provider()`.
 
 ### `voice-ws/src/speech/factory.py` — Pipecat provider factory
 
@@ -166,7 +178,9 @@ presets, or a provider-specific realtime adapter for `engine_mode=realtime`.
 Loads agent, preset, prompt, tools, MCP, and skills; builds the Pipecat pipeline
 or selected realtime session for `/ws` and `/twilio`. Pipeline-only provider
 fallback remains separate; a realtime provider failure is surfaced rather than
-silently switching models.
+silently switching models. For platform presets and agents using platform
+credits, it loads encrypted platform keys once per call before resolving the
+required provider set.
 
 ## Why tools are engine-agnostic
 

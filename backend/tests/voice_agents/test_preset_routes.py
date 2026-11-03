@@ -123,8 +123,9 @@ class TestPresetRoutesAuthz:
 
     @pytest.mark.asyncio
     async def test_update_preset_not_found_returns_404(self):
-        from shared.voice_agents.preset_models import PresetUpdate
         from src.voice_agents.preset_routes import update_preset
+
+        from shared.voice_agents.preset_models import PresetUpdate
 
         with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
             mock_service.update_preset = AsyncMock(
@@ -534,8 +535,9 @@ class TestSetDefaultPresetRoute:
     @pytest.mark.asyncio
     async def test_update_preset_default_row_can_be_edited(self):
         """The currently selected platform default remains a normal preset."""
-        from shared.voice_agents.preset_models import PresetUpdate
         from src.voice_agents.preset_routes import update_preset
+
+        from shared.voice_agents.preset_models import PresetUpdate
 
         with patch("src.voice_agents.preset_routes.preset_service") as mock_service:
             mock_service.update_preset = AsyncMock(
@@ -557,8 +559,9 @@ class TestPresetCatalogRoute:
 
     @pytest.mark.asyncio
     async def test_catalog_returns_readiness_without_config_leak(self):
-        from shared.voice_agents.preset_models import PresetCatalogResponse
         from src.voice_agents.preset_routes import get_preset_catalog
+
+        from shared.voice_agents.preset_models import PresetCatalogResponse
 
         profile = _profile(is_admin=False)
         profile.has_permission = Mock(return_value=True)
@@ -582,7 +585,9 @@ class TestPresetCatalogRoute:
             "src.voice_agents.preset_routes.organization_service"
         ) as mock_org_svc, patch(
             "src.voice_agents.preset_routes.preset_service"
-        ) as mock_preset_svc:
+        ) as mock_preset_svc, patch(
+            "src.voice_agents.preset_routes.platform_voice_provider_credential_service"
+        ) as mock_credential_svc:
             mock_org_svc.get_organization_by_id = AsyncMock(
                 return_value=(mock_org, None)
             )
@@ -593,6 +598,9 @@ class TestPresetCatalogRoute:
                 return_value=(_preset(name="System Default", is_default=True), None)
             )
             mock_preset_svc.build_preset_catalog = Mock(return_value=catalog)
+            mock_credential_svc.get_provider_credentials = AsyncMock(
+                return_value={"google": "platform-google-key"}
+            )
 
             result = await get_preset_catalog(
                 organization_id=self.TEST_ORG_ID,
@@ -605,6 +613,63 @@ class TestPresetCatalogRoute:
         assert result.presets[0].name == "Professional Voice"
         assert result.presets[0].is_ready is False
         assert "config" not in result.presets[0].model_dump()
+        assert mock_preset_svc.build_preset_catalog.call_args.kwargs[
+            "platform_credentials"
+        ] == {"google": "platform-google-key"}
+        mock_credential_svc.get_provider_credentials.assert_awaited_once_with(
+            {"google"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_catalog_skips_platform_key_read_for_org_only_presets(self):
+        """Org-key-only catalogs do not depend on platform credential storage."""
+        from src.voice_agents.preset_routes import get_preset_catalog
+
+        from shared.voice_agents.preset_models import PresetCatalogResponse
+
+        profile = _profile(is_admin=False)
+        profile.has_permission = Mock(return_value=True)
+
+        with patch(
+            "src.voice_agents.preset_routes.organization_service"
+        ) as mock_org_svc, patch(
+            "src.voice_agents.preset_routes.preset_service"
+        ) as mock_preset_svc, patch(
+            "src.voice_agents.preset_routes.platform_voice_provider_credential_service"
+        ) as mock_credential_svc:
+            mock_org_svc.get_organization_by_id = AsyncMock(return_value=(Mock(), None))
+            mock_preset_svc.get_presets = AsyncMock(
+                return_value=(
+                    [_preset(credential_source="organization")],
+                    None,
+                )
+            )
+            mock_preset_svc.get_default_preset = AsyncMock(
+                return_value=(
+                    _preset(is_default=True, credential_source="organization"),
+                    None,
+                )
+            )
+            mock_preset_svc.build_preset_catalog = Mock(
+                return_value=PresetCatalogResponse(
+                    presets=[], default_is_ready=True, credentials_self_service=True
+                )
+            )
+            mock_credential_svc.get_provider_credentials = AsyncMock()
+
+            await get_preset_catalog(
+                organization_id=self.TEST_ORG_ID,
+                use_platform_credits=False,
+                user_data=(TEST_USER_ID, profile),
+            )
+
+        mock_credential_svc.get_provider_credentials.assert_not_awaited()
+        assert (
+            mock_preset_svc.build_preset_catalog.call_args.kwargs[
+                "platform_credentials"
+            ]
+            == {}
+        )
 
     @pytest.mark.asyncio
     async def test_catalog_org_not_found_returns_404(self):

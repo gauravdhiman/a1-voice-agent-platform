@@ -83,10 +83,11 @@ unclear ownership.
    project key remains a separate protected build input because it is a
    browser-visible value and is injected into the frontend build.
 9. **Keep worktree provider settings synchronized.** The full isolated
-   worktree launcher reads non-placeholder voice-provider credentials from the
-   worktree `.env.local` or the main checkout `.env.local`, refreshes them into
-   `.worktree-state/app.env` on every setup, and fails fast when
-   `GEMINI_API_KEY` is not configured.
+   worktree launcher reads non-placeholder voice-provider environment
+   fallbacks from the worktree `.env.local` or the main checkout `.env.local`
+   and refreshes them into `.worktree-state/app.env` on every setup. A missing
+   `GEMINI_API_KEY` does not block startup because platform keys can be set
+   after sign-in under Platform settings → API Credentials.
 
 Deployment helper names that contain `cloud` (for example,
 `gcp-env-from-cloud.py` or `deploy-cloud.yml`) describe the cloud hosting

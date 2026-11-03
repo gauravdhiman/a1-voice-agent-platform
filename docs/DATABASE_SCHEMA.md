@@ -13,6 +13,7 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 - [Billing Tables](#billing-tables)
 - [Plan Versioning & Entitlements Tables](#plan-versioning--entitlements-tables)
 - [Notification Tables](#notification-tables)
+- [Platform Settings Tables](#platform-settings-tables)
 - [Legal Document Tables](#legal-document-tables)
 - [Platform Skills Tables](#platform-skills-tables)
 - [Master Data Seed Tables](#master-data-seed-tables)
@@ -27,7 +28,10 @@ This document provides a comprehensive overview of the AI Voice Agent Platform d
 ## Data API security boundary
 
 Migrations `20261019000001`–`20261019000005` require coordinated backend,
-frontend and voice-ws deployment. All public application tables have RLS enabled;
+frontend and voice-ws deployment. Migration `20261031000001` adds encrypted
+platform voice-provider credentials and requires coordinated backend, frontend,
+and voice-ws code that understands the new table. All public application tables
+have RLS enabled;
 `anon` and `authenticated` have no direct table/sequence access or function
 execution, except authenticated SELECT on `agent_change_events` and execution
 of its tenant-check helper. Backend authorization remains authoritative because
@@ -989,6 +993,37 @@ legacy `voice_agents.phone_number` field or issue a second agent lookup.
 
 Only the service role accesses this singleton. The platform-admin API is
 `GET/PUT /api/v1/phone-numbers/admin/settings`.
+
+---
+
+## Platform Settings Tables
+
+### platform_voice_provider_credentials
+
+One row per platform-managed provider credential (currently used by voice
+presets). Values are Fernet-encrypted by the backend and decrypted only by
+backend readiness checks and the voice-ws runtime. The platform-admin UI/API
+returns configured flags and environment-fallback flags, never key values. A saved platform key takes
+precedence over that provider's environment variable; the environment value is
+used only when no stored key exists.
+
+| Column               | Type        | Constraints                                     | Description                                                                     |
+| -------------------- | ----------- | ----------------------------------------------- | ------------------------------------------------------------------------------- |
+| provider             | VARCHAR(32) | PRIMARY KEY, CHECK allowed voice-provider names | Provider key: google, deepgram, openai, cartesia, cerebras, openrouter, or fish |
+| credential_encrypted | TEXT        | NOT NULL                                        | Fernet-encrypted JSON containing the provider API key                           |
+| updated_by           | UUID        | NULLABLE                                        | Platform admin who last changed the key                                         |
+| created_at           | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                         | Creation timestamp                                                              |
+| updated_at           | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                         | Last update timestamp                                                           |
+
+**Indexes**: The provider primary key is the lookup index; separate provider
+rows make concurrent updates independent.
+
+**RLS**: Enabled; only `service_role` has table privileges and a matching RLS
+policy. Anonymous and authenticated roles have no direct access.
+
+**API**: `GET /api/v1/platform/api-credentials/` returns status only;
+`PUT` and `DELETE /api/v1/platform/api-credentials/{provider}` are
+platform-admin-only write operations. Key input is write-only.
 
 ---
 
@@ -2144,6 +2179,14 @@ erDiagram
         timestamptz updated_at
     }
 
+    platform_voice_provider_credentials {
+        varchar provider
+        text credential_encrypted
+        uuid updated_by
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     credit_transactions {
         uuid id
         uuid organization_id
@@ -2445,6 +2488,7 @@ erDiagram
 108. `20261008000001` - Default `max_agents` to unlimited and publish a new Free plan version with unlimited agent creation.
 109. `20261012000001` - Add legal document versioning: `legal_document_versions` (one draft and one current version per document key, enforced by partial unique indexes), `legal_document_publish_events` publish audit rows, `legal_document_acceptances` per-user acceptance records, and `legal_update_notification_outbox` for publish-time user notification emails. All four tables are service-role only (RLS enabled, no policies).
 110. `20261030000001` - Add `pipeline_presets.credential_source` (`organization` by default), promote the existing default to a published platform preset, constrain defaults to published platform credentials, and create the service-role-only atomic `set_default_pipeline_preset(uuid)` RPC.
+111. `20261031000001` - Add the RLS-protected `platform_voice_provider_credentials` table for per-provider Fernet-encrypted platform voice keys, with access limited to the service role.
 
 ---
 
@@ -2626,6 +2670,7 @@ be verified against the latest source definition before applying changes.
 - `20261019000004`: worker lease metadata, renewal and bounded crash reconciliation.
 - `20261019000005`: unique session claim and atomic organization slot admission.
 - `20261030000001`: add platform/organization preset credential sources, promote the seeded default to a published platform preset, and add atomic service-role-only default selection.
+- `20261031000001`: add encrypted platform voice-provider keys with service-role-only Data API access.
 
 Security/financial downgrades deliberately refuse to reopen access or discard
 pending work. Use an approved forward repair. These revisions do not seed paid
@@ -2781,4 +2826,4 @@ When making schema changes:
 
 ---
 
-**Last Updated**: 2026-10-19
+**Last Updated**: 2026-11-02
