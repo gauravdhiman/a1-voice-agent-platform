@@ -53,6 +53,14 @@ export interface ProviderCredentialRowProps {
   disabled?: boolean;
   /** Whether the row is in add/update edit mode. */
   editing: boolean;
+  /** Whether a matching environment key is available as a fallback. */
+  environmentFallbackConfigured?: boolean;
+  /** Whether this credential is shared at the platform level. */
+  credentialScope?: "organization" | "platform";
+  /** Persist the current write-only key draft when supplied. */
+  onSave?: () => void | Promise<void>;
+  /** True while the current key draft is being saved. */
+  saving?: boolean;
   /** Enter edit mode to set or replace a key. */
   onStartEdit: () => void;
   /** Leave edit mode and discard unsaved draft for this row. */
@@ -85,6 +93,10 @@ export function ProviderCredentialRow({
   removing = false,
   disabled = false,
   editing,
+  environmentFallbackConfigured = false,
+  credentialScope = "organization",
+  onSave,
+  saving = false,
   onStartEdit,
   onCancelEdit,
   pendingChange = false,
@@ -95,8 +107,12 @@ export function ProviderCredentialRow({
   const [removeDialogOpen, setRemoveDialogOpen] = React.useState(false);
 
   const handleConfirmRemove = async () => {
+    try {
     await onRemove();
     setRemoveDialogOpen(false);
+    } catch {
+      // The caller reports the failure and keeps the confirmation open.
+    }
   };
 
   return (
@@ -122,7 +138,10 @@ export function ProviderCredentialRow({
                         className="inline-flex shrink-0 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                         aria-label={`Help for ${label}`}
                       >
-                        <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
+                        <CircleHelp
+                          className="h-3.5 w-3.5"
+                          aria-hidden="true"
+                        />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent
@@ -138,15 +157,19 @@ export function ProviderCredentialRow({
               <Badge
                 variant={configured ? "default" : "secondary"}
                 className={
-                  configured
-                    ? "bg-green-600 hover:bg-green-600/90"
-                    : undefined
+                  configured ? "bg-green-600 hover:bg-green-600/90" : undefined
                 }
               >
                 {configured ? "Configured" : "Not configured"}
               </Badge>
+              {environmentFallbackConfigured ? (
+                <Badge variant="outline">Environment fallback</Badge>
+              ) : null}
               {pendingChange ? (
-                <Badge variant="outline" className="border-amber-500 text-amber-700">
+                <Badge
+                  variant="outline"
+                  className="border-amber-500 text-amber-700"
+                >
                   Unsaved
                 </Badge>
               ) : null}
@@ -154,7 +177,11 @@ export function ProviderCredentialRow({
             <p className="text-xs text-muted-foreground">
               {configured
                 ? "A key is stored securely. Update to replace it or remove to delete it."
-                : "No key stored yet. Add one to enable voice features that need this provider."}
+                : environmentFallbackConfigured
+                  ? credentialScope === "platform"
+                    ? "No platform API credential is stored. The matching environment value will be used as a fallback."
+                    : "No API credential is stored. The matching environment value will be used as a fallback."
+                  : "No API credential is stored yet. Add one to enable integrations that use this provider."}
             </p>
             {setupUrl ? (
               <a
@@ -219,7 +246,7 @@ export function ProviderCredentialRow({
                 type="password"
                 autoComplete="off"
                 value={value}
-                disabled={disabled}
+                disabled={disabled || saving}
                 placeholder={
                   configured
                     ? "Enter a new key to replace the stored one"
@@ -228,27 +255,45 @@ export function ProviderCredentialRow({
                 onChange={(event) => onChange(event.target.value)}
               />
             </div>
+            {onSave ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void onSave()}
+                disabled={disabled || saving || !value.trim()}
+              >
+                {saving ? "Saving..." : "Save API key"}
+              </Button>
+            ) : null}
+            {onDescriptionChange ? (
             <div className="space-y-1.5">
               <Label htmlFor={`provider-desc-${label}`} className="text-xs">
-                Description <span className="font-normal text-muted-foreground">(optional)</span>
+                  Description{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (optional)
+                  </span>
               </Label>
               <Textarea
                 id={`provider-desc-${label}`}
                 value={description}
-                disabled={disabled}
+                  disabled={disabled || saving}
                 maxLength={1000}
                 placeholder="Add a private reference note, such as the project or environment this key belongs to."
                 className="min-h-20 resize-y"
-                onChange={(event) => onDescriptionChange?.(event.target.value)}
+                  onChange={(event) => onDescriptionChange(event.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                This note is for your team&apos;s reference and is not sent to the provider.
+                  This note is for your team&apos;s reference and is not sent to
+                  the provider.
               </p>
             </div>
+            ) : null}
+            {onSave ? null : (
             <p className="text-xs text-muted-foreground">
-              Click <span className="font-medium">Save changes</span> below when
-              you are ready to apply this update.
+                Click <span className="font-medium">Save changes</span> below
+                when you are ready to apply this update.
             </p>
+            )}
           </div>
         ) : configured ? (
           <>
@@ -260,14 +305,20 @@ export function ProviderCredentialRow({
             </div>
             {description.trim() ? (
               <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2">
-                <p className="text-xs font-medium text-muted-foreground">Description</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm">{description}</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Description
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-sm">
+                  {description}
+                </p>
               </div>
             ) : null}
           </>
         ) : description.trim() ? (
           <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2">
-            <p className="text-xs font-medium text-muted-foreground">Description</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              Description
+            </p>
             <p className="mt-1 whitespace-pre-wrap text-sm">{description}</p>
           </div>
         ) : null}
@@ -278,8 +329,13 @@ export function ProviderCredentialRow({
           <DialogHeader>
             <DialogTitle>Remove {label} API key?</DialogTitle>
             <DialogDescription>
-              This deletes the stored key for {label}. Voice features that rely
-              on this provider may stop working until you add a new key.
+              {environmentFallbackConfigured
+                ? `This removes the platform API credential for ${label}. The matching environment value will then be used as a fallback.`
+                : `${
+                    credentialScope === "platform"
+                      ? "This removes the platform API credential"
+                      : "This removes the API credential"
+                  } for ${label}. Integrations that use this provider may stop working until you add a new credential.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">

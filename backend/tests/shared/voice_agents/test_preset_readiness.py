@@ -93,6 +93,22 @@ class TestIsPresetReady:
         clean_env.setenv("GEMINI_API_KEY", "platform-g")
         assert is_preset_ready(_realtime(), org, credential_source="platform") is True
 
+    def test_platform_preset_readiness_uses_database_key_before_env(
+        self, patch_decrypt, clean_env
+    ):
+        org, creds = _org({})
+        patch_decrypt.return_value = creds
+
+        assert (
+            is_preset_ready(
+                _realtime(),
+                org,
+                credential_source="platform",
+                platform_credentials={"google": "database-g"},
+            )
+            is True
+        )
+
     def test_organization_preset_readiness_requires_org_keys(
         self, patch_decrypt, clean_env
     ):

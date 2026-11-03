@@ -49,9 +49,10 @@ The launcher does the following:
 - resolve provider settings from the explicit `--source-env`, the worktree's
   `.env.local`, the main checkout's `.env.local`, or the example file; prefer a
   source with a usable `GEMINI_API_KEY`, refresh non-placeholder voice-provider
-  credentials on every setup, and repair stale Gemini values;
-- require a configured `GEMINI_API_KEY` before `up` so a placeholder cannot
-  leave voice-ws running but unable to answer calls;
+  environment fallbacks on every setup, and repair stale Gemini values;
+- allow the stack to start without provider environment keys so platform admins
+  can configure encrypted keys in Platform settings; voice calls remain
+  unavailable for any provider with neither a stored key nor fallback;
 - generate and persist a unique URL-safe base64 Fernet `ENCRYPTION_KEY` for
   each new worktree (a valid existing key is preserved across restarts); this
   key protects organization provider credentials in that worktree's database;
@@ -118,14 +119,14 @@ after a successful `up`; the password is not persisted in the metadata file. Ins
 the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started)
 and Docker before using the launcher.
 
-Voice provider credentials are read from the canonical local environment file.
-For a worktree checkout, the launcher first checks that worktree's `.env.local`,
-then the main repository checkout's `.env.local`, and only uses
-`.env.local.example` as a placeholder fallback. If no valid `GEMINI_API_KEY` is
-available, `up` stops with an actionable error; use `--source-env PATH` when a
-different private environment file should be used. The generated `app.env` is
-refreshed on each `config` or `up`, so adding or rotating the key after the
-first setup is picked up automatically.
+Voice provider environment fallbacks are read from the canonical local
+environment file. For a worktree checkout, the launcher first checks that
+worktree's `.env.local`, then the main repository checkout's `.env.local`, and
+only uses `.env.local.example` as a placeholder fallback. A missing
+`GEMINI_API_KEY` does not block `up`; configure platform-managed keys under
+Platform settings → API Credentials before making calls that need them. Use
+`--source-env PATH` when a different private environment file should supply
+fallbacks. The generated `app.env` is refreshed on each `config` or `up`.
 
 The default seed creates a neutral `24x7 AI Demo Studio` organization in
 `America/Phoenix` with three active demos: Pleasant Pediatric dental

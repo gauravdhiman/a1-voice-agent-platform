@@ -1,4 +1,4 @@
-"""Tests for the per-org provider key resolver (Phase 3).
+"""Tests for organization and platform provider-key resolution.
 
 The resolver is pure-Python: it pairs a ``SpeechConfig`` with an organization's
 encrypted ``provider_credentials`` blob and the platform env vars to produce the
@@ -148,6 +148,57 @@ class TestKeyResolver:
             use_platform_credits=True,
             credential_source="organization",
         ) == {"google": "plat-gemini"}
+
+    def test_platform_database_key_precedes_environment_fallback(
+        self, patch_decrypt, clean_env
+    ):
+        """Stored platform credentials take priority over environment keys."""
+        clean_env.setenv("GEMINI_API_KEY", "env-gemini")
+
+        assert resolve_api_keys(
+            _realtime(),
+            org=None,
+            credential_source="platform",
+            platform_credentials={"google": "database-gemini"},
+        ) == {"google": "database-gemini"}
+
+    def test_platform_provider_missing_from_database_uses_environment(
+        self, patch_decrypt, clean_env
+    ):
+        """Environment fallback remains available for unconfigured providers."""
+        clean_env.setenv("GEMINI_API_KEY", "env-gemini")
+
+        assert resolve_api_keys(
+            _realtime(),
+            org=None,
+            credential_source="platform",
+            platform_credentials={},
+        ) == {"google": "env-gemini"}
+
+    def test_org_preset_ignores_platform_database_keys_without_platform_billing(
+        self, patch_decrypt, clean_env
+    ):
+        """Platform keys are used for org presets only with platform billing."""
+        clean_env.setenv("GEMINI_API_KEY", "env-gemini")
+        org, creds = _org({})
+        patch_decrypt.return_value = creds
+
+        assert (
+            resolve_api_keys(
+                _realtime(),
+                org=org,
+                credential_source="organization",
+                platform_credentials={"google": "database-gemini"},
+            )
+            == {}
+        )
+        assert resolve_api_keys(
+            _realtime(),
+            org=org,
+            use_platform_credits=True,
+            credential_source="organization",
+            platform_credentials={"google": "database-gemini"},
+        ) == {"google": "database-gemini"}
 
     def test_pipeline_direct_resolves_all_stages(self, patch_decrypt, clean_env):
         """An all-direct pipeline resolves each stage provider from env."""

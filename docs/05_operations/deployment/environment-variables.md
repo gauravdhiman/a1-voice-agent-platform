@@ -82,7 +82,7 @@ flow, rotation, and the staged organization-credential migration.
 | `SUPABASE_SERVICE_KEY`                               | Supabase service_role key                                                                                    | **Yes**                               |
 | `SUPABASE_ANON_KEY`                                  | Supabase anon key                                                                                            | **Yes**                               |
 | `DATABASE_URL`                                       | PostgreSQL connection string (Alembic)                                                                       | **Yes**                               |
-| `ENCRYPTION_KEY`                                     | Current Fernet key for organization provider credentials and OAuth token encryption                          | **Yes**                               |
+| `ENCRYPTION_KEY` | Current Fernet key for organization/platform provider credentials and OAuth token encryption | **Yes** |
 | `ENCRYPTION_KEY_FALLBACKS`                           | Optional comma-separated previous Fernet keys during controlled rotation                                     | **Yes**                               |
 | `TINYFISH_API_KEY`                                    | Optional TinyFish Fetch API key for user-initiated website business-context drafts                            | **Yes**                               |
 | `GEMINI_API_KEY`                                      | Optional Gemini key used to prepare website business-context drafts                                          | **Yes**                               |
@@ -183,7 +183,7 @@ worktree launcher enables its private local collector when needed.
 | `JWT_SECRET_KEY`                                                | Must match backend                                                                                                             | **Yes** |
 | `ENCRYPTION_KEY`                                                | Same current Fernet key as backend; required to decrypt organization credentials and OAuth connections                         | **Yes** |
 | `ENCRYPTION_KEY_FALLBACKS`                                      | Same optional key-rotation fallbacks as backend                                                                                | **Yes** |
-| `GEMINI_API_KEY`                                                | Gemini realtime fallback                                                                                                       | **Yes** |
+| `GEMINI_API_KEY` | Google voice API credential environment fallback when no platform credential is stored | **Yes** |
 | `DEEPGRAM_API_KEY`                                              | STT pipeline fallback                                                                                                          | **Yes** |
 | `OPENAI_API_KEY`                                                | LLM pipeline fallback                                                                                                          | **Yes** |
 | `CARTESIA_API_KEY`                                              | TTS pipeline fallback                                                                                                          | **Yes** |

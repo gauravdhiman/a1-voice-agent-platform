@@ -15,7 +15,11 @@ from src.tools.assembly import AssembledTools, assemble_agent_tools
 from shared.organization.service import BaseOrganizationService
 from shared.organization.timezone import resolve_organization_timezone
 from shared.voice_agents.default_voice_rules import DEFAULT_VOICE_SYSTEM_PROMPT
-from shared.voice_agents.key_resolver import resolve_api_keys
+from shared.voice_agents.key_resolver import required_provider_keys, resolve_api_keys
+from shared.voice_agents.platform_credentials import (
+    PlatformVoiceCredentialError,
+    platform_voice_provider_credential_service,
+)
 from shared.voice_agents.prompt_builder import (
     GENERIC_SYSTEM_GUARDRAILS,
     PromptBuilder,
@@ -93,11 +97,27 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
     speech_config, credential_source = await resolve_speech_profile_for_agent(
         agent, agent.id
     )
+    use_platform_credits = bool(getattr(agent, "use_platform_credits", False))
+    platform_credentials = None
+    if credential_source == "platform" or use_platform_credits:
+        needed_platform_providers = required_provider_keys(speech_config)
+        if needed_platform_providers:
+            try:
+                platform_credentials = await (
+                    platform_voice_provider_credential_service.get_provider_credentials(
+                        needed_platform_providers
+                    )
+                )
+            except PlatformVoiceCredentialError:
+                raise ValueError(
+                    "Platform voice-provider credentials are unavailable"
+                ) from None
     api_keys = resolve_api_keys(
         speech_config,
         org=org,
-        use_platform_credits=bool(getattr(agent, "use_platform_credits", False)),
+        use_platform_credits=use_platform_credits,
         credential_source=credential_source,
+        platform_credentials=platform_credentials,
     )
     current_datetime = build_current_datetime_section(session_timezone)
     instructions = (
@@ -153,6 +173,7 @@ async def prepare_voice_session(claims: VoiceSessionClaims) -> VoiceSessionBundl
                     getattr(agent, "use_platform_credits", False)
                 ),
                 credential_source=credential_source,
+                platform_credentials=platform_credentials,
             )
             speech = build_speech_components(
                 speech_config,

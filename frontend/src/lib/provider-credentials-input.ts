@@ -17,6 +17,19 @@ export const SIMPLE_PROVIDER_KEYS = [
 
 export type SimpleProviderKey = (typeof SIMPLE_PROVIDER_KEYS)[number];
 
+/** Providers used by the platform-managed voice runtime (excluding Resend). */
+export const VOICE_PROVIDER_KEYS = [
+  "google",
+  "deepgram",
+  "openai",
+  "cartesia",
+  "cerebras",
+  "openrouter",
+  "fish",
+] as const;
+
+export type VoiceProviderKey = (typeof VOICE_PROVIDER_KEYS)[number];
+
 export interface ProviderCredentialDefinition {
   label: string;
   setupUrl: string;
@@ -49,14 +62,12 @@ export const PROVIDER_DEFINITIONS: Record<
   cartesia: {
     label: "Cartesia",
     setupUrl: "https://play.cartesia.ai/",
-    helpText:
-      "A Cartesia API key for Cartesia text-to-speech voices.",
+    helpText: "A Cartesia API key for Cartesia text-to-speech voices.",
   },
   cerebras: {
     label: "Cerebras",
     setupUrl: "https://cloud.cerebras.ai/platform",
-    helpText:
-      "A Cerebras API key for Cerebras language models.",
+    helpText: "A Cerebras API key for Cerebras language models.",
   },
   openrouter: {
     label: "OpenRouter",
@@ -67,14 +78,12 @@ export const PROVIDER_DEFINITIONS: Record<
   fish: {
     label: "Fish Audio",
     setupUrl: "https://fish.audio/go-api/",
-    helpText:
-      "A Fish Audio API key for Fish Audio text-to-speech voices.",
+    helpText: "A Fish Audio API key for Fish Audio text-to-speech voices.",
   },
   resend: {
     label: "Resend",
     setupUrl: "https://resend.com/api-keys",
-    helpText:
-      "A Resend API key for organization email delivery tools.",
+    helpText: "A Resend API key for organization email delivery tools.",
   },
 };
 
@@ -137,8 +146,12 @@ export function countPendingProviderCredentialChanges(
   touched: Record<string, boolean>,
   additionalTouched: Record<string, boolean> = {},
 ): number {
-  const keys = new Set([...Object.keys(touched), ...Object.keys(additionalTouched)]);
-  return [...keys].filter((key) => touched[key] || additionalTouched[key]).length;
+  const keys = new Set([
+    ...Object.keys(touched),
+    ...Object.keys(additionalTouched),
+  ]);
+  return [...keys].filter((key) => touched[key] || additionalTouched[key])
+    .length;
 }
 
 /**

@@ -197,8 +197,9 @@ web3 = 30
 # secret = ""
 
 [auth.email]
-# Keep direct email signup closed; invited users are created by the backend.
-enable_signup = false
+# Keep email/password sign-in enabled for existing users. The global
+# auth.enable_signup setting above keeps direct account creation closed.
+enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true

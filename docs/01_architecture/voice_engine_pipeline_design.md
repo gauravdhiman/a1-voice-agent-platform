@@ -70,7 +70,7 @@ supports **both** modes by construction:
 - End-to-end (today): `AgentSession(llm=RealtimeModel(...))`
 - Pipeline (new): `AgentSession(stt=..., llm=..., tts=..., vad=..., turn_detection=...)`
 
-**Recommendation: use LiveKit's native pipeline mode**, *not* a port of the HF queue
+**Recommendation: use LiveKit's native pipeline mode**, _not_ a port of the HF queue
 plumbing. This reuses 100% of our existing infrastructure (JobContext, `room_io`,
 PromptBuilder, two-tier tools + MCP, room-name dispatch, greeting, API-key routing) and
 keeps a single asyncio runtime. From the HF repo we borrow the **provider-factory
@@ -95,7 +95,7 @@ flowchart LR
 
 Everything upstream (room dispatch, agent fetch, prompt build, tool/MCP wiring,
 API-key resolution) and downstream (room join, greeting, cleanup) is **shared and
-unchanged**. The *only* divergence is **how the `AgentSession` is constructed**.
+unchanged**. The _only_ divergence is **how the `AgentSession` is constructed**.
 
 ```mermaid
 flowchart TD
@@ -266,14 +266,15 @@ org blob cannot be authenticated, resolution fails closed rather than charging
 the platform account.
 
 LiveKit **Inference** is the one special case: a single voice-ws (Pipecat) auth
-(`api_key` + `api_secret`) authenticates *all* Inference stages in a pipeline, so
+(`api_key` + `api_secret`) authenticates _all_ Inference stages in a pipeline, so
 the resolver injects it under a dedicated `livekit` entry (a nested
 `{api_key, api_secret}` dict) **only when the preset's config actually contains a
 stage with `provider == "livekit_inference"`** — not one key per Inference stage.
 Rationale: the platform's LiveKit plan limits won't scale to all tenants' calls,
 so a tenant can bring its own LiveKit key for **Inference only**; a future path
 migrates LiveKit rooms/sessions to tenant keys. Direct providers
-(Deepgram/OpenAI/Cartesia/Cerebras) each keep their own per-org / platform key.
+(Deepgram/OpenAI/Cartesia/Cerebras) each keep their own per-org key or shared
+platform key.
 The registry's `_build_livekit_inference_stage` reads `api_keys["livekit"]` and
 passes `api_key`/`api_secret` to the Inference builders (falling back to env when
 both are `None`).
@@ -282,7 +283,8 @@ both are `None`).
 flowchart TD
     Agent["VoiceAgent.preset_id -> preset.config (SpeechConfig)"] --> Resolver["key_resolver.resolve_api_keys(speech_config, org, use_platform_credits)"]
     Blob["organizations.provider_credentials (encrypted TEXT)"] -->|decrypt_data| Resolver
-    Plat["platform env: GEMINI/OPENAI/DEEPGRAM/CARTESIA/CEREBRAS_API_KEY, /SECRET"] --> Resolver
+    PlatformDB["platform_voice_provider_credentials (encrypted per-provider keys)"] -->|decrypt_data| Resolver
+    Env["provider environment variables (fallback only)"] --> Resolver
     Credits["agent.use_platform_credits"] --> Resolver
     Resolver --> Map["{google|openai|deepgram|cartesia|cerebras: str, livekit: {api_key, api_secret} (only when an Inference stage is used)}"]
     Map --> Factories["registry.build_session_components (inference stages read livekit; direct stages read their own)"]
@@ -507,8 +509,9 @@ flowchart TD
   - **Multiple platform profiles (migration `20261030000001`).** The original
     single seeded row is now a published platform-managed profile. Presets
     declare `credential_source=platform|organization`: platform profiles use
-    platform provider keys, while organization profiles require org keys unless
-    the agent explicitly selects platform credits. Platform admins can publish
+    encrypted keys managed under Platform settings → API Credentials, then
+    provider environment fallbacks; organization profiles require org keys
+    unless the agent explicitly selects platform credits. Platform admins can publish
     additional platform profiles and select a default with
     `POST /api/v1/presets/{id}/default`. A service-role-only transactional RPC
     serializes changes; database constraints require the one default to remain

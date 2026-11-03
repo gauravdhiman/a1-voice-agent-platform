@@ -43,6 +43,7 @@ from src.voice_agents import (
     embed_router,
     organization_tool_router,
     platform_skill_router,
+    platform_voice_credential_router,
     preset_router,
     skill_router,
     tool_router,
@@ -173,6 +174,7 @@ def create_app() -> FastAPI:
     # Include skill routes (org-level + platform admin)
     app.include_router(skill_router)
     app.include_router(platform_skill_router)
+    app.include_router(platform_voice_credential_router)
 
     # Include voice-engine preset routes (platform admin CRUD + published listing)
     app.include_router(preset_router)

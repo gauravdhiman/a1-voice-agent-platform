@@ -23,19 +23,25 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from opentelemetry import trace
-
-from shared.voice_agents.preset_models import (
-    Preset,
-    PresetCatalogResponse,
-    PresetCreate,
-    PresetType,
-    PresetUpdate,
-)
-from shared.voice_agents.preset_service import preset_service
 from src.auth.dependencies import assert_platform_role
 from src.auth.middleware import get_authenticated_user
 from src.auth.models import UserProfile
 from src.organization.service import organization_service
+
+from shared.voice_agents.key_resolver import required_provider_keys
+from shared.voice_agents.platform_credentials import (
+    PlatformVoiceCredentialError,
+    platform_voice_provider_credential_service,
+)
+from shared.voice_agents.preset_models import (
+    Preset,
+    PresetCatalogResponse,
+    PresetCreate,
+    PresetCredentialSource,
+    PresetType,
+    PresetUpdate,
+)
+from shared.voice_agents.preset_service import preset_service
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -158,8 +164,8 @@ async def get_preset_catalog(
     use_platform_credits: bool = Query(
         False,
         description=(
-            "When true, readiness ignores org credentials and checks platform "
-            "env fallback only (mirrors the per-agent billing toggle)."
+            "When true, readiness ignores org credentials and checks stored "
+            "platform keys before platform environment fallbacks."
         ),
     ),
     user_data: tuple[UUID, UserProfile] = Depends(get_authenticated_user),
@@ -202,12 +208,40 @@ async def get_preset_catalog(
         "organization:update", str(organization_id)
     ) or user_profile.has_role("platform_admin")
 
+    platform_provider_names: set[str] = set()
+    for preset in presets or []:
+        if (
+            use_platform_credits
+            or preset.credential_source == PresetCredentialSource.PLATFORM
+        ):
+            platform_provider_names.update(required_provider_keys(preset.config))
+    if default_preset and (
+        use_platform_credits
+        or default_preset.credential_source == PresetCredentialSource.PLATFORM
+    ):
+        platform_provider_names.update(required_provider_keys(default_preset.config))
+
+    platform_credentials = {}
+    if platform_provider_names:
+        try:
+            platform_credentials = await (
+                platform_voice_provider_credential_service.get_provider_credentials(
+                    platform_provider_names
+                )
+            )
+        except PlatformVoiceCredentialError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Voice preset readiness is temporarily unavailable",
+            ) from None
+
     return preset_service.build_preset_catalog(
         presets or [],
         default_preset,
         org,
         use_platform_credits=use_platform_credits,
         credentials_self_service=credentials_self_service,
+        platform_credentials=platform_credentials,
     )
 
 
