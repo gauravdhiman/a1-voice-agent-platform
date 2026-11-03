@@ -7,6 +7,7 @@ import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { useOrganizationById } from "@/hooks/use-organization-by-id";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { OrganizationEditDialog } from "@/components/organizations/organization-edit-dialog";
+import { WebsiteBusinessContextGenerator } from "@/components/organizations/website-business-context-generator";
 import { ProviderCredentialsCard } from "@/components/organizations/provider-credentials-card";
 import { PublicPageSettingsCard } from "@/components/organizations/public-page-settings-card";
 import { OrganizationNotificationSettingsForm } from "@/components/notifications/organization-notification-settings-form";
@@ -915,9 +916,26 @@ export default function OrganizationPage() {
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="business_details">
-                              Business Context
-                            </Label>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <Label htmlFor="business_details">
+                                Business Context
+                              </Label>
+                              {orgId && editedOrg && (
+                                <WebsiteBusinessContextGenerator
+                                  organizationId={orgId}
+                                  website={editedOrg.website}
+                                  businessContext={editedOrg.business_details}
+                                  onBusinessContextChange={(business_details) =>
+                                    setEditedOrg((current) =>
+                                      current
+                                        ? { ...current, business_details }
+                                        : current,
+                                    )
+                                  }
+                                  disabled={saving}
+                                />
+                              )}
+                            </div>
                             <Textarea
                               id="business_details"
                               value={editedOrg?.business_details || ""}

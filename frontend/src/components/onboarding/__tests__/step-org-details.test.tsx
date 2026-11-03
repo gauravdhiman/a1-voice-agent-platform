@@ -29,6 +29,7 @@ describe("StepOrgDetails", () => {
     const onNext = vi.fn();
     render(
       <StepOrgDetails
+        organizationId="org-1"
         state={baseState()}
         onChange={vi.fn()}
         onNext={onNext}
@@ -43,6 +44,7 @@ describe("StepOrgDetails", () => {
     const onNext = vi.fn();
     render(
       <StepOrgDetails
+        organizationId="org-1"
         state={baseState({
           businessName: "Acme Plumbing",
           slug: "acme-plumbing",
@@ -65,6 +67,7 @@ describe("StepOrgDetails", () => {
   it("shows a custom industry field when Other is selected", () => {
     render(
       <StepOrgDetails
+        organizationId="org-1"
         state={baseState({
           businessName: "Acme",
           slug: "acme",

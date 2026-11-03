@@ -25,8 +25,10 @@ import {
   ORGANIZATION_TIMEZONE_OPTIONS,
   ORGANIZATION_TIMEZONE_UNSET,
 } from "@/lib/organization-timezones";
+import { WebsiteBusinessContextGenerator } from "@/components/organizations/website-business-context-generator";
 
 export interface StepOrgDetailsProps {
+  organizationId: string;
   state: OnboardingWizardState;
   onChange: (update: Partial<OnboardingWizardState>) => void;
   onNext: () => void;
@@ -40,6 +42,7 @@ export interface StepOrgDetailsProps {
  * description. Continue stays disabled until required fields are valid.
  */
 export function StepOrgDetails({
+  organizationId,
   state,
   onChange,
   onNext,
@@ -193,9 +196,20 @@ export function StepOrgDetails({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Brief business description
-          </label>
+          <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <label className="block text-sm font-medium text-gray-700">
+              Brief business description
+            </label>
+            <WebsiteBusinessContextGenerator
+              organizationId={organizationId}
+              website={state.website}
+              businessContext={state.businessDescription}
+              onBusinessContextChange={(businessDescription) =>
+                onChange({ businessDescription })
+              }
+              disabled={saving}
+            />
+          </div>
           <Textarea
             placeholder="Describe your services, hours, and anything the AI should know about your business..."
             value={state.businessDescription}

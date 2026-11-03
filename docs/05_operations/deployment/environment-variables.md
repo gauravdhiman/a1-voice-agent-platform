@@ -84,6 +84,8 @@ flow, rotation, and the staged organization-credential migration.
 | `DATABASE_URL`                                       | PostgreSQL connection string (Alembic)                                                                       | **Yes**                               |
 | `ENCRYPTION_KEY`                                     | Current Fernet key for organization provider credentials and OAuth token encryption                          | **Yes**                               |
 | `ENCRYPTION_KEY_FALLBACKS`                           | Optional comma-separated previous Fernet keys during controlled rotation                                     | **Yes**                               |
+| `TINYFISH_API_KEY`                                    | Optional TinyFish Fetch API key for user-initiated website business-context drafts                            | **Yes**                               |
+| `GEMINI_API_KEY`                                      | Optional Gemini key used to prepare website business-context drafts                                          | **Yes**                               |
 | `STRIPE_SECRET_KEY`                                  | Stripe secret key                                                                                            | **Yes**                               |
 | `STRIPE_WEBHOOK_SECRET`                              | Stripe webhook signing secret                                                                                | **Yes**                               |
 | `STRIPE_MODE`                                        | Explicit Stripe account mode: `test` for soft production/staging or `live` for real production              | No                                    |

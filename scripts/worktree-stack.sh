@@ -257,6 +257,7 @@ sync_voice_provider_settings() {
   local key value
   for key in \
     GEMINI_API_KEY \
+    TINYFISH_API_KEY \
     DEEPGRAM_API_KEY \
     OPENAI_API_KEY \
     CARTESIA_API_KEY \
