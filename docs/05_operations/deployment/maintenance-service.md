@@ -101,6 +101,10 @@ Treat the ping URL as a secret. Test the alert by pausing a staging scheduler;
 test separately that an unhealthy job prevents a success signal. This monitors
 maintenance, not the public website or voice service: use separate external
 uptime checks for those endpoints and exercise real calls in release testing.
+Production Google Cloud uptime checks for the backend and website run every
+five minutes from three US regions. This reduces monitoring requests and idle
+wake-ups compared with one-minute checks, at the cost of slower outage detection.
+Review alert timing when changing the check period.
 
 ## Prepared Google Cloud deployment
 
