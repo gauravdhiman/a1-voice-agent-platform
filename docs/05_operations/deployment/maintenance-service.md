@@ -92,6 +92,11 @@ exposing the organization ID. A configured `MAINTENANCE_HEARTBEAT_URL` sends
 an HTTPS POST only after a tick and the persisted status are healthy. Configure
 an independent dead-man monitor, such as Healthchecks.io, with a one-minute
 period, a reviewed grace period (start with 20 minutes), and email alerts.
+Grafana Cloud IRM's webhook heartbeat is another compatible option; configure
+an escalation chain and the recipient's notification rules, not just the
+heartbeat interval. The currently configured production check uses a 30-minute
+interval and an email escalation to the account owner. Verify the recipient and
+delivery whenever changing the integration.
 Treat the ping URL as a secret. Test the alert by pausing a staging scheduler;
 test separately that an unhealthy job prevents a success signal. This monitors
 maintenance, not the public website or voice service: use separate external
@@ -144,9 +149,14 @@ both together with a controlled transition. The worker, scheduler, IAM grants,
 secret versions, independent check, and alert recipient all require actual
 provisioning and verification; these scripts do not create accounts or grant
 permissions. The Cloud Run service limit bounds instances, not monthly spending.
-Configure a Google spend-cap budget if the project is eligible, and understand
-that enforcement can stop the site and that other providers are outside the cap.
-Ordinary Google budget alerts are not a spending cap.
+The current production project has a $5 monthly Cloud Run spend cap and
+automatic Google alerts at 50%, 80%, and 100%. Google bases enforcement on
+estimated gross usage before credits and free-tier savings, so the cap can pause
+the site even when the eventual bill is below $5 or zero. Enforcement is delayed
+and may overshoot; it covers only Cloud Run in this project, not other Google
+services or other providers. Ordinary budget alerts are not a spending cap.
+Review the threshold after observing the new configuration's usage, balancing
+the user's cost preference with availability.
 
 To recover a held claim, first identify the exact job and claim from the
 service-role-only `maintenance_runs` table. Verify the old worker is stopped,
