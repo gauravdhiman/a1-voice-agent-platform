@@ -102,8 +102,11 @@ test separately that an unhealthy job prevents a success signal. This monitors
 maintenance, not the public website or voice service: use separate external
 uptime checks for those endpoints and exercise real calls in release testing.
 Production Google Cloud uptime checks for the backend and website run every
-five minutes from three US regions. This reduces monitoring requests and idle
-wake-ups compared with one-minute checks, at the cost of slower outage detection.
+15 minutes from three US regions. Each region checks independently, so each
+endpoint receives at least 12 checks per hour. This reduces monitoring requests
+at the cost of slower outage detection; it does not guarantee that instances
+stay warm or scale to zero. The public availability alert aligns each check's
+results over 20 minutes and triggers after two regions fail for one minute.
 Review alert timing when changing the check period.
 
 ## Prepared Google Cloud deployment
