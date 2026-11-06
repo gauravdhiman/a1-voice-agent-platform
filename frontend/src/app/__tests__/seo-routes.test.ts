@@ -126,6 +126,11 @@ describe("public SEO routes", () => {
         changeFrequency: "monthly",
         priority: 0.6,
       },
+      {
+        url: `${SITE_URL}/blog/ai-receptionist-for-hvac`,
+        changeFrequency: "monthly",
+        priority: 0.6,
+      },
       { url: `${SITE_URL}/ai-tools`, changeFrequency: "weekly", priority: 0.7 },
       {
         url: `${SITE_URL}/ai-tools/savings-calculator`,

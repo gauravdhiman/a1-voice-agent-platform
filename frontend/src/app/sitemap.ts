@@ -122,6 +122,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.6,
     },
+    {
+      path: "/blog/ai-receptionist-for-hvac",
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
     ...aiToolsPages,
   ];
   return pages.map((page) => ({
