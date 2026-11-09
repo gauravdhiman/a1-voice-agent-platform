@@ -127,6 +127,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.6,
     },
+    {
+      path: "/blog/ai-phone-answering-for-restaurants",
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
     ...aiToolsPages,
   ];
   return pages.map((page) => ({
