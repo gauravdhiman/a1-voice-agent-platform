@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img">
+  <rect x="0" y="0" width="1200" height="630" fill="#0f172a"/>
+  <text x="60" y="70" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="34" font-weight="700" fill="#f1f5f9">What people say they would do if connected to AI</text>
+  <text x="60" y="108" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="20" fill="#94a3b8">AnswerConnect / OnePoll, May 2026, 6,000 adults in the US, UK, and Canada</text>
+
+  <rect x="60" y="200" width="335" height="72" fill="#f87171"/>
+  <rect x="395" y="200" width="410" height="72" fill="#fbbf24"/>
+  <rect x="805" y="200" width="335" height="72" fill="#34d399"/>
+  <text x="227" y="246" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="30" font-weight="700" fill="#1e293b" text-anchor="middle">31%</text>
+  <text x="600" y="246" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="30" font-weight="700" fill="#1e293b" text-anchor="middle">38%</text>
+  <text x="972" y="246" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="30" font-weight="700" fill="#1e293b" text-anchor="middle">31%</text>
+
+  <text x="227" y="330" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" font-weight="600" fill="#e2e8f0" text-anchor="middle">Would hang up</text>
+  <text x="600" y="330" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" font-weight="600" fill="#e2e8f0" text-anchor="middle">It depends</text>
+  <text x="972" y="330" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" font-weight="600" fill="#e2e8f0" text-anchor="middle">Would continue</text>
+
+  <text x="60" y="440" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" fill="#94a3b8">Only a third say they would hang up, and another third say it depends.</text>
+  <text x="60" y="478" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" fill="#94a3b8">That is stated intent, not observed behavior: in Metrigy's Q3 2026</text>
+  <text x="60" y="516" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" fill="#94a3b8">study of 1,000 US adults, only 9% said they would hang up.</text>
+  <text x="60" y="574" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="19" fill="#64748b">Note: survey commissioned by AnswerConnect, a human answering-service provider.</text>
+</svg>

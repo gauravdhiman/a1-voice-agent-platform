@@ -31,6 +31,7 @@ describe("sitemap", () => {
       `${SITE_URL}/blog/ai-receptionist-for-dental-offices`,
       `${SITE_URL}/blog/ai-receptionist-for-hvac`,
       `${SITE_URL}/blog/ai-phone-answering-for-restaurants`,
+      `${SITE_URL}/blog/do-customers-hang-up-on-ai`,
       `${SITE_URL}/ai-tools`,
       `${SITE_URL}/ai-tools/savings-calculator`,
       ...TOOL_CATEGORIES.map(
