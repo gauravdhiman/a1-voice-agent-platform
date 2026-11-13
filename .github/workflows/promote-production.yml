@@ -201,10 +201,39 @@ jobs:
       - name: Install GCP deployment migration dependencies
         run: python -m pip install --disable-pip-version-check --no-cache-dir -r scripts/deploy/requirements-migrations.txt
 
+      - name: Pause maintenance scheduler before deploy
+        run: |
+          job_name="$(python3 scripts/deploy/read-env-cloud.py .env.prod GCP_MAINTENANCE_SCHEDULER_JOB 2>/dev/null || true)"
+          job_name="${job_name:-maintenance-tick}"
+          scheduler_region="$(python3 scripts/deploy/read-env-cloud.py .env.prod GCP_SCHEDULER_REGION 2>/dev/null || true)"
+          scheduler_region="${scheduler_region:-$GCP_REGION}"
+          state="$(gcloud scheduler jobs describe "$job_name" --project="$GCP_PROJECT_ID" --location="$scheduler_region" --format='value(state)')"
+          if [[ "$state" != "PAUSED" ]]; then
+            echo "Pausing Cloud Scheduler job $job_name in $scheduler_region (state: $state)"
+            gcloud scheduler jobs pause "$job_name" --project="$GCP_PROJECT_ID" --location="$scheduler_region"
+          else
+            echo "Cloud Scheduler job $job_name already paused"
+          fi
+
       - name: Deploy backend and frontend to production Cloud Run
         run: |
           chmod +x scripts/deploy.sh
           ./scripts/deploy.sh gcp --env-file .env.prod
+
+      - name: Resume maintenance scheduler after deploy
+        if: always()
+        run: |
+          job_name="$(python3 scripts/deploy/read-env-cloud.py .env.prod GCP_MAINTENANCE_SCHEDULER_JOB 2>/dev/null || true)"
+          job_name="${job_name:-maintenance-tick}"
+          scheduler_region="$(python3 scripts/deploy/read-env-cloud.py .env.prod GCP_SCHEDULER_REGION 2>/dev/null || true)"
+          scheduler_region="${scheduler_region:-$GCP_REGION}"
+          state="$(gcloud scheduler jobs describe "$job_name" --project="$GCP_PROJECT_ID" --location="$scheduler_region" --format='value(state)')"
+          if [[ "$state" == "PAUSED" ]]; then
+            echo "Resuming Cloud Scheduler job $job_name in $scheduler_region"
+            gcloud scheduler jobs resume "$job_name" --project="$GCP_PROJECT_ID" --location="$scheduler_region"
+          else
+            echo "Cloud Scheduler job $job_name already running (state: $state)"
+          fi
 
   deploy-voice-ws-production:
     runs-on: ubuntu-latest
