@@ -29,10 +29,23 @@ export default async function BlogIndexPage() {
           business from the phone you already have.
         </p>
 
-        <div className="mt-12 space-y-10">
+        <div className="mt-12 space-y-12">
           {posts.map((post) => (
             <article key={post.slug}>
-              <p className="text-sm text-muted-foreground">{post.date}</p>
+              {post.image ? (
+                <Link
+                  href={`/blog/${post.slug}`}
+                  className="block overflow-hidden rounded-xl"
+                >
+                  <img
+                    src={post.image}
+                    alt={post.title}
+                    loading="lazy"
+                    className="aspect-video w-full object-cover transition-transform duration-300 hover:scale-[1.02]"
+                  />
+                </Link>
+              ) : null}
+              <p className="mt-4 text-sm text-muted-foreground">{post.date}</p>
               <Link href={`/blog/${post.slug}`}>
                 <h2 className="mt-1 text-2xl font-semibold text-foreground hover:underline">
                   {post.title}
