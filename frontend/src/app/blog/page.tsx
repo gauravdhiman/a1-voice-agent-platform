@@ -29,7 +29,7 @@ export default async function BlogIndexPage() {
           business from the phone you already have.
         </p>
 
-        <div className="mt-12 space-y-12">
+        <div className="mt-12 space-y-12 divide-y divide-border">
           {posts.map((post) => (
             <article key={post.slug}>
               {post.image ? (
