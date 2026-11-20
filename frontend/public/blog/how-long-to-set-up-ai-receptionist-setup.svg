@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img">
+  <rect x="0" y="0" width="1200" height="630" fill="#0f172a"/>
+  <text x="60" y="64" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="34" font-weight="700" fill="#f1f5f9">Where the setup hour actually goes</text>
+  <text x="60" y="102" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="20" fill="#94a3b8">Minutes of your time per setup step, for a typical small business</text>
+
+  <text x="60" y="182" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" font-weight="600" fill="#e2e8f0">Tell it about your business</text>
+  <rect x="60" y="196" width="640" height="44" fill="#34d399"/>
+  <text x="716" y="228" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" fill="#f8fafc">about 20 min</text>
+
+  <text x="60" y="286" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" font-weight="600" fill="#e2e8f0">Test calls and tune the greeting</text>
+  <rect x="60" y="300" width="480" height="44" fill="#38bdf8"/>
+  <text x="556" y="332" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" fill="#f8fafc">about 15 min</text>
+
+  <text x="60" y="390" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" font-weight="600" fill="#e2e8f0">Set the call rules</text>
+  <rect x="60" y="404" width="320" height="44" fill="#38bdf8"/>
+  <text x="396" y="436" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" fill="#f8fafc">about 10 min</text>
+
+  <text x="60" y="494" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" font-weight="600" fill="#e2e8f0">Point your number at it</text>
+  <rect x="60" y="508" width="320" height="44" fill="#fbbf24"/>
+  <text x="396" y="540" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" fill="#f8fafc">about 10 min</text>
+
+  <text x="60" y="598" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="19" fill="#94a3b8">Connect your calendar: about 5 min. Total: about an hour, live within 48 hours.</text>
+</svg>
