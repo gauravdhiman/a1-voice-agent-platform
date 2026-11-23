@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img">
+  <rect x="0" y="0" width="1200" height="630" fill="#0f172a"/>
+  <text x="60" y="64" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="34" font-weight="700" fill="#f1f5f9">What happens when a new client calls your firm</text>
+  <text x="60" y="102" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="20" fill="#94a3b8">The intake flow, from the first ring to your callback</text>
+
+  <rect x="60" y="136" width="8" height="56" fill="#34d399"/>
+  <text x="92" y="160" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">1. A new client calls, at any hour</text>
+  <text x="92" y="186" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">Evenings, weekends, while you are in court</text>
+
+  <rect x="60" y="212" width="8" height="56" fill="#34d399"/>
+  <text x="92" y="236" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">2. The AI answers in your firm&#39;s voice</text>
+  <text x="92" y="262" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">No hold music, no voicemail, no missed ring</text>
+
+  <rect x="60" y="288" width="8" height="56" fill="#38bdf8"/>
+  <text x="92" y="312" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">3. It asks what the case is about, and how urgent it is</text>
+  <text x="92" y="338" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">Practice area first, then the facts that decide priority</text>
+
+  <rect x="60" y="364" width="8" height="56" fill="#38bdf8"/>
+  <text x="92" y="388" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">4. It collects the name, number, and a short version of the facts</text>
+  <text x="92" y="414" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">Spelled back and confirmed, so nothing gets lost</text>
+
+  <rect x="60" y="440" width="8" height="56" fill="#fbbf24"/>
+  <text x="92" y="464" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">5. It books a consultation, or takes a detailed message</text>
+  <text x="92" y="490" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">Straight into your real calendar, in an open slot</text>
+
+  <rect x="60" y="516" width="8" height="56" fill="#fbbf24"/>
+  <text x="92" y="540" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">6. You get a written summary within minutes</text>
+  <text x="92" y="566" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">So you call back prepared, not cold</text>
+
+  <text x="60" y="610" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">The whole call takes a few minutes. The client feels heard. You never touched the phone.</text>
+</svg>
