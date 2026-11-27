@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img">
+  <rect x="0" y="0" width="1200" height="630" fill="#0f172a"/>
+  <text x="60" y="64" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="34" font-weight="700" fill="#f1f5f9">What happens when the AI doesn&#39;t know</text>
+  <text x="60" y="102" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="20" fill="#94a3b8">A good handoff, from the hard question to a human who has the story</text>
+
+  <rect x="60" y="136" width="8" height="56" fill="#34d399"/>
+  <text x="92" y="160" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">1. A caller asks something the AI can&#39;t answer</text>
+  <text x="92" y="186" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">A weird job, a custom price, a question only a person can answer</text>
+
+  <rect x="60" y="212" width="8" height="56" fill="#38bdf8"/>
+  <text x="92" y="236" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">2. The AI says so honestly, and tells the caller what happens next</text>
+  <text x="92" y="262" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">No guessing, no apology spiral, just a clear next step</text>
+
+  <rect x="60" y="288" width="8" height="56" fill="#38bdf8"/>
+  <text x="92" y="312" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">3. It passes the full context to a human</text>
+  <text x="92" y="338" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">Name, question, and everything already covered, before hello</text>
+
+  <rect x="60" y="364" width="8" height="56" fill="#fbbf24"/>
+  <text x="92" y="388" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">4. Warm transfer, callback, or a booked call</text>
+  <text x="92" y="414" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">A person now, a message with a callback time, or a time the caller picks</text>
+
+  <rect x="60" y="440" width="8" height="56" fill="#fbbf24"/>
+  <text x="92" y="464" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">5. If nobody picks up, the AI comes back and takes a message</text>
+  <text x="92" y="490" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">Never a dropped call, never voicemail, always a time attached</text>
+
+  <rect x="60" y="516" width="8" height="56" fill="#34d399"/>
+  <text x="92" y="540" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#f1f5f9">6. You get a written summary of the whole thing</text>
+  <text x="92" y="566" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">So you call back prepared, and the question joins the training list</text>
+
+  <text x="60" y="610" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#94a3b8">The caller never repeats themselves. The handoff is the part that makes the system trustworthy.</text>
+</svg>

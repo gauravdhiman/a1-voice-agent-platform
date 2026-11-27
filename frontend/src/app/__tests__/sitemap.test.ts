@@ -35,6 +35,7 @@ describe("sitemap", () => {
       `${SITE_URL}/blog/ai-receptionist-vs-front-desk-employee`,
       `${SITE_URL}/blog/how-long-to-set-up-ai-receptionist`,
       `${SITE_URL}/blog/ai-call-answering-for-law-firms`,
+      `${SITE_URL}/blog/what-happens-when-ai-doesnt-know`,
       `${SITE_URL}/ai-tools`,
       `${SITE_URL}/ai-tools/savings-calculator`,
       ...TOOL_CATEGORIES.map(
